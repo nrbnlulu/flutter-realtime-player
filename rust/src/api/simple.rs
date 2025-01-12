@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread};
+use std::{collections::HashMap, sync::{Arc, Mutex}, thread};
 
 use flume::{bounded, Receiver, Sender};
 use irondash_engine_context::EngineContext;
@@ -23,9 +23,13 @@ pub fn init_app() {
 }
 
 
+lazy_static::lazy_static! {
+
+    static ref TEXTURES_REGISTRY: Mutex<HashMap<i64, Arc<SendableTexture<BoxedPixelData>>>> = Mutex::new(HashMap::new());
+}
+
 pub fn create_that_texture_please(engine_handle: i64) -> anyhow::Result<i64> {
     let (tx_texture_id, rx_texture_id) = bounded(1);
-
 
     RunLoop::sender_for_main_thread().unwrap().send(move || {
         if let Err(e) = EngineContext::get(){
@@ -35,9 +39,15 @@ pub fn create_that_texture_please(engine_handle: i64) -> anyhow::Result<i64> {
     let provider = Arc::new(PixelBufferSource { rx });
 
     let texture = Texture::new_with_provider(engine_handle, provider).unwrap();
-    tx_texture_id.send(texture.id()).expect("Failed to send texture");
+    let texture_id = texture.id();
+    tx_texture_id.send(texture_id).expect("Failed to send texture");
 
     let texture_arc = texture.into_sendable_texture();
+    {
+        let _ = TEXTURES_REGISTRY.lock().unwrap().insert(texture_id, texture_arc.clone());
+
+    }
+
     std::thread::spawn(move || {
         get_images(tx, texture_arc).expect("Failed to get images");
     });

@@ -1,7 +1,8 @@
-use std::{sync::Arc, thread};
+use std::{fs::File, sync::Arc, thread};
 
 use flume::{bounded, Receiver, Sender};
 use flutter_rust_bridge::BaseAsyncRuntime;
+use image::{ImageBuffer, ImageReader, RgbaImage};
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture, SimplePixelData, Texture};
 use log::info;
 
@@ -19,37 +20,28 @@ impl PayloadProvider<BoxedPixelData> for PixelBufferSource {
         SimplePixelData::new_boxed(width as i32, height as i32, data)
     }
 }
+
+fn get_png_bytes(path: &str) -> anyhow::Result<RgbaImage>{
+    let path = std::path::Path::new(path);
+    Ok(image::open(path)?.to_rgba8())
+}
+
 pub fn get_images(tx: Sender<Frame>, texture: Arc<SendableTexture<BoxedPixelData>>) -> anyhow::Result<()> {
     info!("Starting image stream");
-    let img1_raw = include_bytes!("../assets/1.png").to_vec();
-    let img2_raw = include_bytes!("../assets/2.png").to_vec();
 
-    let rgba_converter = Arc::new(move |input: Vec<u8>| {
-        let mut rgba = vec![0; input.len() * 4];
-        for i in 0..input.len() {
-            rgba[i * 4] = input[i];
-            rgba[i * 4 + 1] = input[i];
-            rgba[i * 4 + 2] = input[i];
-            rgba[i * 4 + 3] = 255;
-        }
-        rgba
-    });
-
-    
-    let img1 = rgba_converter(img1_raw);
-    let img2 = rgba_converter(img2_raw);
-    let (tx1 , rx) = bounded(2);
-
-    FLUTTER_RUST_BRIDGE_HANDLER.async_runtime().spawn(async move {
-        tx1.send((img1, 256, 256)).expect("Failed to send frame");
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        tx1.send((img2, 256, 256)).expect("Failed to send frame");
-    });
-
-
-    while let Ok(frame) = rx.recv() {
-        tx.send(frame).expect("Failed to send frame");
+    loop{
+        let img1 = get_png_bytes("./assets/1.png").expect("Failed to load image");
+        let frame1 = Arc::new((img1.to_vec(), img1.width(), img1.height()));
+        tx.send(Arc::try_unwrap(frame1).unwrap()).expect("Failed to send frame");
         texture.mark_frame_available();
+        info!("Sent frame 1");
+        thread::sleep(std::time::Duration::from_secs(1));
+        let img2 = get_png_bytes("./assets/2.jpg").expect("Failed to load image");
+        let frame2 = Arc::new((img2.to_vec(), img2.width(), img2.height()));
+        tx.send(Arc::try_unwrap(frame2).unwrap()).expect("Failed to send frame");
+        info!("Sent frame 2");
+        texture.mark_frame_available();
+        thread::sleep(std::time::Duration::from_secs(1));
     }
     Ok(())
 }
