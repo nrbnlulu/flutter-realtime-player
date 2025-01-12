@@ -1,0 +1,22 @@
+[package]
+name = "rust_lib_my_app"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.7.0"
+irondash_texture = { version = "0.5.0" }
+irondash_run_loop = { version = "0.5.0" }
+irondash_dart_ffi = "0.2.0"
+simple_logger = "2.1"
+log = "0.4"
+fastrand = "1.8"
+anyhow = "1.0.81"
+async-trait = "0.1.77"
+tokio = { version = "1.43.0", features = ["full"] }
+flume = "0.11.1"
+simple-log = "2.1.1"
+irondash_engine_context = "0.5.0"
