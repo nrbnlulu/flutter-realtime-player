@@ -10,24 +10,25 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
   final handle = await EngineContext.instance.getEngineHandle();
-
-  runApp(MyApp(handle: handle));
+    debugPrint("Isolate.current.debugName: ${Isolate.current.debugName} ${Service.getIsolateId(Isolate.current)}");
+    final texture = await rlib.createThatTexturePlease(engineHandle: handle);
+    print('Texture: $texture');
+  runApp(MyApp(textureId: texture));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, required this.handle});
-  final int handle;
+  const MyApp({super.key, required this.textureId});
+  final int textureId;
   @override
   Widget build(BuildContext context) {
-    debugPrint("Isolate.current.debugName: ${Isolate.current.debugName} ${Service.getIsolateId(Isolate.current)}");
-    final texture = rlib.createThatTexturePlease(engineHandle: handle);
-    print('Texture: $texture');
+
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
         body: Center(
-          child: Text(
-              'Action: Call Rust `greet("Tom")`\nResult: `${rlib.greet(name: "Tom")}`'),
+          child: Texture(
+            textureId: textureId,
+          ),
         ),
       ),
     );

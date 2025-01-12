@@ -1,8 +1,11 @@
 use std::{sync::Arc, thread};
 
 use flume::{bounded, Receiver, Sender};
+use flutter_rust_bridge::BaseAsyncRuntime;
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture, SimplePixelData, Texture};
 use log::info;
+
+use crate::frb_generated::FLUTTER_RUST_BRIDGE_HANDLER;
 
 type Frame = (Vec<u8>, u32, u32);
 
@@ -36,9 +39,10 @@ pub fn get_images(tx: Sender<Frame>, texture: Arc<SendableTexture<BoxedPixelData
     let img1 = rgba_converter(img1_raw);
     let img2 = rgba_converter(img2_raw);
     let (tx1 , rx) = bounded(2);
-    tokio::spawn(async move {
+
+    FLUTTER_RUST_BRIDGE_HANDLER.async_runtime().spawn(async move {
         tx1.send((img1, 256, 256)).expect("Failed to send frame");
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         tx1.send((img2, 256, 256)).expect("Failed to send frame");
     });
 

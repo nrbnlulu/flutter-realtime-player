@@ -9,6 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 String greet({required String name}) =>
     RustLib.instance.api.crateApiSimpleGreet(name: name);
 
-PlatformInt64 createThatTexturePlease({required PlatformInt64 engineHandle}) =>
+Future<PlatformInt64> createThatTexturePlease(
+        {required PlatformInt64 engineHandle}) =>
     RustLib.instance.api
         .crateApiSimpleCreateThatTexturePlease(engineHandle: engineHandle);

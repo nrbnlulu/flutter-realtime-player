@@ -79,7 +79,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  PlatformInt64 crateApiSimpleCreateThatTexturePlease(
+  Future<PlatformInt64> crateApiSimpleCreateThatTexturePlease(
       {required PlatformInt64 engineHandle});
 
   String crateApiSimpleGreet({required String name});
@@ -96,13 +96,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  PlatformInt64 crateApiSimpleCreateThatTexturePlease(
+  Future<PlatformInt64> crateApiSimpleCreateThatTexturePlease(
       {required PlatformInt64 engineHandle}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_64(engineHandle, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 1, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_i_64,
