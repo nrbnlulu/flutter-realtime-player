@@ -3,7 +3,6 @@ use std::{sync::Arc, thread};
 use glow::{
     HasContext, NativeProgram, TEXTURE_2D
 };
-use irondash_engine_context::EngineContext;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider, PayloadProvider, Texture};
 use simple_log::info;
 
@@ -22,7 +21,6 @@ unsafe impl Sync for MyGdkWrapper {}
 struct GLTextureSource {
     width: i32,
     height: i32,
-    gdk_ctontext: MyGdkWrapper,
     gl_context: glow::Context,
     texture_name: Option<u32>,
 }
@@ -31,23 +29,7 @@ impl GLTextureSource {
 
 
     pub fn init_gl_context_from_gdk(engine_handle: i64) -> anyhow::Result<Self> {
-        let engine = EngineContext::get().unwrap();
-        let fl_view = engine.get_flutter_view(engine_handle).unwrap();
-        let fl_view = unsafe { std::mem::transmute(fl_view) };
-        let gtk_widget = unsafe {
-            std::mem::transmute(gobject_sys::g_type_check_instance_cast(
-                fl_view,
-                gtk_sys::gtk_widget_get_type(),
-            ))
-        };
 
-        let window = unsafe { gtk_sys::gtk_widget_get_parent_window(gtk_widget) };
-        let mut error: *mut glib_sys::GError = std::ptr::null_mut();
-        let error_ptr: *mut *mut glib_sys::GError = &mut error;
-        let gdk_context =
-            MyGdkWrapper(unsafe { gdk_sys::gdk_window_create_gl_context(window, error_ptr) });
-
-        unsafe { gdk_sys::gdk_gl_context_make_current(gdk_context.as_gdk()) };
 
         gl_loader::init_gl();
         let gl_context = unsafe {
@@ -81,7 +63,6 @@ impl GLTextureSource {
            return Ok(Self {
                 width: 400,
                 height: 400,
-                gdk_ctontext: gdk_context,
                 gl_context,
                 texture_name: Some(texture_name),
             })
