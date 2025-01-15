@@ -26,4 +26,4 @@ gobject-sys = "0.18.0"
 gdk-sys = "0.18.0"
 gtk-sys = "0.18.0"
 gl_loader = "0.1.2"
-glium = { version="0.32"}
+glow = "0.16.0"
