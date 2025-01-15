@@ -1,10 +1,11 @@
-use std::sync::Arc;
+use std::{sync::Arc, thread};
 
 use glow::{
     HasContext, NativeProgram, TEXTURE_2D
 };
 use irondash_engine_context::EngineContext;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider, PayloadProvider, Texture};
+use simple_log::info;
 
 pub struct MyGdkWrapper(*mut gdk_sys::GdkGLContext);
 
@@ -23,7 +24,7 @@ struct GLTextureSource {
     height: i32,
     gdk_ctontext: MyGdkWrapper,
     gl_context: glow::Context,
-    texture_name: Option<i64>,
+    texture_name: Option<u32>,
 }
 
 impl GLTextureSource {
@@ -49,23 +50,47 @@ impl GLTextureSource {
         unsafe { gdk_sys::gdk_gl_context_make_current(gdk_context.as_gdk()) };
 
         gl_loader::init_gl();
-
         let gl_context = unsafe {
             glow::Context::from_loader_function(|s| {
                 std::mem::transmute(gl_loader::get_proc_address(s))
             })
         };
-
-        unsafe {
-            gdk_sys::gdk_gl_context_clear_current();
+        if let Some(texture) = unsafe { gl_context.create_texture().ok() }{
+            let texture_name = texture.0.get();
+            unsafe {
+                gl_context.bind_texture(TEXTURE_2D, Some(texture));
+                gl_context.tex_image_2d(
+                    TEXTURE_2D,
+                    0,
+                    glow::RGBA as i32,
+                    200,
+                    500,
+                    0,
+                    glow::RGBA,
+                    glow::UNSIGNED_BYTE,
+                    glow::PixelUnpackData::Slice(Some(&vec![0, 255, 0, 255].repeat(200 * 500))),
+                );
+                gl_context.bind_texture(TEXTURE_2D, Some(texture));
+            }
+    
+    
+    
+            unsafe {
+                gdk_sys::gdk_gl_context_clear_current();
+            }
+           return Ok(Self {
+                width: 400,
+                height: 400,
+                gdk_ctontext: gdk_context,
+                gl_context,
+                texture_name: Some(texture_name),
+            })
         }
-        Ok(Self {
-            width: 400,
-            height: 400,
-            gdk_ctontext: gdk_context,
-            gl_context,
-            texture_name: None,
-        })
+        else {
+           return Err(anyhow::anyhow!("Failed to create texture"))
+        }
+
+
     }
 
     /// setup some state for rendering. not sure why he needed that.
@@ -151,6 +176,7 @@ impl GLTexture {
 
 impl GLTextureProvider for GLTexture {
     fn get(&self) -> irondash_texture::GLTexture {
+        info!("Returning GLTexture");
         irondash_texture::GLTexture {
             target: self.target,
             name: &self.name,
@@ -165,16 +191,13 @@ impl PayloadProvider<BoxedGLTexture> for GLTextureSource {
     fn get_payload(&self) -> BoxedGLTexture {
         //let rng = fastrand::Rng::new();
 
-        let gl = &self.gl_context;
 
-        let texture = unsafe { gl.create_texture().unwrap() };
-        let texture_name = texture.0.get();
 
         let ret = Box::new(GLTexture {
             height: self.width,
             width: self.height,
             target: TEXTURE_2D,
-            name: texture_name,
+            name: self.texture_name.expect("Texture name not set"),
         });
         ret
 
@@ -194,10 +217,17 @@ fn init() -> anyhow::Result<()> {
 
 
 
-fn init_on_main_thread(engine_handle: i64) -> irondash_texture::Result<i64> {
+pub fn create_ogl_texture(engine_handle: i64) -> anyhow::Result<i64> {
 
     let provider = Arc::new(GLTextureSource::init_gl_context_from_gdk(engine_handle).unwrap());
     let texture = Texture::new_with_provider(engine_handle, provider.clone())?;
     let id = texture.id();
+    let sendable_texture = texture.into_sendable_texture(); 
+    thread::spawn(move || {
+        loop{
+            sendable_texture.mark_frame_available();
+            thread::sleep(std::time::Duration::from_secs(1));
+        }
+    });
     Ok(id)
 }

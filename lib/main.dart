@@ -11,7 +11,7 @@ Future<void> main() async {
   await RustLib.init();
   final handle = await EngineContext.instance.getEngineHandle();
     debugPrint("Isolate.current.debugName: ${Isolate.current.debugName} ${Service.getIsolateId(Isolate.current)}");
-    final texture = await rlib.createThatTexturePlease(engineHandle: handle);
+    final texture = await rlib.getOpenglTexture(engineHandle: handle);
     print('Texture: $texture');
   runApp(MyApp(textureId: texture));
 }

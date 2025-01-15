@@ -6,6 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These types are ignored because they are not used by any `pub` functions: `TEXTURES_REGISTRY`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `initialize`
+
 String greet({required String name}) =>
     RustLib.instance.api.crateApiSimpleGreet(name: name);
 
@@ -13,3 +16,7 @@ Future<PlatformInt64> createThatTexturePlease(
         {required PlatformInt64 engineHandle}) =>
     RustLib.instance.api
         .crateApiSimpleCreateThatTexturePlease(engineHandle: engineHandle);
+
+Future<PlatformInt64> getOpenglTexture({required PlatformInt64 engineHandle}) =>
+    RustLib.instance.api
+        .crateApiSimpleGetOpenglTexture(engineHandle: engineHandle);
