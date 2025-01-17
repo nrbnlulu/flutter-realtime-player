@@ -1,0 +1,7 @@
+[workspace]
+
+members = [ "./rust"]
+
+[workspace.dependencies]
+
+anyhow = "1.0.95"

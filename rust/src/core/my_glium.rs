@@ -6,6 +6,8 @@ use glow::{
 use irondash_texture::{BoxedGLTexture, GLTextureProvider, PayloadProvider, Texture};
 use simple_log::info;
 
+use super::fluttersink::gltexture::GLTexture;
+
 pub struct MyGdkWrapper(*mut gdk_sys::GdkGLContext);
 
 impl MyGdkWrapper {
@@ -137,35 +139,6 @@ impl GLTextureSource {
         }
     }
 }
-struct GLTexture {
-    pub target: u32,
-    pub name: u32,
-    pub width: i32,
-    pub height: i32,
-}
-
-impl GLTexture {
-    fn new(target: u32, name: u32, width: i32, height: i32) -> Self {
-        Self {
-            target,
-            name,
-            width,
-            height,
-        }
-    }
-}
-
-impl GLTextureProvider for GLTexture {
-    fn get(&self) -> irondash_texture::GLTexture {
-        info!("Returning GLTexture");
-        irondash_texture::GLTexture {
-            target: self.target,
-            name: &self.name,
-            width: self.width,
-            height: self.height,
-        }
-    }
-}
 
 
 impl PayloadProvider<BoxedGLTexture> for GLTextureSource {
@@ -184,10 +157,6 @@ impl PayloadProvider<BoxedGLTexture> for GLTextureSource {
 
     }
 
-    //fn destroy(&self) {
-    //    gl.delete_program(self.gl_program);
-    //    gl.delete_vertex_array(self.gl_vertexarray);
-    //}
 }
 
 

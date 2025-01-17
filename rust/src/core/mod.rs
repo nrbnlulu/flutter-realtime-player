@@ -1,5 +1,6 @@
 use std::{fs::File, sync::Arc, thread};
 mod gl;
+pub mod fluttersink;
 pub mod my_glium;
 use flume::{bounded, Receiver, Sender};
 use flutter_rust_bridge::BaseAsyncRuntime;

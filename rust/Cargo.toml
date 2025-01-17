@@ -27,3 +27,9 @@ gdk-sys = "0.18.0"
 gtk-sys = "0.18.0"
 gl_loader = "0.1.2"
 glow = "0.16.0"
+glib = "0.20.7"
+gst = {version = "0.23.4", package = "gstreamer", features = ["v1_16"]}
+gst-gl = { version = "0.23.4", package = "gstreamer-gl" , features = ["v1_16"]}
+gst-video = { version = "0.23.4", package = "gstreamer-video" , features = ["v1_16"]}
+gst-base = { version = "0.23.4", package = "gstreamer-base", features = ["v1_16"] }
+gst-allocators = { version = "0.23.4", package = "gstreamer-allocators", features = ["v1_24"] }
