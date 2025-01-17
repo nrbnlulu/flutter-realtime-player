@@ -11,22 +11,22 @@
 
 // ported from gstreamer-rs-plugins gtk4sink
 
-pub(super) mod imp;
 mod frame;
-mod utils;
 pub mod gltexture;
+pub(super) mod imp;
+mod utils;
 
 enum SinkEvent {
     FrameChanged,
 }
 
 glib::wrapper! {
-    pub struct PaintableSink(ObjectSubclass<imp::PaintableSink>)
+    pub struct FlutterTextureSink(ObjectSubclass<imp::FlutterTextureSink>)
         @extends gst_video::VideoSink, gst_base::BaseSink, gst::Element, gst::Object,
         @implements gst::ChildProxy;
 }
 
-impl PaintableSink {
+impl FlutterTextureSink {
     pub fn new(name: Option<&str>) -> Self {
         gst::Object::builder().name_if_some(name).build().unwrap()
     }
@@ -37,6 +37,6 @@ pub fn register(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
         Some(plugin),
         "gtk4paintablesink",
         gst::Rank::NONE,
-        PaintableSink::static_type(),
+        FlutterTextureSink::static_type(),
     )
 }

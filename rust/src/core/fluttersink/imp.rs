@@ -9,8 +9,10 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use crate::core::Frame;
+
+use super::utils::invoke_on_main_thread;
 use super::{frame, SinkEvent};
-use crate::paintable::Paintable;
 
 use glib::thread_guard::ThreadGuard;
 
@@ -24,7 +26,6 @@ use std::sync::{
     atomic::{self, AtomicBool},
     Mutex,
 };
-
 
 // Global GL context that is created by the first sink and kept around until the end of the
 // process. This is provided to other elements in the pipeline to make sure they create GL contexts
@@ -44,9 +45,9 @@ static GL_CONTEXT: Mutex<GLContext> = Mutex::new(GLContext::Uninitialized);
 
 pub(crate) static CAT: LazyLock<gst::DebugCategory> = LazyLock::new(|| {
     gst::DebugCategory::new(
-        "gtk4paintablesink",
+        "fluttertexturesink",
         gst::DebugColorFlags::empty(),
-        Some("GTK4 Paintable sink"),
+        Some("Flutter texture sink"),
     )
 });
 
@@ -68,12 +69,15 @@ impl Default for StreamConfig {
     }
 }
 
+struct FlutterTexture{
+
+}
+
 #[derive(Default)]
-pub struct PaintableSink {
-    paintable: Mutex<Option<ThreadGuard<Paintable>>>,
-    window: Mutex<Option<ThreadGuard<gtk::Window>>>,
+pub struct FlutterTextureSink {
     config: Mutex<StreamConfig>,
-    sender: Mutex<Option<async_channel::Sender<SinkEvent>>>,
+    texture: Mutex<FlutterTexture>,
+    sender: Mutex<Option<flume::Sender<SinkEvent>>>,
     pending_frame: Mutex<Option<Frame>>,
     cached_caps: Mutex<Option<gst::Caps>>,
     settings: Mutex<Settings>,
@@ -86,32 +90,22 @@ struct Settings {
     window_height: u32,
 }
 
-impl Drop for PaintableSink {
-    fn drop(&mut self) {
-        let mut paintable = self.paintable.lock().unwrap();
-        if let Some(paintable) = paintable.take() {
-            glib::MainContext::default().invoke(|| drop(paintable))
-        }
-    }
+impl Drop for FlutterTextureSink {
+    fn drop(&mut self) {}
 }
 
 #[glib::object_subclass]
-impl ObjectSubclass for PaintableSink {
-    const NAME: &'static str = "GstGtk4PaintableSink";
-    type Type = super::PaintableSink;
+impl ObjectSubclass for FlutterTextureSink {
+    const NAME: &'static str = "FlutterTextureSink";
+    type Type = super::FlutterTextureSink;
     type ParentType = gst_video::VideoSink;
     type Interfaces = (gst::ChildProxy,);
 }
 
-impl ObjectImpl for PaintableSink {
+impl ObjectImpl for FlutterTextureSink {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: LazyLock<Vec<glib::ParamSpec>> = LazyLock::new(|| {
             vec![
-                glib::ParamSpecObject::builder::<super::paintable::Paintable>("paintable")
-                    .nick("Paintable")
-                    .blurb("The Paintable the sink renders to")
-                    .read_only()
-                    .build(),
                 glib::ParamSpecUInt::builder("window-width")
                     .nick("Window width")
                     .blurb("the width of the main widget rendering the paintable")
@@ -130,57 +124,6 @@ impl ObjectImpl for PaintableSink {
 
     fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
         match pspec.name() {
-            "paintable" => {
-                // Fix segfault when GTK3 and GTK4 are loaded (e.g. `gst-inspect-1.0 -a`)
-                // checking if GtkBin is registered to know if libgtk3.so is already present
-                // GtkBin was dropped for GTK4 https://gitlab.gnome.org/GNOME/gtk/-/commit/3c165b3b77
-                if glib::types::Type::from_name("GtkBin").is_some() {
-                    gst::error!(CAT, imp = self, "Skipping the creation of paintable to avoid segfault between GTK3 and GTK4");
-                    return None::<&Paintable>.to_value();
-                }
-
-                let mut paintable_guard = self.paintable.lock().unwrap();
-                let mut created = false;
-                if paintable_guard.is_none() {
-                    created = true;
-                    self.create_paintable(&mut paintable_guard);
-                }
-
-                let paintable = match &*paintable_guard {
-                    Some(ref paintable) => paintable,
-                    None => {
-                        gst::error!(CAT, imp = self, "Failed to create paintable");
-                        return None::<&Paintable>.to_value();
-                    }
-                };
-
-                // Getter must be called from the main thread
-                if !paintable.is_owner() {
-                    gst::error!(
-                        CAT,
-                        imp = self,
-                        "Can't retrieve Paintable from non-main thread"
-                    );
-                    return None::<&Paintable>.to_value();
-                }
-
-                let paintable = paintable.get_ref().clone();
-                drop(paintable_guard);
-
-                if created {
-                    let self_ = self.to_owned();
-                    glib::MainContext::default().invoke(move || {
-                        let paintable_guard = self_.paintable.lock().unwrap();
-                        if let Some(paintable) = &*paintable_guard {
-                            let paintable_clone = paintable.get_ref().clone();
-                            drop(paintable_guard);
-                            self_.obj().child_added(&paintable_clone, "paintable");
-                        }
-                    });
-                }
-
-                paintable.to_value()
-            }
             "window-width" => {
                 let settings = self.settings.lock().unwrap();
                 settings.window_width.to_value()
@@ -216,16 +159,16 @@ impl ObjectImpl for PaintableSink {
     }
 }
 
-impl GstObjectImpl for PaintableSink {}
+impl GstObjectImpl for FlutterTextureSink {}
 
-impl ElementImpl for PaintableSink {
+impl ElementImpl for FlutterTextureSink {
     fn metadata() -> Option<&'static gst::subclass::ElementMetadata> {
         static ELEMENT_METADATA: LazyLock<gst::subclass::ElementMetadata> = LazyLock::new(|| {
             gst::subclass::ElementMetadata::new(
-                "GTK 4 Paintable Sink",
+                "Flutter texture sink",
                 "Sink/Video",
-                "A GTK 4 Paintable sink",
-                "Bilal Elmoussaoui <bil.elmoussaoui@gmail.com>, Jordan Petridis <jordan@centricular.com>, Sebastian Dröge <sebastian@centricular.com>",
+                "A Flutter texture sink",
+                "Bilal Elmoussaoui <bil.elmoussaoui@gmail.com>, Jordan Petridis <jordan@centricular.com>, Sebastian Dröge <sebastian@centricular.com>, Nir Benlulu <nrbnlulu@gmail.com>",
             )
         });
 
@@ -350,19 +293,6 @@ impl ElementImpl for PaintableSink {
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
         match transition {
             gst::StateChange::NullToReady => {
-                let create_window = glib::program_name().as_deref() == Some("gst-launch-1.0")
-                    || glib::program_name().as_deref() == Some("gst-play-1.0")
-                    || std::env::var("GST_GTK4_WINDOW").as_deref() == Ok("1");
-
-                if create_window {
-                    let res = utils::invoke_on_main_thread(gtk::init);
-
-                    if let Err(err) = res {
-                        gst::error!(CAT, imp = self, "Failed to create initialize GTK: {err}");
-                        return Err(gst::StateChangeError);
-                    }
-                }
-
                 let mut paintable_guard = self.paintable.lock().unwrap();
                 let mut created = false;
                 if paintable_guard.is_none() {
@@ -379,7 +309,7 @@ impl ElementImpl for PaintableSink {
 
                 if created {
                     let self_ = self.to_owned();
-                    glib::MainContext::default().invoke(move || {
+                    invoke_on_main_thread(move || {
                         let paintable_guard = self_.paintable.lock().unwrap();
                         if let Some(paintable) = &*paintable_guard {
                             let paintable_clone = paintable.get_ref().clone();
@@ -435,7 +365,7 @@ impl ElementImpl for PaintableSink {
                 // Flush frames from the GDK paintable but don't wait
                 // for this to finish as this can other deadlock.
                 let self_ = self.to_owned();
-                glib::MainContext::default().invoke(move || {
+                invoke_on_main_thread(move || {
                     let paintable = self_.paintable.lock().unwrap();
                     if let Some(paintable) = &*paintable {
                         paintable.get_ref().handle_flush_frames();
@@ -447,7 +377,7 @@ impl ElementImpl for PaintableSink {
                 if let Some(window) = window_guard.take() {
                     drop(window_guard);
 
-                    glib::MainContext::default().invoke(move || {
+                    invoke_on_main_thread(move || {
                         let window = window.get_ref();
                         window.close();
                     });
@@ -460,7 +390,7 @@ impl ElementImpl for PaintableSink {
     }
 }
 
-impl BaseSinkImpl for PaintableSink {
+impl BaseSinkImpl for FlutterTextureSink {
     fn caps(&self, filter: Option<&gst::Caps>) -> Option<gst::Caps> {
         let cached_caps = self
             .cached_caps
@@ -628,7 +558,7 @@ impl BaseSinkImpl for PaintableSink {
     }
 }
 
-impl VideoSinkImpl for PaintableSink {
+impl VideoSinkImpl for FlutterTextureSink {
     fn show_frame(&self, buffer: &gst::Buffer) -> Result<gst::FlowSuccess, gst::FlowError> {
         gst::trace!(CAT, imp = self, "Rendering buffer {:?}", buffer);
 
@@ -699,7 +629,7 @@ impl VideoSinkImpl for PaintableSink {
     }
 }
 
-impl PaintableSink {
+impl FlutterTextureSink {
     fn pending_frame(&self) -> Option<Frame> {
         self.pending_frame.lock().unwrap().take()
     }
@@ -791,7 +721,7 @@ impl PaintableSink {
 
     fn create_window(&self) {
         let self_ = self.to_owned();
-        glib::MainContext::default().invoke(move || {
+        invoke_on_main_thread(move || {
             let mut window_guard = self_.window.lock().unwrap();
             if window_guard.is_some() {
                 return;
@@ -877,12 +807,15 @@ impl PaintableSink {
 
         // Create the paintable from the main thread
         let paintable = utils::invoke_on_main_thread(move || {
-            let gdk_context =
-                if let GLContext::Initialized { glow_context: gdk_context, .. } = &*GL_CONTEXT.lock().unwrap() {
-                    Some(gdk_context.get_ref().clone())
-                } else {
-                    None
-                };
+            let gdk_context = if let GLContext::Initialized {
+                glow_context: gdk_context,
+                ..
+            } = &*GL_CONTEXT.lock().unwrap()
+            {
+                Some(gdk_context.get_ref().clone())
+            } else {
+                None
+            };
             ThreadGuard::new(Paintable::new(gdk_context))
         });
 
@@ -1345,7 +1278,7 @@ impl PaintableSink {
     }
 }
 
-impl ChildProxyImpl for PaintableSink {
+impl ChildProxyImpl for FlutterTextureSink {
     fn child_by_index(&self, index: u32) -> Option<glib::Object> {
         if index != 0 {
             return None;
