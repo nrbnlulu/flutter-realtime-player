@@ -150,7 +150,7 @@ pub(crate) struct Frame {
 
 #[derive(Debug, Default, glib::Enum, PartialEq, Eq, Copy, Clone)]
 #[repr(C)]
-#[enum_type(name = "GstGtk4PaintableSinkOrientation")]
+#[enum_type(name = "FlutterSinkOrientation")]
 pub enum Orientation {
     #[default]
     Auto,

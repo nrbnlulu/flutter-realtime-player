@@ -21,7 +21,7 @@ use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
 use gst_video::subclass::prelude::*;
 
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::sync::{
     atomic::{self, AtomicBool},
     Mutex,
@@ -69,14 +69,14 @@ impl Default for StreamConfig {
     }
 }
 
-struct FlutterTexture{
-
+struct FlutterTextureSession{
+    fl_txt_id: i64,
 }
 
 #[derive(Default)]
 pub struct FlutterTextureSink {
     config: Mutex<StreamConfig>,
-    texture: Mutex<FlutterTexture>,
+    texture: Option<Arc<Mutex<FlutterTextureSession>>>,
     sender: Mutex<Option<flume::Sender<SinkEvent>>>,
     pending_frame: Mutex<Option<Frame>>,
     cached_caps: Mutex<Option<gst::Caps>>,
@@ -106,6 +106,8 @@ impl ObjectImpl for FlutterTextureSink {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: LazyLock<Vec<glib::ParamSpec>> = LazyLock::new(|| {
             vec![
+
+
                 glib::ParamSpecUInt::builder("window-width")
                     .nick("Window width")
                     .blurb("the width of the main widget rendering the paintable")
@@ -366,7 +368,7 @@ impl ElementImpl for FlutterTextureSink {
                 // for this to finish as this can other deadlock.
                 let self_ = self.to_owned();
                 invoke_on_main_thread(move || {
-                    let paintable = self_.paintable.lock().unwrap();
+                    let paintable = self_.paintable.lock().u    nwrap();
                     if let Some(paintable) = &*paintable {
                         paintable.get_ref().handle_flush_frames();
                     }
