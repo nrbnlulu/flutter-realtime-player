@@ -10,7 +10,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use super::{frame, SinkEvent};
-use crate::sink::Frame;
 use crate::paintable::Paintable;
 
 use glib::thread_guard::ThreadGuard;
@@ -26,7 +25,6 @@ use std::sync::{
     Mutex,
 };
 
-use crate::utils;
 
 // Global GL context that is created by the first sink and kept around until the end of the
 // process. This is provided to other elements in the pipeline to make sure they create GL contexts
@@ -38,7 +36,7 @@ enum GLContext {
     Initialized {
         display: gst_gl::GLDisplay,
         wrapped_context: gst_gl::GLContext,
-        gdk_context: ThreadGuard<gdk::GLContext>,
+        glow_context: ThreadGuard<glow::Context>,
     },
 }
 
@@ -880,7 +878,7 @@ impl PaintableSink {
         // Create the paintable from the main thread
         let paintable = utils::invoke_on_main_thread(move || {
             let gdk_context =
-                if let GLContext::Initialized { gdk_context, .. } = &*GL_CONTEXT.lock().unwrap() {
+                if let GLContext::Initialized { glow_context: gdk_context, .. } = &*GL_CONTEXT.lock().unwrap() {
                     Some(gdk_context.get_ref().clone())
                 } else {
                     None

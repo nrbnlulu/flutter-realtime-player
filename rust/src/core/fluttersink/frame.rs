@@ -227,7 +227,7 @@ impl AsRef<[u8]> for FrameWrapper {
 /// Convert a video frame to a 
 fn video_frame_to_pixel_buffer(
     frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
-) -> () {
+) -> anyhow::Result<()> {
     unimplemented!("video_frame_to_pixel_buffer")
 }
 
@@ -236,15 +236,15 @@ fn video_frame_to_gl_texture(
     cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
     used_textures: &mut HashSet<TextureCacheId>,
     #[allow(unused)] wrapped_context: &gst_gl::GLContext,
-) -> (GLTexture, f64) {
-    let texture_id = frame.texture_id(0).expect("Invalid texture id") as usize;
+) -> anyhow::Result<(GLTexture, f64)> {
+    let texture_name = frame.texture_id(0).expect("Invalid texture id") as usize;
 
     let pixel_aspect_ratio =
         (frame.info().par().numer() as f64) / (frame.info().par().denom() as f64);
 
-    if let Some(texture) = cached_textures.get(&TextureCacheId::GL(texture_id)) {
-        used_textures.insert(TextureCacheId::GL(texture_id));
-        return (texture.clone(), pixel_aspect_ratio);
+    if let Some(texture) = cached_textures.get(&TextureCacheId::GL(texture_name)) {
+        used_textures.insert(TextureCacheId::GL(texture_name));
+        return Ok((texture.clone(), pixel_aspect_ratio));
     }
 
     let width = frame.width();
@@ -252,14 +252,12 @@ fn video_frame_to_gl_texture(
 
     let sync_meta = frame.buffer().meta::<gst_gl::GLSyncMeta>().unwrap();
     let format = frame.format();
-    let glow_texture = glow::NativeTexture{
-        0: std::num::NonZeroU32::new(texture_id as u32).unwrap(),
-    };
-    let texture = GLTexture::new(glow_texture, width as i32, height as i32);
 
-    cached_textures.insert(TextureCacheId::GL(texture_id), texture.clone());
-    used_textures.insert(TextureCacheId::GL(texture_id));
-    (texture, pixel_aspect_ratio)
+let texture = GLTexture::new(texture_name as u32, width as i32, height as i32)?;
+
+    cached_textures.insert(TextureCacheId::GL(texture_name), texture.clone());
+    used_textures.insert(TextureCacheId::GL(texture_name));
+    Ok((texture, pixel_aspect_ratio))
 }
 
 #[cfg(all(target_os = "linux", feature = "dmabuf"))]
@@ -322,7 +320,7 @@ impl Frame {
         let has_alpha = self.frame.format_info().has_alpha();
         let orientation = self.frame.orientation();
         let (texture, pixel_aspect_ratio) = match self.frame {
-            MappedFrame::SysMem { frame, .. } => {
+            MappedFrame::SysMem { .. } => {
                 unimplemented!("MappedFrame::SysMem")
             }
             MappedFrame::GL {
@@ -341,7 +339,7 @@ impl Frame {
                     cached_textures,
                     &mut used_textures,
                     &wrapped_context,
-                )
+                ).unwrap()
             }
             #[cfg(all(target_os = "linux", feature = "dmabuf"))]
             MappedFrame::DmaBuf {
@@ -366,6 +364,7 @@ impl Frame {
                 width,
                 height,
             )?,
+
         };
 
         textures.push(Texture {
