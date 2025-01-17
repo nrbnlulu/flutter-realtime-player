@@ -236,7 +236,7 @@ fn video_frame_to_gl_texture(
     cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
     used_textures: &mut HashSet<TextureCacheId>,
     #[allow(unused)] wrapped_context: &gst_gl::GLContext,
-) -> (BoxedGLTexture, f64) {
+) -> (GLTexture, f64) {
     let texture_id = frame.texture_id(0).expect("Invalid texture id") as usize;
 
     let pixel_aspect_ratio =
@@ -252,12 +252,14 @@ fn video_frame_to_gl_texture(
 
     let sync_meta = frame.buffer().meta::<gst_gl::GLSyncMeta>().unwrap();
     let format = frame.format();
-    
+    let glow_texture = glow::NativeTexture{
+        0: std::num::NonZeroU32::new(texture_id as u32).unwrap(),
+    };
+    let texture = GLTexture::new(glow_texture, width as i32, height as i32);
 
     cached_textures.insert(TextureCacheId::GL(texture_id), texture.clone());
     used_textures.insert(TextureCacheId::GL(texture_id));
-    let texture = GLTexture::new( texture_id as u32, width as i32, height as i32);
-    (Box::new(texture), pixel_aspect_ratio)
+    (texture, pixel_aspect_ratio)
 }
 
 #[cfg(all(target_os = "linux", feature = "dmabuf"))]
@@ -309,8 +311,8 @@ fn video_frame_to_dmabuf_texture(
 impl Frame {
     pub(crate) fn into_textures(
         self,
-        #[allow(unused_variables)] gdk_context: Option<&gdk::GLContext>,
-        cached_textures: &mut HashMap<TextureCacheId, gdk::Texture>,
+        #[allow(unused_variables)] gdk_context: Option<&glow::Context>,
+        cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
     ) -> Result<Vec<Texture>, glib::Error> {
         let mut textures = Vec::with_capacity(1 + self.overlays.len());
         let mut used_textures = HashSet::with_capacity(1 + self.overlays.len());
@@ -338,7 +340,6 @@ impl Frame {
                     frame,
                     cached_textures,
                     &mut used_textures,
-                    gdk_context,
                     &wrapped_context,
                 )
             }
@@ -379,19 +380,7 @@ impl Frame {
         });
 
         for overlay in self.overlays {
-            let has_alpha = overlay.frame.format_info().has_alpha();
             unimplemented!("This is an in memory frame, we need to implement this using pixel buffer");
-
-            textures.push(Texture {
-                texture,
-                x: overlay.x as f32,
-                y: overlay.y as f32,
-                width: overlay.width as f32,
-                height: overlay.height as f32,
-                global_alpha: overlay.global_alpha,
-                has_alpha,
-                orientation: Orientation::Rotate0,
-            });
         }
 
         // Remove textures that were not used this time
