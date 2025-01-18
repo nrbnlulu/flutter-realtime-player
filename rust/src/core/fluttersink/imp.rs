@@ -11,6 +11,7 @@
 
 use crate::core::Frame;
 
+use super::gltexture::GLTextureSource;
 use super::utils::invoke_on_main_thread;
 use super::{frame, SinkEvent};
 
@@ -20,6 +21,7 @@ use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
 use gst_video::subclass::prelude::*;
+use log::info;
 
 use std::sync::{Arc, LazyLock};
 use std::sync::{
@@ -71,6 +73,7 @@ impl Default for StreamConfig {
 
 struct FlutterTextureSession{
     fl_txt_id: i64,
+    fl_texture: irondash_texture::Texture<GLTextureSource>,
 }
 
 #[derive(Default)]
@@ -162,6 +165,9 @@ impl ObjectImpl for FlutterTextureSink {
 }
 
 impl GstObjectImpl for FlutterTextureSink {}
+
+unsafe impl Send for FlutterTextureSink {}
+unsafe impl Sync for FlutterTextureSink {}
 
 impl ElementImpl for FlutterTextureSink {
     fn metadata() -> Option<&'static gst::subclass::ElementMetadata> {
@@ -295,32 +301,7 @@ impl ElementImpl for FlutterTextureSink {
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
         match transition {
             gst::StateChange::NullToReady => {
-                let mut paintable_guard = self.paintable.lock().unwrap();
-                let mut created = false;
-                if paintable_guard.is_none() {
-                    created = true;
-                    self.create_paintable(&mut paintable_guard);
-                }
-
-                if paintable_guard.is_none() {
-                    gst::error!(CAT, imp = self, "Failed to create paintable");
-                    return Err(gst::StateChangeError);
-                }
-
-                drop(paintable_guard);
-
-                if created {
-                    let self_ = self.to_owned();
-                    invoke_on_main_thread(move || {
-                        let paintable_guard = self_.paintable.lock().unwrap();
-                        if let Some(paintable) = &*paintable_guard {
-                            let paintable_clone = paintable.get_ref().clone();
-                            drop(paintable_guard);
-                            self_.obj().child_added(&paintable_clone, "paintable");
-                        }
-                    });
-                }
-
+                info!("FlutterTextureSink::change_state(NullToReady)");
                 // Notify the pipeline about the GL display and wrapped context so that any other
                 // elements in the pipeline ideally use the same / create GL contexts that are
                 // sharing with this one.
@@ -350,9 +331,6 @@ impl ElementImpl for FlutterTextureSink {
                     }
                 }
 
-                if create_window {
-                    self.create_window();
-                }
             }
             _ => (),
         }
@@ -368,22 +346,14 @@ impl ElementImpl for FlutterTextureSink {
                 // for this to finish as this can other deadlock.
                 let self_ = self.to_owned();
                 invoke_on_main_thread(move || {
-                    let paintable = self_.paintable.lock().u    nwrap();
+                    let paintable = self_.paintable.lock().unwrap();
                     if let Some(paintable) = &*paintable {
                         paintable.get_ref().handle_flush_frames();
                     }
                 });
             }
             gst::StateChange::ReadyToNull => {
-                let mut window_guard = self.window.lock().unwrap();
-                if let Some(window) = window_guard.take() {
-                    drop(window_guard);
-
-                    invoke_on_main_thread(move || {
-                        let window = window.get_ref();
-                        window.close();
-                    });
-                }
+                info!("FlutterTextureSink::change_state(ReadyToNull)");
             }
             _ => (),
         }

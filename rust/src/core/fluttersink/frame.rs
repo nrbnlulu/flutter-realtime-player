@@ -253,7 +253,7 @@ fn video_frame_to_gl_texture(
     let sync_meta = frame.buffer().meta::<gst_gl::GLSyncMeta>().unwrap();
     let format = frame.format();
 
-let texture = GLTexture::new(texture_name as u32, width as i32, height as i32)?;
+let texture = GLTexture::try_new(texture_name as u32, width as i32, height as i32)?;
 
     cached_textures.insert(TextureCacheId::GL(texture_name), texture.clone());
     used_textures.insert(TextureCacheId::GL(texture_name));
