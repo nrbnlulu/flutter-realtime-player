@@ -31,10 +31,6 @@ pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
 }
 
-lazy_static::lazy_static! {
-
-    static ref TEXTURES_REGISTRY: Mutex<HashMap<i64, Arc<SendableTexture<BoxedPixelData>>>> = Mutex::new(HashMap::new());
-}
 
 
 pub fn get_opengl_texture(engine_handle: i64) -> anyhow::Result<i64> {

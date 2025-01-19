@@ -17,7 +17,7 @@ mod frame;
 pub mod gltexture;
 pub(super) mod imp;
 mod utils;
-
+mod fltexturewrapper;
 enum SinkEvent {
     FrameChanged,
 }
@@ -46,3 +46,4 @@ pub fn init() -> anyhow::Result<()> {
     gst::init()?;
     register(None)
 }
+

@@ -28,3 +28,8 @@ where
     });
     recv.recv().expect("Somehow we dropped the sender")
 }
+
+pub(crate) fn make_element(factory_name: &str, name: Option<&str>) -> anyhow::Result<gst::Element> {
+    gst::ElementFactory::make_with_name(factory_name, name)
+        .map_err(|_| anyhow::anyhow!("Failed to create element"))
+}

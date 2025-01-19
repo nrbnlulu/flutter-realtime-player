@@ -2041,6 +2041,7 @@ dependencies = [
  "gdk-sys",
  "gl_loader",
  "glib",
+ "glib-macros",
  "glib-sys 0.18.1",
  "glow",
  "gobject-sys 0.18.0",
