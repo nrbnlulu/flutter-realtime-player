@@ -5,6 +5,7 @@ use std::{
 };
 
 use flume::{bounded, Receiver, Sender};
+use glib::types::StaticType;
 use irondash_engine_context::EngineContext;
 use irondash_run_loop::RunLoop;
 use irondash_texture::{
@@ -13,7 +14,7 @@ use irondash_texture::{
 use log::{error, info};
 use simple_logger::SimpleLogger;
 
-use crate::core::{get_images, my_glium::create_ogl_texture, GlSource};
+use crate::core::{fluttersink::{self, FlutterTextureSink}, get_images, GlSource};
 
 #[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
 pub fn greet(name: String) -> String {
@@ -24,6 +25,8 @@ pub fn greet(name: String) -> String {
 pub fn init_app() {
     SimpleLogger::new().init().unwrap();
     info!("Initializing app");
+    fluttersink::init().unwrap();
+
     // Default utilities - feel free to custom
     flutter_rust_bridge::setup_default_user_utils();
 }
@@ -31,37 +34,6 @@ pub fn init_app() {
 lazy_static::lazy_static! {
 
     static ref TEXTURES_REGISTRY: Mutex<HashMap<i64, Arc<SendableTexture<BoxedPixelData>>>> = Mutex::new(HashMap::new());
-}
-
-pub fn create_that_texture_please(engine_handle: i64) -> anyhow::Result<i64> {
-    let (tx_texture_id, rx_texture_id) = bounded(1);
-
-    RunLoop::sender_for_main_thread().unwrap().send(move || {
-        if let Err(e) = EngineContext::get() {
-            error!("Failed to get engine handle: {:?}", e);
-        }
-        let (tx, rx) = bounded(2);
-        let provider = Arc::new(GlSource { rx });
-
-        let texture = Texture::new_with_provider(engine_handle, provider).unwrap();
-        let texture_id = texture.id();
-        tx_texture_id
-            .send(texture_id)
-            .expect("Failed to send texture");
-
-        let texture_arc = texture.into_sendable_texture();
-        {
-            let _ = TEXTURES_REGISTRY
-                .lock()
-                .unwrap()
-                .insert(texture_id, texture_arc.clone());
-        }
-
-        std::thread::spawn(move || {
-            get_images(tx, texture_arc).expect("Failed to get images");
-        });
-    });
-    Ok(rx_texture_id.recv().unwrap())
 }
 
 
@@ -81,3 +53,4 @@ pub fn get_opengl_texture(engine_handle: i64) -> anyhow::Result<i64> {
     Ok(rx_texture_id.recv().unwrap())
 
 }
+

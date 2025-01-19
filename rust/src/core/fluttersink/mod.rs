@@ -33,11 +33,16 @@ impl FlutterTextureSink {
     }
 }
 
-pub fn register(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
+fn register(plugin: Option<&gst::Plugin>) -> anyhow::Result<()> {
     gst::Element::register(
-        Some(plugin),
+        plugin,
         "fluttertexturesink",
         gst::Rank::NONE,
         FlutterTextureSink::static_type(),
-    )
+    ).map_err(|_| anyhow::anyhow!("Failed to register FlutterTextureSink"))
+}
+
+pub fn init() -> anyhow::Result<()> {
+    gst::init()?;
+    register(None)
 }
