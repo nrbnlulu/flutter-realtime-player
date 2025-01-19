@@ -1,7 +1,7 @@
 use std::{sync::{Arc, Mutex}, thread};
 
 use glow::{HasContext, NativeProgram, TEXTURE_2D};
-use irondash_texture::{BoxedGLTexture, GLTextureProvider, PayloadProvider, Texture};
+use irondash_texture::{BoxedGLTexture, GLTextureProvider, PayloadProvider, SendableTexture, Texture};
 use simple_log::info;
 
 use super::fluttersink::gltexture::{GLTexture, GLTextureSource};
@@ -18,3 +18,6 @@ pub fn create_ogl_texture(engine_handle: i64) -> anyhow::Result<i64> {
     });
     Ok(id)
 }
+
+
+
