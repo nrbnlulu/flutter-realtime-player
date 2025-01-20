@@ -17,11 +17,12 @@ use glib::{object::Cast, subclass::types::ObjectSubclassIsExt, types::StaticType
 use gltexture::GLTextureSource;
 use gst::prelude::GstBinExtManual;
 use imp::ArcSendableTexture;
+use log::{debug, info};
 
 mod frame;
 pub mod gltexture;
 pub(super) mod imp;
-mod utils;
+pub mod utils;
 enum SinkEvent {
     FrameChanged,
 }
@@ -53,14 +54,16 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 fn create_flutter_texture(engine_handle: i64) -> anyhow::Result<(ArcSendableTexture, i64)> {
-    utils::invoke_on_platform_main_thread(move || {
+    return utils::invoke_on_platform_main_thread(move || {
+        info!("Creating Flutter texture");
         let provider = Arc::new(GLTextureSource::init_gl_context().unwrap());
         let texture =
             irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
+        debug!("Created Flutter texture with id {}", texture.id());
         let tx_id = texture.id();
         let sendable_texture = texture.into_sendable_texture();
         Ok((sendable_texture, tx_id))
-    })
+    });
 }
 
 pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
@@ -80,4 +83,4 @@ pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
     gst::Element::link_many(&[&src, &sink])?;
 
     Ok(id)
-}
+} 

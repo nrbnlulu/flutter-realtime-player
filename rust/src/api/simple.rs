@@ -4,7 +4,7 @@ use irondash_run_loop::RunLoop;
 use log::info;
 use simple_logger::SimpleLogger;
 
-use crate::core::fluttersink::{self, testit};
+use crate::core::fluttersink::{self, testit, utils};
 
 #[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
 pub fn greet(name: String) -> String {
@@ -22,15 +22,7 @@ pub fn init_app() {
 }
 
 pub fn get_opengl_texture(engine_handle: i64) -> anyhow::Result<i64> {
-    let (tx_texture_id, rx_texture_id) = bounded(1);
-
-    RunLoop::sender_for_main_thread().unwrap().send(move || {
-        let a = testit(engine_handle);
-        info!("sending texture id");
-        tx_texture_id
-            .send(a.unwrap())
-            .expect("Failed to send texture");
+    return utils::invoke_on_platform_main_thread(move || {
+         return testit(engine_handle)
     });
-    info!("waiting for texture id");
-    Ok(rx_texture_id.recv().unwrap())
 }

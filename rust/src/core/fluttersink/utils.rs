@@ -21,6 +21,9 @@ where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
+    if RunLoop::is_main_thread().unwrap_or(false) {
+        return func();
+    }
     let (send, recv) = flume::bounded(1);
 
     RunLoop::sender_for_main_thread().unwrap().send(move || {
