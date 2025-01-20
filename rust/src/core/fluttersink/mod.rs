@@ -23,7 +23,7 @@ mod frame;
 pub mod gltexture;
 pub(super) mod imp;
 pub mod utils;
-enum SinkEvent {
+pub(crate) enum SinkEvent {
     FrameChanged,
 }
 
@@ -52,35 +52,39 @@ pub fn init() -> anyhow::Result<()> {
     gst::init()?;
     register(None)
 }
+pub type FrameSender = flume::Sender<SinkEvent>;
 
-fn create_flutter_texture(engine_handle: i64) -> anyhow::Result<(ArcSendableTexture, i64)> {
+fn create_flutter_texture(
+    engine_handle: i64,
+) -> anyhow::Result<(ArcSendableTexture, i64, FrameSender)> {
     return utils::invoke_on_platform_main_thread(move || {
-        info!("Creating Flutter texture");
-        let provider = Arc::new(GLTextureSource::init_gl_context().unwrap());
+        debug!("Creating Flutter texture");
+        let (tx, rx) = flume::bounded(3);
+
+        let provider = Arc::new(GLTextureSource::new(rx).unwrap());
         let texture =
             irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
         debug!("Created Flutter texture with id {}", texture.id());
         let tx_id = texture.id();
         let sendable_texture = texture.into_sendable_texture();
-        Ok((sendable_texture, tx_id))
+        Ok((sendable_texture, tx_id, tx))
     });
 }
 
 pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
-    let (texture, id) = create_flutter_texture(engine_handle)?;
+    let (_, id, tx) = create_flutter_texture(engine_handle)?;
     let src = utils::make_element("videotestsrc", None)?;
     let sink = utils::make_element("fluttertexturesink", None)?;
-    let (tx, rx) = flume::unbounded();
 
-    let fl_texture_wrapper = imp::FlTextureWrapper::new(id, tx);
+    let fl_texture_wrapper = imp::FlutterConfig::new(id, tx);
     sink.downcast_ref::<FlutterTextureSink>()
         .unwrap()
         .imp()
-        .set_fl_texture(fl_texture_wrapper);
+        .set_fl_config(fl_texture_wrapper);
 
     let pipeline = gst::Pipeline::new();
     pipeline.add_many(&[&src, &sink])?;
     gst::Element::link_many(&[&src, &sink])?;
 
     Ok(id)
-} 
+}

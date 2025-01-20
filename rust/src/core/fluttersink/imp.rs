@@ -14,7 +14,7 @@ use crate::core::fluttersink::utils;
 
 use super::gltexture::GLTextureSource;
 use super::utils::{invoke_on_gs_main_thread, make_element};
-use super::{frame, SinkEvent};
+use super::{frame, FrameSender, SinkEvent};
 
 use glib::clone::Downgrade;
 use glib::thread_guard::ThreadGuard;
@@ -75,16 +75,14 @@ impl Default for StreamConfig {
     }
 }
 
-type FrameSender = flume::Sender<SinkEvent>;
-
-pub(crate) struct FlTextureWrapper {
+pub(crate) struct FlutterConfig {
     fl_txt_id: i64,
     frame_sender: FrameSender,
 }
 
-impl FlTextureWrapper {
-    pub fn new(fl_txt_id: i64, frame_sender: FrameSender) -> Self {
-        FlTextureWrapper {
+impl FlutterConfig {
+    pub(crate) fn new(fl_txt_id: i64, frame_sender: FrameSender) -> Self {
+        FlutterConfig {
             fl_txt_id,
             frame_sender,
         }
@@ -97,7 +95,7 @@ pub type ArcSendableTexture =
 #[derive(Default)]
 pub struct FlutterTextureSink {
     config: Mutex<StreamConfig>,
-    fl_texture: RefCell<Option<FlTextureWrapper>>,
+    fl_config: RefCell<Option<FlutterConfig>>,
     pending_frame: Mutex<Option<Frame>>,
     cached_caps: Mutex<Option<gst::Caps>>,
     settings: Mutex<Settings>,
@@ -596,7 +594,7 @@ impl VideoSinkImpl for FlutterTextureSink {
         self.pending_frame.lock().unwrap().replace(frame);
 
         let sender = self
-            .fl_texture
+            .fl_config
             .borrow()
             .as_ref()
             .map(|wrapper| wrapper.frame_sender.clone());
@@ -696,7 +694,7 @@ impl FlutterTextureSink {
             .replace(tmp_caps);
     }
 
-    pub(crate) fn set_fl_texture(&self, wrapper: FlTextureWrapper) {
-        *self.fl_texture.borrow_mut() = Some(wrapper);
+    pub(crate) fn set_fl_config(&self, config: FlutterConfig) {
+        *self.fl_config.borrow_mut() = Some(config);
     }
 }
