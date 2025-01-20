@@ -1,17 +1,7 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    thread,
-};
 
-use flume::{bounded, Receiver, Sender};
-use glib::types::StaticType;
-use irondash_engine_context::EngineContext;
+use flume::bounded;
 use irondash_run_loop::RunLoop;
-use irondash_texture::{
-    BoxedPixelData, PayloadProvider, SendableTexture, SimplePixelData, Texture,
-};
-use log::{error, info};
+use log::info;
 use simple_logger::SimpleLogger;
 
 use crate::core::fluttersink::{self, testit};
