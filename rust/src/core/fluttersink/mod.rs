@@ -11,7 +11,12 @@
 
 // ported from gstreamer-rs-plugins gtk4sink
 
-use glib::types::StaticType;
+use std::sync::Arc;
+
+use glib::{object::Cast, subclass::types::ObjectSubclassIsExt, types::StaticType};
+use gltexture::GLTextureSource;
+use gst::prelude::GstBinExtManual;
+use imp::ArcSendableTexture;
 
 mod frame;
 pub mod gltexture;
@@ -38,7 +43,8 @@ fn register(plugin: Option<&gst::Plugin>) -> anyhow::Result<()> {
         "fluttertexturesink",
         gst::Rank::NONE,
         FlutterTextureSink::static_type(),
-    ).map_err(|_| anyhow::anyhow!("Failed to register FlutterTextureSink"))
+    )
+    .map_err(|_| anyhow::anyhow!("Failed to register FlutterTextureSink"))
 }
 
 pub fn init() -> anyhow::Result<()> {
@@ -46,3 +52,32 @@ pub fn init() -> anyhow::Result<()> {
     register(None)
 }
 
+fn create_flutter_texture(engine_handle: i64) -> anyhow::Result<(ArcSendableTexture, i64)> {
+    utils::invoke_on_platform_main_thread(move || {
+        let provider = Arc::new(GLTextureSource::init_gl_context().unwrap());
+        let texture =
+            irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
+        let tx_id = texture.id();
+        let sendable_texture = texture.into_sendable_texture();
+        Ok((sendable_texture, tx_id))
+    })
+}
+
+pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
+    let (texture, id) = create_flutter_texture(engine_handle)?;
+    let src = utils::make_element("videotestsrc", None)?;
+    let sink = utils::make_element("fluttertexturesink", None)?;
+    let (tx, rx) = flume::unbounded();
+
+    let fl_texture_wrapper = imp::FlTextureWrapper::new(id, tx);
+    sink.downcast_ref::<FlutterTextureSink>()
+        .unwrap()
+        .imp()
+        .set_fl_texture(fl_texture_wrapper);
+
+    let pipeline = gst::Pipeline::new();
+    pipeline.add_many(&[&src, &sink])?;
+    gst::Element::link_many(&[&src, &sink])?;
+
+    Ok(id)
+}

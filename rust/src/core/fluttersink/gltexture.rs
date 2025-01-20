@@ -41,7 +41,6 @@ impl GLTextureProvider for GLTexture {
     }
 }
 
-
 pub struct GLTextureSource {
     width: i32,
     height: i32,
@@ -79,7 +78,7 @@ impl GLTextureSource {
             unsafe {
                 gdk_sys::gdk_gl_context_clear_current();
             }
-            
+
             return Ok(Self {
                 width: 400,
                 height: 400,

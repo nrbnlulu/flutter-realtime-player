@@ -79,14 +79,20 @@ type FrameSender = flume::Sender<SinkEvent>;
 
 pub(crate) struct FlTextureWrapper {
     fl_txt_id: i64,
-    frame_sender: FrameSender
+    frame_sender: FrameSender,
+}
+
+impl FlTextureWrapper {
+    pub fn new(fl_txt_id: i64, frame_sender: FrameSender) -> Self {
+        FlTextureWrapper {
+            fl_txt_id,
+            frame_sender,
+        }
+    }
 }
 
 pub type ArcSendableTexture =
-Arc<irondash_texture::SendableTexture<irondash_texture::BoxedGLTexture>>;
-
-
-
+    Arc<irondash_texture::SendableTexture<irondash_texture::BoxedGLTexture>>;
 
 #[derive(Default)]
 pub struct FlutterTextureSink {
@@ -97,7 +103,6 @@ pub struct FlutterTextureSink {
     settings: Mutex<Settings>,
     window_resized: AtomicBool,
 }
-
 
 #[derive(Default)]
 struct Settings {
@@ -120,7 +125,6 @@ impl ObjectImpl for FlutterTextureSink {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: LazyLock<Vec<glib::ParamSpec>> = LazyLock::new(|| {
             vec![
-
                 glib::ParamSpecUInt::builder("window-width")
                     .nick("Window width")
                     .blurb("the width of the main widget rendering the paintable")
@@ -591,7 +595,11 @@ impl VideoSinkImpl for FlutterTextureSink {
         )?;
         self.pending_frame.lock().unwrap().replace(frame);
 
-        let sender = self.fl_texture.borrow().as_ref().map(|wrapper| wrapper.frame_sender.clone());
+        let sender = self
+            .fl_texture
+            .borrow()
+            .as_ref()
+            .map(|wrapper| wrapper.frame_sender.clone());
         let sender = sender.as_ref().ok_or_else(|| {
             gst::error!(CAT, imp = self, "Have no main thread sender");
             gst::FlowError::Flushing
@@ -688,44 +696,7 @@ impl FlutterTextureSink {
             .replace(tmp_caps);
     }
 
-
-    fn set_fl_texture(&self, wrapper: FlTextureWrapper) {
+    pub(crate) fn set_fl_texture(&self, wrapper: FlTextureWrapper) {
         *self.fl_texture.borrow_mut() = Some(wrapper);
     }
-}
-
-
-fn create_flutter_texture(
-    engine_handle: i64,
-) -> anyhow::Result<(
-    ArcSendableTexture,
-    i64,
-)> {
-    utils::invoke_on_platform_main_thread(move || {
-        let provider = Arc::new(GLTextureSource::init_gl_context().unwrap());
-        let texture =
-            irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
-        let tx_id = texture.id();
-        let sendable_texture = texture.into_sendable_texture();
-        Ok((sendable_texture, tx_id))
-    })
-}
-
-pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
-    let (texture, id) = create_flutter_texture(engine_handle)?;
-    let src = utils::make_element("videotestsrc", None)?;
-    let sink = utils::make_element("fluttertexturesink", None)?;
-    let (tx, rx) = flume::unbounded();
-
-    let fl_texture_wrapper = FlTextureWrapper{
-        fl_txt_id: id,
-        frame_sender: tx
-    };
-    sink.downcast_ref::<super::FlutterTextureSink>().unwrap().imp().set_fl_texture(fl_texture_wrapper);
-    
-    let pipeline = gst::Pipeline::new();
-    pipeline.add_many(&[&src, &sink])?;
-    gst::Element::link_many(&[&src, &sink])?;
-
-    Ok(id)
 }

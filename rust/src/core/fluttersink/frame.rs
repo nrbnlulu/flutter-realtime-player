@@ -223,8 +223,7 @@ impl AsRef<[u8]> for FrameWrapper {
     }
 }
 
-
-/// Convert a video frame to a 
+/// Convert a video frame to a
 fn video_frame_to_pixel_buffer(
     frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
 ) -> anyhow::Result<()> {
@@ -253,7 +252,7 @@ fn video_frame_to_gl_texture(
     let sync_meta = frame.buffer().meta::<gst_gl::GLSyncMeta>().unwrap();
     let format = frame.format();
 
-let texture = GLTexture::try_new(texture_name as u32, width as i32, height as i32)?;
+    let texture = GLTexture::try_new(texture_name as u32, width as i32, height as i32)?;
 
     cached_textures.insert(TextureCacheId::GL(texture_name), texture.clone());
     used_textures.insert(TextureCacheId::GL(texture_name));
@@ -339,7 +338,8 @@ impl Frame {
                     cached_textures,
                     &mut used_textures,
                     &wrapped_context,
-                ).unwrap()
+                )
+                .unwrap()
             }
             #[cfg(all(target_os = "linux", feature = "dmabuf"))]
             MappedFrame::DmaBuf {
@@ -364,7 +364,6 @@ impl Frame {
                 width,
                 height,
             )?,
-
         };
 
         textures.push(Texture {
@@ -379,7 +378,9 @@ impl Frame {
         });
 
         for overlay in self.overlays {
-            unimplemented!("This is an in memory frame, we need to implement this using pixel buffer");
+            unimplemented!(
+                "This is an in memory frame, we need to implement this using pixel buffer"
+            );
         }
 
         // Remove textures that were not used this time
