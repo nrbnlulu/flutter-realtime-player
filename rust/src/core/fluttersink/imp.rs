@@ -13,7 +13,6 @@ use crate::core::fluttersink::frame::Frame;
 use crate::core::fluttersink::utils;
 
 use super::gltexture::GLTextureSource;
-use super::props::imp::{ArcSendableTexture, FlTextureWrapper};
 use super::utils::{invoke_on_gs_main_thread, make_element};
 use super::{frame, SinkEvent};
 
@@ -27,6 +26,7 @@ use gst_video::subclass::prelude::*;
 use irondash_texture::SendableTexture;
 use log::info;
 
+use std::cell::RefCell;
 use std::sync::{
     atomic::{self, AtomicBool},
     Mutex,
@@ -75,12 +75,23 @@ impl Default for StreamConfig {
     }
 }
 
+type FrameSender = flume::Sender<SinkEvent>;
+
+pub(crate) struct FlTextureWrapper {
+    fl_txt_id: i64,
+    frame_sender: FrameSender
+}
+
+pub type ArcSendableTexture =
+Arc<irondash_texture::SendableTexture<irondash_texture::BoxedGLTexture>>;
+
+
+
 
 #[derive(Default)]
 pub struct FlutterTextureSink {
     config: Mutex<StreamConfig>,
-    texture: Option<FlTextureWrapper>,
-    sender: Mutex<Option<flume::Sender<SinkEvent>>>,
+    fl_texture: RefCell<Option<FlTextureWrapper>>,
     pending_frame: Mutex<Option<Frame>>,
     cached_caps: Mutex<Option<gst::Caps>>,
     settings: Mutex<Settings>,
@@ -109,7 +120,6 @@ impl ObjectImpl for FlutterTextureSink {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: LazyLock<Vec<glib::ParamSpec>> = LazyLock::new(|| {
             vec![
-                glib::ParamSpecObject::builder::<FlTextureWrapper>("FlTextureWrapper").build(),
 
                 glib::ParamSpecUInt::builder("window-width")
                     .nick("Window width")
@@ -581,7 +591,7 @@ impl VideoSinkImpl for FlutterTextureSink {
         )?;
         self.pending_frame.lock().unwrap().replace(frame);
 
-        let sender = self.sender.lock().unwrap();
+        let sender = self.fl_texture.borrow().as_ref().map(|wrapper| wrapper.frame_sender.clone());
         let sender = sender.as_ref().ok_or_else(|| {
             gst::error!(CAT, imp = self, "Have no main thread sender");
             gst::FlowError::Flushing
@@ -678,11 +688,9 @@ impl FlutterTextureSink {
             .replace(tmp_caps);
     }
 
-    fn set_fl_texture(&mut self, fl_texture: ArcSendableTexture, fl_txt_id: i64) {
-        self.texture = Some(FlTextureWrapper {
-            fl_txt_id,
-            fl_texture,
-        });
+
+    fn set_fl_texture(&self, wrapper: FlTextureWrapper) {
+        *self.fl_texture.borrow_mut() = Some(wrapper);
     }
 }
 
@@ -707,8 +715,14 @@ pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
     let (texture, id) = create_flutter_texture(engine_handle)?;
     let src = utils::make_element("videotestsrc", None)?;
     let sink = utils::make_element("fluttertexturesink", None)?;
-    let binding = sink.downcast::<super::FlutterTextureSink>().unwrap();
-    let sink_downcast = binding.imp();
+    let (tx, rx) = flume::unbounded();
+
+    let fl_texture_wrapper = FlTextureWrapper{
+        fl_txt_id: id,
+        frame_sender: tx
+    };
+    sink.downcast_ref::<super::FlutterTextureSink>().unwrap().imp().set_fl_texture(fl_texture_wrapper);
+    
     let pipeline = gst::Pipeline::new();
     pipeline.add_many(&[&src, &sink])?;
     gst::Element::link_many(&[&src, &sink])?;
