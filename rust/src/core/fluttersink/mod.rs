@@ -73,7 +73,7 @@ fn create_flutter_texture(
 }
 
 pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
-    let (_, id, tx) = create_flutter_texture(engine_handle)?;
+    let (sendable_fl_txt, id, tx) = create_flutter_texture(engine_handle)?;
     let gl = false;
 
     let pipeline = gst::Pipeline::new();
@@ -106,7 +106,7 @@ pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
         (src, sink.upcast())
     };
 
-    let fl_texture_wrapper = imp::FlutterConfig::new(id, tx);
+    let fl_texture_wrapper = imp::FlutterConfig::new(id, tx, sendable_fl_txt);
     flsink
         .downcast_ref::<FlutterTextureSink>()
         .unwrap()

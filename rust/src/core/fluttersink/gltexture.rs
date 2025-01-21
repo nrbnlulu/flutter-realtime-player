@@ -1,8 +1,10 @@
-use std::sync::Mutex;
+use std::{cell::RefCell, collections::HashMap, sync::Mutex};
 
 use glow::HasContext;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider};
-use log::{debug, info};
+use log::{debug, error, info};
+
+use crate::core::fluttersink::frame;
 
 use super::SinkEvent;
 
@@ -28,6 +30,7 @@ impl GLTexture {
             height,
         })
     }
+
 }
 
 impl GLTextureProvider for GLTexture {
@@ -47,6 +50,8 @@ pub struct GLTextureSource {
     width: i32,
     height: i32,
     texture_receiver: flume::Receiver<SinkEvent>,
+    cached_textures: Mutex<HashMap<frame::TextureCacheId, GLTexture>>,
+    gl_context: Mutex<glow::Context>,
     green_texture_name: u32,
 }
 
@@ -83,6 +88,8 @@ impl GLTextureSource {
             height: 0,
             texture_receiver,
             green_texture_name: texture_name,
+            cached_textures: Mutex::new(HashMap::new()),
+            gl_context: Mutex::new(gl_context),
         })
     }
 }
@@ -92,62 +99,47 @@ impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
         match self.texture_receiver.recv() {
             Ok(SinkEvent::FrameChanged(frame)) => {
                 debug!("PayloadProvider: Frame changed");
-                let context = self.gl_ctx.borrow();
-
-
-                let new_paintables = match frame
-                    .into_textures(context.as_ref(), &mut self.cached_textures.borrow_mut())
+                let context = self.gl_context.lock().unwrap();
+                if let Ok(new_paintables) =
+                    frame.into_textures(Some(&context), &mut self.cached_textures.lock().unwrap())
                 {
-                    Ok(textures) => textures,
-                    Err(err) => {
-                        gst::element_error!(
-                            sink,
-                            gst::ResourceError::Failed,
-                            ["Failed to transform frame into textures: {err}"]
-                        );
-                        return;
-                    }
-                };
+                    let flip_width_height =
+                        |(width, height, orientation): (u32, u32, frame::Orientation)| {
+                            if orientation.is_flip_width_height() {
+                                (height, width)
+                            } else {
+                                (width, height)
+                            }
+                        };
 
-                let flip_width_height =
-                    |(width, height, orientation): (u32, u32, frame::Orientation)| {
-                        if orientation.is_flip_width_height() {
-                            (height, width)
-                        } else {
-                            (width, height)
-                        }
-                    };
+                    let new_size = new_paintables
+                        .first()
+                        .map(|p| {
+                            flip_width_height((
+                                f32::round(p.width) as u32,
+                                f32::round(p.height) as u32,
+                                p.orientation,
+                            ))
+                        })
+                        .unwrap();
 
-                let new_size = new_paintables
-                    .first()
-                    .map(|p| {
-                        flip_width_height((
-                            f32::round(p.width) as u32,
-                            f32::round(p.height) as u32,
-                            p.orientation,
-                        ))
-                    })
-                    .unwrap();
+                    // let old_paintables = self.paintables.replace(new_paintables);
+                    // let old_size = old_paintables.first().map(|p| {
+                    //     flip_width_height((
+                    //         f32::round(p.width) as u32,
+                    //         f32::round(p.height) as u32,
+                    //         p.orientation,
+                    //     ))
+                    // });
 
-                let old_paintables = self.paintables.replace(new_paintables);
-                let old_size = old_paintables.first().map(|p| {
-                    flip_width_height((
-                        f32::round(p.width) as u32,
-                        f32::round(p.height) as u32,
-                        p.orientation,
-                    ))
-                });
-
-                if Some(new_size) != old_size {
-                    gst::debug!(
-                        CAT,
-                        imp = self,
-                        "Size changed from {old_size:?} to {new_size:?}",
-                    );
-                    self.obj().invalidate_size();
+                    // if Some(new_size) != old_size {
+                    //     debug!("Size changed from {old_size:?} to {new_size:?}",);
+                    // }
+                    let first_frame = new_paintables.first().unwrap();
+                    return Box::new(
+                        first_frame.texture.clone()
+                    )
                 }
-
-                self.obj().invalidate_contents();
             }
             Err(e) => {
                 info!("Error receiving frame changed event: {:?}", e);

@@ -593,7 +593,6 @@ impl VideoSinkImpl for FlutterTextureSink {
                 gst::error!(CAT, imp = self, "Failed to map video frame");
             },
         )?;
-        self.pending_frame.lock().unwrap().replace(frame);
 
         let sender = self
             .fl_config
@@ -605,14 +604,11 @@ impl VideoSinkImpl for FlutterTextureSink {
             gst::FlowError::Flushing
         })?;
 
-        match sender.try_send(SinkEvent::FrameChanged) {
-                gst::warning!(CAT, imp = self, "Have too many pending frames");
-            Ok(_) => self.fl_config.borrow().inspect(|p| p.sendable_txt.mark_frame_available()),
-            Err(flume::TrySendError::Full(_)) => {
-                warn!("Too many pending frames");
-            }
+        match sender.try_send(SinkEvent::FrameChanged(frame)) {
+            Ok(_) => {let _  = self.fl_config.borrow().as_ref().inspect(|p| p.sendable_txt.mark_frame_available());},
+            Err(flume::TrySendError::Full(_)) => warn!("Main thread receiver is full"),
             Err(flume::TrySendError::Disconnected(_)) => {
-                gst::error!(CAT, imp = self, "Have main thread receiver shut down");
+                error!("Main thread receiver is disconnected");
                 return Err(gst::FlowError::Flushing);
             }
         }
