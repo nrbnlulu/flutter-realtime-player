@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use glow::HasContext;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider};
-use log::info;
+use log::{debug, info};
 
 use super::SinkEvent;
 
@@ -32,6 +32,7 @@ impl GLTexture {
 
 impl GLTextureProvider for GLTexture {
     fn get(&self) -> irondash_texture::GLTexture {
+        info!("Returning GLTexture");
 
         irondash_texture::GLTexture {
             target: self.target,
@@ -47,7 +48,7 @@ pub struct GLTextureSource {
     height: i32,
     texture_receiver: flume::Receiver<SinkEvent>,
     green_texture_name: u32,
-}       
+}
 
 impl GLTextureSource {
     pub fn new(texture_receiver: flume::Receiver<SinkEvent>) -> anyhow::Result<Self> {
@@ -76,41 +77,85 @@ impl GLTextureSource {
                 );
                 gl_context.bind_texture(glow::TEXTURE_2D, Some(texture));
             }
-        } 
-        Ok(
-            Self {
-                width: 0,
-                height: 0,
-                texture_receiver,
-                green_texture_name: texture_name,
-            }
-        )
+        }
+        Ok(Self {
+            width: 0,
+            height: 0,
+            texture_receiver,
+            green_texture_name: texture_name,
+        })
     }
-
-    }
+}
 
 impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
     fn get_payload(&self) -> BoxedGLTexture {
-        match self.texture_receiver.try_recv(){
-            Ok(SinkEvent::FrameChanged) => {
-                info!("Frame changed");
+        match self.texture_receiver.recv() {
+            Ok(SinkEvent::FrameChanged(frame)) => {
+                debug!("PayloadProvider: Frame changed");
+                let context = self.gl_ctx.borrow();
+
+
+                let new_paintables = match frame
+                    .into_textures(context.as_ref(), &mut self.cached_textures.borrow_mut())
+                {
+                    Ok(textures) => textures,
+                    Err(err) => {
+                        gst::element_error!(
+                            sink,
+                            gst::ResourceError::Failed,
+                            ["Failed to transform frame into textures: {err}"]
+                        );
+                        return;
+                    }
+                };
+
+                let flip_width_height =
+                    |(width, height, orientation): (u32, u32, frame::Orientation)| {
+                        if orientation.is_flip_width_height() {
+                            (height, width)
+                        } else {
+                            (width, height)
+                        }
+                    };
+
+                let new_size = new_paintables
+                    .first()
+                    .map(|p| {
+                        flip_width_height((
+                            f32::round(p.width) as u32,
+                            f32::round(p.height) as u32,
+                            p.orientation,
+                        ))
+                    })
+                    .unwrap();
+
+                let old_paintables = self.paintables.replace(new_paintables);
+                let old_size = old_paintables.first().map(|p| {
+                    flip_width_height((
+                        f32::round(p.width) as u32,
+                        f32::round(p.height) as u32,
+                        p.orientation,
+                    ))
+                });
+
+                if Some(new_size) != old_size {
+                    gst::debug!(
+                        CAT,
+                        imp = self,
+                        "Size changed from {old_size:?} to {new_size:?}",
+                    );
+                    self.obj().invalidate_size();
+                }
+
+                self.obj().invalidate_contents();
             }
             Err(e) => {
                 info!("Error receiving frame changed event: {:?}", e);
             }
         }
         // fallback to a green screen
-        
-        info!("Returning default GLTexture");
 
-        Box::new(
-            GLTexture::try_new(
-                self.green_texture_name,
-                self.width,
-                self.height,
-            )
-            .unwrap(),
-        )
+        Box::new(GLTexture::try_new(self.green_texture_name, self.width, self.height).unwrap())
     }
 }
 
