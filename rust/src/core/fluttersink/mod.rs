@@ -13,18 +13,19 @@
 
 use std::sync::Arc;
 
+use frame::Frame;
 use glib::{object::Cast, subclass::types::ObjectSubclassIsExt, types::StaticType};
 use gltexture::GLTextureSource;
-use gst::prelude::GstBinExtManual;
+use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, GstObjectExt};
 use imp::ArcSendableTexture;
-use log::{debug, info};
+use log::{debug, error, info};
 
 mod frame;
 pub mod gltexture;
 pub(super) mod imp;
 pub mod utils;
 pub(crate) enum SinkEvent {
-    FrameChanged,
+    FrameChanged(Frame),
 }
 
 glib::wrapper! {
@@ -52,7 +53,7 @@ pub fn init() -> anyhow::Result<()> {
     gst::init()?;
     register(None)
 }
-pub type FrameSender = flume::Sender<SinkEvent>;
+pub(crate) type FrameSender = flume::Sender<SinkEvent>;
 
 fn create_flutter_texture(
     engine_handle: i64,
@@ -73,18 +74,84 @@ fn create_flutter_texture(
 
 pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
     let (_, id, tx) = create_flutter_texture(engine_handle)?;
-    let src = utils::make_element("videotestsrc", None)?;
-    let sink = utils::make_element("fluttertexturesink", None)?;
+    let gl = false;
+
+    let pipeline = gst::Pipeline::new();
+    let flsink = utils::make_element("fluttertexturesink", None)?;
+    let overlay = gst::ElementFactory::make("clockoverlay")
+        .property("font-desc", "Monospace 42")
+        .build()
+        .unwrap();
+
+    let (src, sink) = if gl {
+        unimplemented!("GL not supported yet");
+        // let src = utils::make_element("gltestsrc", None)?;
+
+        // let sink = gst::ElementFactory::make("glsinkbin")
+        //     .property("sink", &flsink)
+        //     .build()
+        //     .unwrap();
+    } else {
+        let src = gst::ElementFactory::make("videotestsrc").build().unwrap();
+
+        let sink = gst::Bin::default();
+        let convert = gst::ElementFactory::make("videoconvert").build().unwrap();
+
+        sink.add(&convert).unwrap();
+        sink.add(&flsink).unwrap();
+        convert.link(&flsink).unwrap();
+
+        sink.add_pad(&gst::GhostPad::with_target(&convert.static_pad("sink").unwrap()).unwrap())
+            .unwrap();
+        (src, sink.upcast())
+    };
 
     let fl_texture_wrapper = imp::FlutterConfig::new(id, tx);
-    sink.downcast_ref::<FlutterTextureSink>()
+    flsink
+        .downcast_ref::<FlutterTextureSink>()
         .unwrap()
         .imp()
         .set_fl_config(fl_texture_wrapper);
 
-    let pipeline = gst::Pipeline::new();
-    pipeline.add_many(&[&src, &sink])?;
-    gst::Element::link_many(&[&src, &sink])?;
+    
+    pipeline.add_many([&src, &overlay, &sink]).unwrap();
+    let caps = gst_video::VideoCapsBuilder::new()
+        .width(640)
+        .height(480)
+        .any_features()
+        .build();
 
+    src.link_filtered(&overlay, &caps).unwrap();
+    overlay.link(&sink).unwrap();
+    let bus = pipeline.bus().unwrap();
+
+    pipeline
+        .set_state(gst::State::Playing)
+        .expect("Unable to set the pipeline to the `Playing` state");
+    let bus_watch = bus
+        .add_watch_local(move |_, msg| {
+            use gst::MessageView;
+
+            match msg.view() {
+                MessageView::Info(info) => {
+                    if let Some(s) = info.structure() {
+                        info!("Info: {:?}", s);
+                    }
+                }
+                MessageView::Eos(..) => info!("End of stream"),
+                MessageView::Error(err) => {
+                    error!(
+                        "Error from {:?}: {} ({:?})",
+                        err.src().map(|s| s.path_string()),
+                        err.error(),
+                        err.debug()
+                    );
+                }
+                _ => (),
+            };
+
+            glib::ControlFlow::Continue
+        })
+        .expect("Failed to add bus watch");
     Ok(id)
 }

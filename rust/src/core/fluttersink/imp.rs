@@ -10,7 +10,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::core::fluttersink::frame::Frame;
-use crate::core::fluttersink::utils;
+use crate::core::fluttersink::utils::{self, LogErr};
 
 use super::gltexture::GLTextureSource;
 use super::utils::{invoke_on_gs_main_thread, make_element};
@@ -19,6 +19,7 @@ use super::{frame, FrameSender, SinkEvent};
 use glib::clone::Downgrade;
 use glib::thread_guard::ThreadGuard;
 
+use log::{debug, error};
 use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
@@ -545,6 +546,7 @@ impl BaseSinkImpl for FlutterTextureSink {
 impl VideoSinkImpl for FlutterTextureSink {
     /// if new frame could be rendered, send a message to the main thread
     fn show_frame(&self, buffer: &gst::Buffer) -> Result<gst::FlowSuccess, gst::FlowError> {
+        debug!("FlutterTextureSink::show_frame {:?}", buffer);
         gst::trace!(CAT, imp = self, "Rendering buffer {:?}", buffer);
 
         if self.window_resized.swap(false, atomic::Ordering::SeqCst) {
@@ -556,11 +558,7 @@ impl VideoSinkImpl for FlutterTextureSink {
 
         // Empty buffer, nothing to render
         if buffer.n_memory() == 0 {
-            gst::trace!(
-                CAT,
-                imp = self,
-                "Empty buffer, nothing to render. Returning."
-            );
+            info!("Empty buffer, nothing to render");
             return Ok(gst::FlowSuccess::Ok);
         };
 
@@ -588,35 +586,23 @@ impl VideoSinkImpl for FlutterTextureSink {
         };
         let frame = Frame::new(buffer, info, orientation, wrapped_context.as_ref()).inspect_err(
             |_err| {
-                gst::error!(CAT, imp = self, "Failed to map video frame");
+                error!("Failed to map video frame");
             },
         )?;
-        self.pending_frame.lock().unwrap().replace(frame);
-
-        let sender = self
-            .fl_config
-            .borrow()
-            .as_ref()
-            .map(|wrapper| wrapper.frame_sender.clone());
-        let sender = sender.as_ref().ok_or_else(|| {
-            gst::error!(CAT, imp = self, "Have no main thread sender");
-            gst::FlowError::Flushing
-        })?;
-
-        match sender.try_send(SinkEvent::FrameChanged) {
-            Ok(_) => (),
-            Err(flume::TrySendError::Full(_)) => {
-                gst::warning!(CAT, imp = self, "Have too many pending frames");
+        match self.fl_config.borrow().as_ref(){
+            Some(fl_config) => {
+                fl_config.frame_sender.send(SinkEvent::FrameChanged(frame)).log_err();
             }
-            Err(flume::TrySendError::Disconnected(_)) => {
-                gst::error!(CAT, imp = self, "Have main thread receiver shut down");
-                return Err(gst::FlowError::Flushing);
+            None => {
+                self.pending_frame.lock().unwrap().replace(frame);
             }
+            
         }
 
         Ok(gst::FlowSuccess::Ok)
     }
 }
+
 
 impl FlutterTextureSink {
     fn pending_frame(&self) -> Option<Frame> {

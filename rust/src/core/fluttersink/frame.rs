@@ -308,7 +308,7 @@ fn video_frame_to_dmabuf_texture(
 impl Frame {
     pub(crate) fn into_textures(
         self,
-        #[allow(unused_variables)] gdk_context: Option<&glow::Context>,
+        #[allow(unused_variables)] gl_context: Option<&glow::Context>,
         cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
     ) -> Result<Vec<Texture>, glib::Error> {
         let mut textures = Vec::with_capacity(1 + self.overlays.len());
@@ -327,7 +327,7 @@ impl Frame {
                 wrapped_context,
                 ..
             } => {
-                let Some(gdk_context) = gdk_context else {
+                let Some(gdk_context) = gl_context else {
                     // This will fail badly if the video frame was actually mapped as GL texture
                     // but this case can't really happen as we only do that if we actually have a
                     // GDK GL context.
