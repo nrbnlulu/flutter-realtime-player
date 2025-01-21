@@ -11,7 +11,7 @@
 
 // ported from gstreamer-rs-plugins gtk4sink
 
-use std::sync::Arc;
+use std::{sync::Arc, thread, time::Duration};
 
 use glib::{object::Cast, subclass::types::ObjectSubclassIsExt, types::StaticType};
 use gltexture::GLTextureSource;
@@ -72,11 +72,11 @@ fn create_flutter_texture(
 }
 
 pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
-    let (_, id, tx) = create_flutter_texture(engine_handle)?;
+    let (sendable_txt, id, tx) = create_flutter_texture(engine_handle)?;
     let src = utils::make_element("videotestsrc", None)?;
     let sink = utils::make_element("fluttertexturesink", None)?;
 
-    let fl_texture_wrapper = imp::FlutterConfig::new(id, tx);
+    let fl_texture_wrapper = imp::FlutterConfig::new(id, tx, sendable_txt);
     sink.downcast_ref::<FlutterTextureSink>()
         .unwrap()
         .imp()

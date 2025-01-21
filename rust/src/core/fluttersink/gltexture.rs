@@ -32,7 +32,6 @@ impl GLTexture {
 
 impl GLTextureProvider for GLTexture {
     fn get(&self) -> irondash_texture::GLTexture {
-        info!("Returning GLTexture");
 
         irondash_texture::GLTexture {
             target: self.target,
@@ -92,7 +91,7 @@ impl GLTextureSource {
 
 impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
     fn get_payload(&self) -> BoxedGLTexture {
-        match self.texture_receiver.recv(){
+        match self.texture_receiver.try_recv(){
             Ok(SinkEvent::FrameChanged) => {
                 info!("Frame changed");
             }
@@ -102,6 +101,7 @@ impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
         }
         // fallback to a green screen
         
+        info!("Returning default GLTexture");
 
         Box::new(
             GLTexture::try_new(

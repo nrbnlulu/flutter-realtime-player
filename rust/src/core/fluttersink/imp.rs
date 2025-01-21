@@ -24,7 +24,7 @@ use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
 use gst_video::subclass::prelude::*;
 use irondash_texture::SendableTexture;
-use log::info;
+use log::{error, info, warn};
 
 use std::cell::RefCell;
 use std::sync::{
@@ -78,13 +78,15 @@ impl Default for StreamConfig {
 pub(crate) struct FlutterConfig {
     fl_txt_id: i64,
     frame_sender: FrameSender,
+    sendable_txt: ArcSendableTexture
 }
 
 impl FlutterConfig {
-    pub(crate) fn new(fl_txt_id: i64, frame_sender: FrameSender) -> Self {
+    pub(crate) fn new(fl_txt_id: i64, frame_sender: FrameSender, sendable_txt: ArcSendableTexture) -> Self {
         FlutterConfig {
             fl_txt_id,
             frame_sender,
+            sendable_txt
         }
     }
 }
@@ -599,14 +601,15 @@ impl VideoSinkImpl for FlutterTextureSink {
             .as_ref()
             .map(|wrapper| wrapper.frame_sender.clone());
         let sender = sender.as_ref().ok_or_else(|| {
-            gst::error!(CAT, imp = self, "Have no main thread sender");
+            error!("has no main thread sender");
             gst::FlowError::Flushing
         })?;
 
         match sender.try_send(SinkEvent::FrameChanged) {
-            Ok(_) => (),
-            Err(flume::TrySendError::Full(_)) => {
                 gst::warning!(CAT, imp = self, "Have too many pending frames");
+            Ok(_) => self.fl_config.borrow().inspect(|p| p.sendable_txt.mark_frame_available()),
+            Err(flume::TrySendError::Full(_)) => {
+                warn!("Too many pending frames");
             }
             Err(flume::TrySendError::Disconnected(_)) => {
                 gst::error!(CAT, imp = self, "Have main thread receiver shut down");
