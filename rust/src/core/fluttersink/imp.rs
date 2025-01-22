@@ -23,8 +23,8 @@ use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
 use gst_video::subclass::prelude::*;
-use irondash_texture::SendableTexture;
-use log::{error, info, warn};
+
+use log::{debug, error, info, trace, warn};
 
 use std::cell::RefCell;
 use std::sync::{
@@ -551,10 +551,10 @@ impl BaseSinkImpl for FlutterTextureSink {
 impl VideoSinkImpl for FlutterTextureSink {
     /// if new frame could be rendered, send a message to the main thread
     fn show_frame(&self, buffer: &gst::Buffer) -> Result<gst::FlowSuccess, gst::FlowError> {
-        gst::trace!(CAT, imp = self, "Rendering buffer {:?}", buffer);
+        trace!("VideoSinkImpl new frame: {:?}", buffer);
 
         if self.window_resized.swap(false, atomic::Ordering::SeqCst) {
-            gst::debug!(CAT, imp = self, "Window size changed, needs to reconfigure");
+            debug!("Window size changed, needs to reconfigure");
             let obj = self.obj();
             let sink = obj.sink_pad();
             sink.push_event(gst::event::Reconfigure::builder().build());
@@ -562,17 +562,13 @@ impl VideoSinkImpl for FlutterTextureSink {
 
         // Empty buffer, nothing to render
         if buffer.n_memory() == 0 {
-            gst::trace!(
-                CAT,
-                imp = self,
-                "Empty buffer, nothing to render. Returning."
-            );
+            trace!("Empty buffer, nothing to render. Returning.");
             return Ok(gst::FlowSuccess::Ok);
         };
-
+        trace!("getting config");
         let config = self.config.lock().unwrap();
         let info = config.info.as_ref().ok_or_else(|| {
-            gst::error!(CAT, imp = self, "Received no caps yet");
+            error!("Received no caps yet");
             gst::FlowError::NotNegotiated
         })?;
         let orientation = config
@@ -581,7 +577,10 @@ impl VideoSinkImpl for FlutterTextureSink {
 
         let wrapped_context = {
             {
-                let gl_context = GL_CONTEXT.lock().unwrap();
+                let gl_context = GL_CONTEXT.lock().map_err(|_| {
+                    error!("Failed to lock GL context");
+                    gst::FlowError::Error
+                })?;
                 if let GLContext::Initialized {
                     wrapped_context, ..
                 } = &*gl_context
@@ -594,7 +593,7 @@ impl VideoSinkImpl for FlutterTextureSink {
         };
         let frame = Frame::new(buffer, info, orientation, wrapped_context.as_ref()).inspect_err(
             |_err| {
-                gst::error!(CAT, imp = self, "Failed to map video frame");
+                error!("Failed to create frame from buffer");
             },
         )?;
 
@@ -607,14 +606,16 @@ impl VideoSinkImpl for FlutterTextureSink {
             error!("has no main thread sender");
             gst::FlowError::Flushing
         })?;
-
+        // we first mark the frame available so that the main thread would listen
+        // the frame channel.
+        let _ = self
+            .fl_config
+            .borrow()
+            .as_ref()
+            .inspect(|p| p.sendable_txt.mark_frame_available());
         match sender.try_send(SinkEvent::FrameChanged(frame)) {
             Ok(_) => {
-                let _ = self
-                    .fl_config
-                    .borrow()
-                    .as_ref()
-                    .inspect(|p| p.sendable_txt.mark_frame_available());
+                trace!("Sent frame to main thread");
             }
             Err(flume::TrySendError::Full(_)) => warn!("Main thread receiver is full"),
             Err(flume::TrySendError::Disconnected(_)) => {

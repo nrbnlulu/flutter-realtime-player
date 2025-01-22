@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, sync::Mutex};
 
 use glow::HasContext;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider};
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 
 use crate::core::fluttersink::frame;
 
@@ -101,16 +101,24 @@ impl GLTextureSource {
             gl_context: Mutex::new(gl_context),
         })
     }
-}
 
-impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
-    fn get_payload(&self) -> BoxedGLTexture {
+    fn recv_frame(&self) -> anyhow::Result<BoxedGLTexture> {
         match self.texture_receiver.recv() {
             Ok(SinkEvent::FrameChanged(frame)) => {
-                let context = self.gl_context.lock().unwrap();
-                if let Ok(new_paintables) =
-                    frame.into_textures(Some(&context), &mut self.cached_textures.lock().unwrap())
+                let context: std::sync::MutexGuard<'_, glow::Context> = self
+                    .gl_context
+                    .lock()
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                trace!("trying to get cacged textures");
+                let mut cached_textures = self
+                    .cached_textures
+                    .lock()
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                trace!("got cached textures");
+                if let Ok(textures) =
+                    frame.into_textures(Some(&context), &mut cached_textures)
                 {
+                    trace!("got textures");
                     let flip_width_height =
                         |(width, height, orientation): (u32, u32, frame::Orientation)| {
                             if orientation.is_flip_width_height() {
@@ -120,7 +128,7 @@ impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
                             }
                         };
 
-                    let new_size = new_paintables
+                    let new_size = textures
                         .first()
                         .map(|p| {
                             flip_width_height((
@@ -129,7 +137,7 @@ impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
                                 p.orientation,
                             ))
                         })
-                        .unwrap();
+                        .ok_or_else(|| anyhow::anyhow!("Failed to get new size"))?;
 
                     // let old_paintables = self.paintables.replace(new_paintables);
                     // let old_size = old_paintables.first().map(|p| {
@@ -143,17 +151,33 @@ impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
                     // if Some(new_size) != old_size {
                     //     debug!("Size changed from {old_size:?} to {new_size:?}",);
                     // }
-                    let first_frame = new_paintables.first().unwrap();
-                    return Box::new(first_frame.texture.clone());
+                    if let Some(first_frame) = textures.first() {
+                        trace!("Returning first frame");
+                        return Ok(Box::new(first_frame.texture.clone()));
+                    };
                 }
+                Err(anyhow::anyhow!("Failed to get first frame"))
             }
             Err(e) => {
                 info!("Error receiving frame changed event: {:?}", e);
+                Err(anyhow::anyhow!("Error receiving frame changed event {:?}", e))
             }
         }
-        // fallback to a green screen
+    }
 
+    fn get_fallback_texture(&self) -> BoxedGLTexture {
         Box::new(GLTexture::try_new(self.green_texture_name, self.width, self.height).unwrap())
+    }
+}
+
+impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
+    fn get_payload(&self) -> BoxedGLTexture {
+        self.recv_frame().unwrap_or_else(|e| {
+            error!("Error receiving frame: {:?}", e);
+            self.get_fallback_texture()
+        })
+
+        // fallback to a green screen
     }
 }
 

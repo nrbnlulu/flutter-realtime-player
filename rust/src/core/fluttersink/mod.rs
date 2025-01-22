@@ -62,7 +62,7 @@ fn create_flutter_texture(
         debug!("Creating Flutter texture");
         let (tx, rx) = flume::bounded(3);
 
-        let provider = Arc::new(GLTextureSource::new(rx).unwrap());
+        let provider = Arc::new(GLTextureSource::new(rx)?);
         let texture =
             irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
         debug!("Created Flutter texture with id {}", texture.id());
