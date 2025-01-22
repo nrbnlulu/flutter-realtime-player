@@ -78,15 +78,19 @@ impl Default for StreamConfig {
 pub(crate) struct FlutterConfig {
     fl_txt_id: i64,
     frame_sender: FrameSender,
-    sendable_txt: ArcSendableTexture
+    sendable_txt: ArcSendableTexture,
 }
 
 impl FlutterConfig {
-    pub(crate) fn new(fl_txt_id: i64, frame_sender: FrameSender, sendable_txt: ArcSendableTexture) -> Self {
+    pub(crate) fn new(
+        fl_txt_id: i64,
+        frame_sender: FrameSender,
+        sendable_txt: ArcSendableTexture,
+    ) -> Self {
         FlutterConfig {
             fl_txt_id,
             frame_sender,
-            sendable_txt
+            sendable_txt,
         }
     }
 }
@@ -605,7 +609,13 @@ impl VideoSinkImpl for FlutterTextureSink {
         })?;
 
         match sender.try_send(SinkEvent::FrameChanged(frame)) {
-            Ok(_) => {let _  = self.fl_config.borrow().as_ref().inspect(|p| p.sendable_txt.mark_frame_available());},
+            Ok(_) => {
+                let _ = self
+                    .fl_config
+                    .borrow()
+                    .as_ref()
+                    .inspect(|p| p.sendable_txt.mark_frame_available());
+            }
             Err(flume::TrySendError::Full(_)) => warn!("Main thread receiver is full"),
             Err(flume::TrySendError::Disconnected(_)) => {
                 error!("Main thread receiver is disconnected");

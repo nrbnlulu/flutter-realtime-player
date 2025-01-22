@@ -31,6 +31,15 @@ impl GLTexture {
         })
     }
 
+    pub fn from_glow(name: glow::Texture, width: i32, height: i32) -> Self {
+        Self {
+            target: glow::TEXTURE_2D,
+            name_raw: name.0.get(),
+            name,
+            width,
+            height,
+        }
+    }
 }
 
 impl GLTextureProvider for GLTexture {
@@ -98,7 +107,6 @@ impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
     fn get_payload(&self) -> BoxedGLTexture {
         match self.texture_receiver.recv() {
             Ok(SinkEvent::FrameChanged(frame)) => {
-                debug!("PayloadProvider: Frame changed");
                 let context = self.gl_context.lock().unwrap();
                 if let Ok(new_paintables) =
                     frame.into_textures(Some(&context), &mut self.cached_textures.lock().unwrap())
@@ -136,9 +144,7 @@ impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
                     //     debug!("Size changed from {old_size:?} to {new_size:?}",);
                     // }
                     let first_frame = new_paintables.first().unwrap();
-                    return Box::new(
-                        first_frame.texture.clone()
-                    )
+                    return Box::new(first_frame.texture.clone());
                 }
             }
             Err(e) => {

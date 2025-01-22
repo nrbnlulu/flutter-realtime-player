@@ -74,55 +74,20 @@ fn create_flutter_texture(
 
 pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
     let (sendable_fl_txt, id, tx) = create_flutter_texture(engine_handle)?;
-    let gl = false;
 
-    let pipeline = gst::Pipeline::new();
     let flsink = utils::make_element("fluttertexturesink", None)?;
-    let overlay = gst::ElementFactory::make("clockoverlay")
-        .property("font-desc", "Monospace 42")
-        .build()
-        .unwrap();
-
-    let (src, sink) = if gl {
-        unimplemented!("GL not supported yet");
-        // let src = utils::make_element("gltestsrc", None)?;
-
-        // let sink = gst::ElementFactory::make("glsinkbin")
-        //     .property("sink", &flsink)
-        //     .build()
-        //     .unwrap();
-    } else {
-        let src = gst::ElementFactory::make("videotestsrc").build().unwrap();
-
-        let sink = gst::Bin::default();
-        let convert = gst::ElementFactory::make("videoconvert").build().unwrap();
-
-        sink.add(&convert).unwrap();
-        sink.add(&flsink).unwrap();
-        convert.link(&flsink).unwrap();
-
-        sink.add_pad(&gst::GhostPad::with_target(&convert.static_pad("sink").unwrap()).unwrap())
-            .unwrap();
-        (src, sink.upcast())
-    };
-
     let fl_texture_wrapper = imp::FlutterConfig::new(id, tx, sendable_fl_txt);
+
     flsink
         .downcast_ref::<FlutterTextureSink>()
         .unwrap()
         .imp()
         .set_fl_config(fl_texture_wrapper);
 
-    
-    pipeline.add_many([&src, &overlay, &sink]).unwrap();
-    let caps = gst_video::VideoCapsBuilder::new()
-        .width(640)
-        .height(480)
-        .any_features()
-        .build();
+    let pipeline =  gst::ElementFactory::make("playbin").property("uri", "http://distribution.bbb3d.renderfarming.net/video/mp4/bbb_sunflower_1080p_60fps_normal.mp4")
+    .property("video-sink", &flsink)
+    .build().unwrap();
 
-    src.link_filtered(&overlay, &caps).unwrap();
-    overlay.link(&sink).unwrap();
     let bus = pipeline.bus().unwrap();
 
     pipeline

@@ -39,13 +39,13 @@ pub(crate) fn make_element(factory_name: &str, name: Option<&str>) -> anyhow::Re
         .map_err(|_| anyhow::anyhow!("Failed to create element"))
 }
 
-
 pub trait LogErr<T> {
     fn log_err(self) -> Option<T>;
 }
 
 impl<T, E> LogErr<T> for Result<T, E>
-where E: std::fmt::Debug
+where
+    E: std::fmt::Debug,
 {
     fn log_err(self) -> Option<T> {
         match self {

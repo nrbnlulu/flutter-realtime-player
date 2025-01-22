@@ -9,6 +9,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use glow::HasContext;
 use gst_video::prelude::*;
 
 use gst_gl::prelude::*;
@@ -16,6 +17,7 @@ use irondash_texture::BoxedGLTexture;
 use std::{
     collections::{HashMap, HashSet},
     ops,
+    rc::Rc,
 };
 
 use super::gltexture::GLTexture;
@@ -310,7 +312,7 @@ impl Frame {
         self,
         #[allow(unused_variables)] gl_context: Option<&glow::Context>,
         cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
-    ) -> Result<Vec<Texture>, glib::Error> {
+    ) -> anyhow::Result<Vec<Texture>> {
         let mut textures = Vec::with_capacity(1 + self.overlays.len());
         let mut used_textures = HashSet::with_capacity(1 + self.overlays.len());
 
@@ -319,9 +321,12 @@ impl Frame {
         let has_alpha = self.frame.format_info().has_alpha();
         let orientation = self.frame.orientation();
         let (texture, pixel_aspect_ratio) = match self.frame {
-            MappedFrame::SysMem { .. } => {
-                unimplemented!("MappedFrame::SysMem")
-            }
+            MappedFrame::SysMem { frame, .. } => video_frame_to_memory_texture(
+                frame,
+                gl_context.unwrap(),
+                cached_textures,
+                &mut used_textures,
+            )?,
             MappedFrame::GL {
                 frame,
                 wrapped_context,
@@ -557,4 +562,68 @@ impl Frame {
 
         Ok(frame)
     }
+}
+
+fn video_frame_to_memory_texture(
+    frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
+    gl: &glow::Context,
+    cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
+    used_textures: &mut HashSet<TextureCacheId>,
+) -> anyhow::Result<(GLTexture, f64)> {
+    let ptr = frame.plane_data(0).unwrap().as_ptr() as usize;
+
+    let pixel_aspect_ratio =
+        (frame.info().par().numer() as f64) / (frame.info().par().denom() as f64); // typos: ignore
+
+    if let Some(texture) = cached_textures.get(&TextureCacheId::Memory(ptr)) {
+        used_textures.insert(TextureCacheId::Memory(ptr));
+        return Ok((texture.clone(), pixel_aspect_ratio));
+    }
+
+    let format = glow::RGBA;
+    let width = frame.width();
+    let height = frame.height();
+    let rowstride = frame.plane_stride()[0] as usize;
+
+    let texture = unsafe { gl.create_texture().map_err(|e| anyhow::anyhow!(e))? };
+    unsafe {
+        gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+        gl.tex_image_2d(
+            glow::TEXTURE_2D,
+            0,
+            format as i32,
+            width as i32,
+            height as i32,
+            0,
+            format,
+            glow::UNSIGNED_BYTE,
+            glow::PixelUnpackData::Slice(Some(frame.plane_data(0).unwrap())),
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_S,
+            glow::CLAMP_TO_EDGE as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_T,
+            glow::CLAMP_TO_EDGE as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MIN_FILTER,
+            glow::LINEAR as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MAG_FILTER,
+            glow::LINEAR as i32,
+        );
+    }
+
+    let gl_tex = GLTexture::from_glow(texture, width as i32, height as i32);
+    cached_textures.insert(TextureCacheId::Memory(ptr), gl_tex.clone());
+    used_textures.insert(TextureCacheId::Memory(ptr));
+
+    Ok((gl_tex, pixel_aspect_ratio))
 }
