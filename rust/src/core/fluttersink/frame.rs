@@ -392,7 +392,7 @@ impl Frame {
 
         // Remove textures that were not used this time
         cached_textures.retain(|id, _| used_textures.contains(id));
-
+        trace!("number of cached textures: {}", cached_textures.len());
         Ok(textures)
     }
 }
