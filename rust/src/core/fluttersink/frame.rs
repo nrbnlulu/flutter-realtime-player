@@ -10,7 +10,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use glow::HasContext;
-use gst_video::prelude::*;
+use gst_video::{prelude::*, VideoFormat};
 
 use gst_gl::prelude::*;
 use irondash_texture::BoxedGLTexture;
@@ -524,7 +524,7 @@ impl Frame {
             },
             overlays: vec![],
         };
-
+        trace!("format is: {:?}", frame.frame.format_info());
         frame.overlays = frame
             .frame
             .buffer()
@@ -575,7 +575,6 @@ fn video_frame_to_memory_texture(
     trace!("video_frame_to_memory_texture");
     let ptr = frame.plane_data(0)?.as_ptr() as usize;
     trace!("frame ptr is {}", ptr);
-
     let pixel_aspect_ratio =
         (frame.info().par().numer() as f64) / (frame.info().par().denom() as f64); // typos: ignore
 
@@ -586,7 +585,6 @@ fn video_frame_to_memory_texture(
         return Ok((texture.clone(), pixel_aspect_ratio));
     }
 
-    let format = glow::RGBA;
     let width = frame.width();
     let height = frame.height();
     let rowstride = frame.plane_stride()[0] as usize;
@@ -598,17 +596,29 @@ fn video_frame_to_memory_texture(
         gl.bind_texture(glow::TEXTURE_2D, Some(texture));
         trace!("successfully bound texture");
         let frame_data = frame.plane_data(0).ok();
+        gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, (rowstride / 4) as i32);
+        fn map_format_to_glow(gst_fmt: VideoFormat) -> u32 {
+            match gst_fmt{
+                VideoFormat::Rgba => glow::RGBA,
+                VideoFormat::Bgra => glow::BGRA,
+                VideoFormat::Rgb => glow::RGB,
+                VideoFormat::Bgr => glow::BGR,
+                _ => glow::RGBA
+            }
+        }
+        let fmt = map_format_to_glow(frame.format());
         gl.tex_image_2d(
             glow::TEXTURE_2D,
             0,
-            format as i32,
+            fmt as i32,
             width as i32,
             height as i32,
             0,
-            format,
+            fmt,
             glow::UNSIGNED_BYTE,
             glow::PixelUnpackData::Slice(frame_data),
         );
+        gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
         trace!("tex image 2d");
         // gl.tex_parameter_i32(
         //     glow::TEXTURE_2D,

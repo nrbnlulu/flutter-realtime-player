@@ -26,6 +26,7 @@ class MyApp extends StatelessWidget {
       home: Scaffold(
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
         body: Center(
+          
           child: Texture(
             textureId: textureId,
           ),
