@@ -15,10 +15,14 @@ pub mod gltexture;
 pub(super) mod imp;
 pub mod types;
 pub mod utils;
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use frame::Frame;
-use glib::{object::{Cast, ObjectExt}, subclass::types::ObjectSubclassIsExt, types::StaticType};
+use glib::{
+    object::{Cast, ObjectExt},
+    subclass::types::ObjectSubclassIsExt,
+    types::StaticType,
+};
 use gltexture::GLTextureSource;
 use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, GstObjectExt};
 use imp::ArcSendableTexture;
@@ -72,32 +76,21 @@ fn create_flutter_texture(
     });
 }
 
-pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
+pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     let (sendable_fl_txt, id, tx) = create_flutter_texture(engine_handle)?;
 
     let flsink = utils::make_element("fluttertexturesink", None)?;
-    let fl_texture_wrapper = imp::FlutterConfig::new(id, tx, sendable_fl_txt);
+    let fl_config = imp::FlutterConfig::new(id, tx, sendable_fl_txt);
 
-    flsink
-        .downcast_ref::<FlutterTextureSink>()
-        .unwrap()
-        .imp()
-        .set_fl_config(fl_texture_wrapper);
+    let fl_imp = flsink.downcast_ref::<FlutterTextureSink>().unwrap().imp();
+    fl_imp.set_fl_config(fl_config);
 
-    let pipeline = gst::Pipeline::new();
-    let caps = gst::Caps::builder("video/x-raw")
-    .field("format", &gst_video::VideoFormat::Rgba.to_string())
-    .field("width", &640)
-    .field("height", &480)
-    .field("framerate", &gst::Fraction::new(30, 1))
-    .build();
-    let tstsrc = utils::make_element("videotestsrc", None)?;
-    let videoconvert = utils::make_element("videoconvert", None)?;
-    pipeline.add_many(&[&tstsrc, &videoconvert, &flsink])?;
-    tstsrc.link_filtered(&videoconvert, &caps)?;
-    videoconvert.link(&flsink)?;
-
-
+    let pipeline = Rc::new(gst::ElementFactory::make("playbin3")
+        .property("video-sink", &flsink)
+        .property("uri", uri)
+        .build()
+        .unwrap());
+    fl_imp.set_playbin3(pipeline.clone());
     let bus = pipeline.bus().unwrap();
 
     pipeline

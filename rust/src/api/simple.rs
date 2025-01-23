@@ -20,6 +20,6 @@ pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
 }
 
-pub fn get_opengl_texture(engine_handle: i64) -> anyhow::Result<i64> {
-    return utils::invoke_on_platform_main_thread(move || testit(engine_handle));
+pub fn get_opengl_texture(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
+    return utils::invoke_on_platform_main_thread(move || testit(engine_handle, uri));
 }

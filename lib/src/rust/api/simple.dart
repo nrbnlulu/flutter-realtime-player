@@ -9,6 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 String greet({required String name}) =>
     RustLib.instance.api.crateApiSimpleGreet(name: name);
 
-Future<PlatformInt64> getOpenglTexture({required PlatformInt64 engineHandle}) =>
+Future<PlatformInt64> getOpenglTexture(
+        {required PlatformInt64 engineHandle, required String uri}) =>
     RustLib.instance.api
-        .crateApiSimpleGetOpenglTexture(engineHandle: engineHandle);
+        .crateApiSimpleGetOpenglTexture(engineHandle: engineHandle, uri: uri);

@@ -12,6 +12,7 @@
 use crate::core::fluttersink::frame::Frame;
 use crate::core::fluttersink::utils;
 
+use super::frame::VideoInfo;
 use super::gltexture::GLTextureSource;
 use super::utils::{invoke_on_gs_main_thread, make_element};
 use super::{frame, FrameSender, SinkEvent};
@@ -19,6 +20,7 @@ use super::{frame, FrameSender, SinkEvent};
 use glib::clone::Downgrade;
 use glib::thread_guard::ThreadGuard;
 
+use glib::translate::FromGlibPtrFull;
 use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
@@ -27,6 +29,7 @@ use gst_video::subclass::prelude::*;
 use log::{debug, error, info, trace, warn};
 
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::{
     atomic::{self, AtomicBool},
     Mutex,
@@ -106,6 +109,7 @@ pub struct FlutterTextureSink {
     cached_caps: Mutex<Option<gst::Caps>>,
     settings: Mutex<Settings>,
     window_resized: AtomicBool,
+    playbin3: RefCell<Option<Rc<gst::Element>>>,
 }
 
 #[derive(Default)]
@@ -382,31 +386,15 @@ impl ElementImpl for FlutterTextureSink {
 
 impl BaseSinkImpl for FlutterTextureSink {
     fn caps(&self, filter: Option<&gst::Caps>) -> Option<gst::Caps> {
-        let cached_caps = self
-            .cached_caps
-            .lock()
-            .expect("Failed to lock cached caps mutex")
-            .clone();
-
-        let mut tmp_caps = cached_caps.unwrap_or_else(|| {
-            let templ = Self::pad_templates();
-            templ[0].caps().clone()
-        });
-
-        gst::debug!(CAT, imp = self, "Advertising our own caps: {tmp_caps:?}");
-
-        if let Some(filter_caps) = filter {
-            gst::debug!(
-                CAT,
-                imp = self,
-                "Intersecting with filter caps: {filter_caps:?}",
-            );
-
-            tmp_caps = filter_caps.intersect_with_mode(&tmp_caps, gst::CapsIntersectMode::First);
-        };
-
-        gst::debug!(CAT, imp = self, "Returning caps: {tmp_caps:?}");
-        Some(tmp_caps)
+        Some(gst::Caps::builder("video/x-raw")
+            .field("format", &gst_video::VideoFormat::Rgba.to_string())
+            .field("width", &gst::IntRange::<i32>::new(1, i32::MAX))
+            .field("height", &gst::IntRange::<i32>::new(1, i32::MAX))
+            .field("framerate", &gst::FractionRange::new(
+            gst::Fraction::new(0, 1),
+            gst::Fraction::new(i32::MAX, 1),
+            ))
+            .build())
     }
 
     fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
@@ -552,7 +540,6 @@ impl VideoSinkImpl for FlutterTextureSink {
     /// if new frame could be rendered, send a message to the main thread
     fn show_frame(&self, buffer: &gst::Buffer) -> Result<gst::FlowSuccess, gst::FlowError> {
         trace!("VideoSinkImpl new frame: {:?}", buffer);
-
         if self.window_resized.swap(false, atomic::Ordering::SeqCst) {
             debug!("Window size changed, needs to reconfigure");
             let obj = self.obj();
@@ -571,6 +558,28 @@ impl VideoSinkImpl for FlutterTextureSink {
             error!("Received no caps yet");
             gst::FlowError::NotNegotiated
         })?;
+        if info.format() != gst_video::VideoFormat::Rgba {
+            info!("Converting buffer to RGBA");
+            let sample = self
+                .playbin3
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .emit_by_name::<gst::Sample>("convert-sample", &[&self.caps()]);
+
+            return self.show_frame_from_buffer(&config, &sample.buffer_owned().unwrap(), info);
+        }
+        self.show_frame_from_buffer(&config, buffer, info)
+    }
+}
+
+impl FlutterTextureSink {
+    fn show_frame_from_buffer(
+        &self,
+        config: &StreamConfig,
+        buffer: &gst::Buffer,
+        info: &VideoInfo,
+    ) -> Result<gst::FlowSuccess, gst::FlowError> {
         let orientation = config
             .stream_orientation
             .unwrap_or(config.global_orientation);
@@ -592,7 +601,7 @@ impl VideoSinkImpl for FlutterTextureSink {
             }
         };
 
-        let frame = Frame::new(buffer, info, orientation, wrapped_context.as_ref()).inspect_err(
+        let frame = Frame::new(&buffer, info, orientation, wrapped_context.as_ref()).inspect_err(
             |_err| {
                 error!("Failed to create frame from buffer");
             },
@@ -624,20 +633,24 @@ impl VideoSinkImpl for FlutterTextureSink {
                 return Err(gst::FlowError::Flushing);
             }
         }
-
         Ok(gst::FlowSuccess::Ok)
     }
-}
 
-impl FlutterTextureSink {
     fn pending_frame(&self) -> Option<Frame> {
         self.pending_frame.lock().unwrap().take()
     }
 
-    fn handle_frame_change(&self) {
-        if let Some(frame) = self.pending_frame() {
-            gst::trace!(CAT, imp = self, "Frame changed");
-        }
+    pub fn set_playbin3(&self, playbin3: Rc<gst::Element>) {
+        *self.playbin3.borrow_mut() = Some(playbin3);
+    }
+
+    fn caps(&self) -> gst::Caps {
+        gst::Caps::builder("video/x-raw")
+            .field("format", &gst_video::VideoFormat::Rgba.to_string())
+            .field("width", &640)
+            .field("height", &480)
+            .field("framerate", &gst::Fraction::new(30, 1))
+            .build()
     }
 
     fn configure_caps(&self) {

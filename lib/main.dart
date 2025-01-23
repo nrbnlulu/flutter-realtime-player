@@ -10,20 +10,25 @@ import 'package:my_app/src/rust/frb_generated.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await RustLib.init();
   final handle = await EngineContext.instance.getEngineHandle();
     debugPrint("Isolate.current.debugName: ${Isolate.current.debugName} ${Service.getIsolateId(Isolate.current)}");
-    final texture = await rlib.getOpenglTexture(engineHandle: handle);
+    // play demo video
+    final texture = await rlib.getOpenglTexture(engineHandle: handle, uri: "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4");
     print('Texture: $texture');
   runApp(MyApp(textureId: texture));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, required this.textureId});
+const MyApp({super.key, required this.textureId});
+
 
   final int textureId;
   
+
   @override
+
   Widget build(BuildContext context) {
 
     return MaterialApp(
@@ -31,6 +36,7 @@ class MyApp extends StatelessWidget {
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
         body: Center(
           
+
           child: Texture(
             textureId: textureId,
           ),
@@ -38,7 +44,9 @@ class MyApp extends StatelessWidget {
       ),
     );
   }  
+
 }
+
 
 
 

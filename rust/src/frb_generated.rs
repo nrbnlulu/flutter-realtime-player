@@ -68,11 +68,13 @@ fn wire__crate__api__simple__get_opengl_texture_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_engine_handle = <i64>::sse_decode(&mut deserializer);
+            let api_uri = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
-                        let output_ok = crate::api::simple::get_opengl_texture(api_engine_handle)?;
+                        let output_ok =
+                            crate::api::simple::get_opengl_texture(api_engine_handle, api_uri)?;
                         Ok(output_ok)
                     })(),
                 )

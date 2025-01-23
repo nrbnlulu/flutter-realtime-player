@@ -80,7 +80,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
 abstract class RustLibApi extends BaseApi {
   Future<PlatformInt64> crateApiSimpleGetOpenglTexture(
-      {required PlatformInt64 engineHandle});
+      {required PlatformInt64 engineHandle, required String uri});
 
   String crateApiSimpleGreet({required String name});
 
@@ -97,11 +97,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<PlatformInt64> crateApiSimpleGetOpenglTexture(
-      {required PlatformInt64 engineHandle}) {
+      {required PlatformInt64 engineHandle, required String uri}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_64(engineHandle, serializer);
+        sse_encode_String(uri, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 1, port: port_);
       },
@@ -110,7 +111,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_AnyhowException,
       ),
       constMeta: kCrateApiSimpleGetOpenglTextureConstMeta,
-      argValues: [engineHandle],
+      argValues: [engineHandle, uri],
       apiImpl: this,
     ));
   }
@@ -118,7 +119,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleGetOpenglTextureConstMeta =>
       const TaskConstMeta(
         debugName: "get_opengl_texture",
-        argNames: ["engineHandle"],
+        argNames: ["engineHandle", "uri"],
       );
 
   @override
