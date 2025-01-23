@@ -1,5 +1,6 @@
 use glib;
 use irondash_run_loop::RunLoop;
+use log::error;
 
 pub(crate) fn invoke_on_gs_main_thread<F, T>(func: F) -> T
 where
@@ -48,7 +49,7 @@ where
     fn log_err(self) -> Option<T> {
         match self {
             Ok(value) => Some(value),
-            Err(_) => {
+            Err(err) => {
                 error!("Error: {:?}", err);
                 None
             }

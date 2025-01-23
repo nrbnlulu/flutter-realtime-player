@@ -7,6 +7,7 @@ use std::{
 
 use glow::HasContext;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider};
+use log::error;
 
 use crate::core::fluttersink::frame;
 
@@ -184,7 +185,8 @@ impl GLTextureSource {
 impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
     fn get_payload(&self) -> BoxedGLTexture {
         self.recv_frame().unwrap_or_else(|e| {
-            self.get_fallback_texture()
+            error!("Error receiving frame: {:?}", e);
+        self.get_fallback_texture()
         })
     }
 }

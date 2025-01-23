@@ -14,6 +14,7 @@ use glib::{
 use gltexture::GLTextureSource;
 use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, GstObjectExt};
 use imp::ArcSendableTexture;
+use log::{error, info};
 
 pub(crate) enum SinkEvent {
     FrameChanged(Frame),

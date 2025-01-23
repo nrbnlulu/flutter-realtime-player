@@ -14,6 +14,7 @@ use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
 use gst_video::subclass::prelude::*;
+use log::{error, warn};
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -520,6 +521,7 @@ impl VideoSinkImpl for FlutterTextureSink {
         };
         let config = self.config.lock().unwrap();
         let info = config.info.as_ref().ok_or_else(|| {
+            error!("Received no caps yet");
             gst::FlowError::NotNegotiated
         })?;
         if info.format() != gst_video::VideoFormat::Rgba {
@@ -550,6 +552,7 @@ impl FlutterTextureSink {
         let wrapped_context = {
             {
                 let gl_context = GL_CONTEXT.lock().map_err(|_| {
+                    error!("Failed to lock GL context");
                     gst::FlowError::Error
                 })?;
                 if let GLContext::Initialized {
@@ -565,6 +568,7 @@ impl FlutterTextureSink {
 
         let frame = Frame::new(&buffer, info, orientation, wrapped_context.as_ref()).inspect_err(
             |_err| {
+                error!("Failed to create frame from buffer");
             },
         )?;
 
