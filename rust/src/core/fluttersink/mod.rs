@@ -18,7 +18,7 @@ pub mod utils;
 use std::sync::Arc;
 
 use frame::Frame;
-use glib::{object::Cast, subclass::types::ObjectSubclassIsExt, types::StaticType};
+use glib::{object::{Cast, ObjectExt}, subclass::types::ObjectSubclassIsExt, types::StaticType};
 use gltexture::GLTextureSource;
 use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, GstObjectExt};
 use imp::ArcSendableTexture;
@@ -84,9 +84,19 @@ pub fn testit(engine_handle: i64) -> anyhow::Result<i64> {
         .imp()
         .set_fl_config(fl_texture_wrapper);
 
-    let pipeline =  gst::ElementFactory::make("playbin").property("uri", "http://distribution.bbb3d.renderfarming.net/video/mp4/bbb_sunflower_1080p_60fps_normal.mp4")
-    .property("video-sink", &flsink)
-    .build().unwrap();
+    let pipeline = gst::Pipeline::new();
+    let caps = gst::Caps::builder("video/x-raw")
+    .field("format", &gst_video::VideoFormat::Rgba.to_string())
+    .field("width", &640)
+    .field("height", &480)
+    .field("framerate", &gst::Fraction::new(30, 1))
+    .build();
+    let tstsrc = utils::make_element("videotestsrc", None)?;
+    let videoconvert = utils::make_element("videoconvert", None)?;
+    pipeline.add_many(&[&tstsrc, &videoconvert, &flsink])?;
+    tstsrc.link_filtered(&videoconvert, &caps)?;
+    videoconvert.link(&flsink)?;
+
 
     let bus = pipeline.bus().unwrap();
 

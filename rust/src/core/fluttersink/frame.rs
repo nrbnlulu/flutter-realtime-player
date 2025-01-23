@@ -385,7 +385,7 @@ impl Frame {
             x: 0.0,
             y: 0.0,
             width: width as f32 * pixel_aspect_ratio as f32,
-            height: height as f32,
+            height: height as f32 * pixel_aspect_ratio as f32,
             global_alpha: 1.0,
             has_alpha,
             orientation,
@@ -603,13 +603,11 @@ fn video_frame_to_memory_texture(
     let width = frame.width();
     let height = frame.height();
     let rowstride = frame.plane_stride()[0] as usize;
+    let texture = unsafe { gl.create_texture().map_err(|e| anyhow::anyhow!(e)) }?;
 
-    let texture = unsafe { gl.create_texture().map_err(|e| anyhow::anyhow!(e))? };
-    trace!("created texture {:?}", texture);
     unsafe {
         gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-        trace!("successfully bound texture");
-        let frame_data = frame.plane_data(0).ok();
+        let frame_data: Option<&[u8]> = frame.plane_data(0).ok();
         gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, (rowstride / 4) as i32);
         fn map_format_to_glow(gst_fmt: VideoFormat) -> u32 {
             match gst_fmt {
@@ -617,7 +615,7 @@ fn video_frame_to_memory_texture(
                 VideoFormat::Bgra => glow::BGRA,
                 VideoFormat::Rgb => glow::RGB,
                 VideoFormat::Bgr => glow::BGR,
-                _ => glow::RGBA,
+                _ => unimplemented!("unsupported format"),
             }
         }
         let fmt = map_format_to_glow(frame.format());
@@ -632,29 +630,7 @@ fn video_frame_to_memory_texture(
             glow::UNSIGNED_BYTE,
             glow::PixelUnpackData::Slice(frame_data),
         );
-        gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
-        trace!("tex image 2d");
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_WRAP_S,
-            glow::CLAMP_TO_EDGE as i32,
-        );
-
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_WRAP_T,
-            glow::CLAMP_TO_EDGE as i32,
-        );
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_MIN_FILTER,
-            glow::LINEAR as i32,
-        );
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_MAG_FILTER,
-            glow::LINEAR as i32,
-        );
+        gl.generate_mipmap(glow::TEXTURE_2D);
     }
     trace!("end gl stuff");
     let gl_tex = GLTexture::from_glow(texture, width as i32, height as i32, gl.clone());
