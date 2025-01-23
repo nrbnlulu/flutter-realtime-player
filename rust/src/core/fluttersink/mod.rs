@@ -2,6 +2,7 @@ mod frame;
 pub mod gltexture;
 pub(super) mod imp;
 pub mod types;
+mod platform;
 pub mod utils;
 use std::{rc::Rc, sync::Arc};
 
@@ -12,7 +13,7 @@ use glib::{
     types::StaticType,
 };
 use gltexture::GLTextureSource;
-use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, GstObjectExt};
+use gst::prelude::{ElementExt, GstBinExt, GstObjectExt};
 use imp::ArcSendableTexture;
 use log::{error, info};
 

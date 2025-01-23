@@ -22,16 +22,15 @@ simple-log = "2.1.1"
 irondash_engine_context = "0.5.0"
 image = "0.25.5"
 lazy_static = "1.5.0"
-glib-sys = "0.18.1"
 gobject-sys = "0.18.0"
-gdk-sys = "0.18.0"
-gtk-sys = "0.18.0"
 gl_loader = "0.1.2"
 glow = "0.16.0"
 glib = { git = "https://github.com/gtk-rs/gtk-rs-core", branch = "main" }
+glib-sys = {git = "https://github.com/gtk-rs/gtk-rs-core", branch = "main" }
 glib-macros = {git = "https://github.com/gtk-rs/gtk-rs-core", branch = "main" }
 gst = {package = "gstreamer", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", features = ["v1_16"]}
 gst-gl = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-gl" , features = ["v1_16"]}
 gst-video = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-video" , features = ["v1_16"]}
 gst-base = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-base", features = ["v1_16"] }
+[target.'cfg(unix)'.dependencies]
 gst-allocators = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-allocators", features = ["v1_24"] }

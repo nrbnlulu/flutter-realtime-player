@@ -6,60 +6,13 @@ use std::{
 };
 
 use glow::HasContext;
-use irondash_texture::{BoxedGLTexture, GLTextureProvider};
 use log::error;
 
 use crate::core::fluttersink::frame;
 
-use super::{types::GlCtx, utils, SinkEvent};
+use super::{platform::{GLTexture, IronDashGlTexture}, types::GlCtx, utils, SinkEvent};
 
-#[derive(Debug, Clone)]
-pub struct GLTexture {
-    pub target: u32,
-    pub name_raw: u32,
-    pub name: glow::Texture,
-    pub width: i32,
-    pub height: i32,
-    gl_ctx: GlCtx,
-}
 
-impl GLTexture {
-    pub fn try_new(name_raw: u32, width: i32, height: i32, gl_ctx: GlCtx) -> anyhow::Result<Self> {
-        let name = glow::NativeTexture {
-            0: std::num::NonZeroU32::new(name_raw).ok_or(anyhow::anyhow!("fdsaf"))?,
-        };
-        Ok(Self {
-            target: glow::TEXTURE_2D,
-            name_raw,
-            name,
-            width,
-            height,
-            gl_ctx,
-        })
-    }
-
-    pub fn from_glow(name: glow::Texture, width: i32, height: i32, gl_ctx: GlCtx) -> Self {
-        Self {
-            target: glow::TEXTURE_2D,
-            name_raw: name.0.get(),
-            name,
-            width,
-            height,
-            gl_ctx,
-        }
-    }
-}
-
-impl GLTextureProvider for GLTexture {
-    fn get(&self) -> irondash_texture::GLTexture {
-        irondash_texture::GLTexture {
-            target: self.target,
-            name: &self.name_raw,
-            width: self.width,
-            height: self.height,
-        }
-    }
-}
 
 pub struct GLTextureSource {
     width: i32,
@@ -111,7 +64,7 @@ impl GLTextureSource {
         })
     }
 
-    fn recv_frame(&self) -> anyhow::Result<BoxedGLTexture> {
+    fn recv_frame(&self) -> anyhow::Result<IronDashGlTexture> {
         match self.texture_receiver.recv() {
             Ok(SinkEvent::FrameChanged(frame)) => {
                 let mut cached_textures = self
@@ -169,7 +122,7 @@ impl GLTextureSource {
         }
     }
 
-    fn get_fallback_texture(&self) -> BoxedGLTexture {
+    fn get_fallback_texture(&self) -> IronDashGlTexture {
         Box::new(
             GLTexture::try_new(
                 self.green_texture_name,
@@ -182,8 +135,8 @@ impl GLTextureSource {
     }
 }
 
-impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
-    fn get_payload(&self) -> BoxedGLTexture {
+impl irondash_texture::PayloadProvider<IronDashGlTexture> for GLTextureSource {
+    fn get_payload(&self) -> IronDashGlTexture {
         self.recv_frame().unwrap_or_else(|e| {
             error!("Error receiving frame: {:?}", e);
         self.get_fallback_texture()

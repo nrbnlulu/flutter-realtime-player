@@ -86,8 +86,7 @@ impl FlutterConfig {
     }
 }
 
-pub type ArcSendableTexture =
-    Arc<irondash_texture::SendableTexture<irondash_texture::BoxedGLTexture>>;
+
 
 #[derive(Default)]
 pub struct FlutterTextureSink {

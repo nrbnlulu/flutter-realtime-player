@@ -2,7 +2,6 @@ use glow::HasContext;
 use gst_video::{prelude::*, VideoFormat};
 
 use gst_gl::prelude::*;
-use irondash_texture::BoxedGLTexture;
 use std::{
     collections::{HashMap, HashSet},
     ops,
