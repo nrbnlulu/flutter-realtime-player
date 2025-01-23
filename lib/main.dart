@@ -13,10 +13,8 @@ Future<void> main() async {
 
   await RustLib.init();
   final handle = await EngineContext.instance.getEngineHandle();
-    debugPrint("Isolate.current.debugName: ${Isolate.current.debugName} ${Service.getIsolateId(Isolate.current)}");
     // play demo video
     final texture = await rlib.getOpenglTexture(engineHandle: handle, uri: "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4");
-    print('Texture: $texture');
   runApp(MyApp(textureId: texture));
 }
 
@@ -46,10 +44,3 @@ const MyApp({super.key, required this.textureId});
   }  
 
 }
-
-
-
-
-
-
-

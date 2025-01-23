@@ -1,14 +1,3 @@
-//
-// Copyright (C) 2021 Bilal Elmoussaoui <bil.elmoussaoui@gmail.com>
-// Copyright (C) 2021 Jordan Petridis <jordan@centricular.com>
-// Copyright (C) 2021-2024 Sebastian Dröge <sebastian@centricular.com>
-//
-// This Source Code Form is subject to the terms of the Mozilla Public License, v2.0.
-// If a copy of the MPL was not distributed with this file, You can obtain one at
-// <https://mozilla.org/MPL/2.0/>.
-//
-// SPDX-License-Identifier: MPL-2.0
-
 use crate::core::fluttersink::frame::Frame;
 use crate::core::fluttersink::utils;
 
@@ -25,8 +14,7 @@ use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
 use gst_video::subclass::prelude::*;
-
-use log::{debug, error, info, trace, warn};
+use log::{error, warn};
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -323,7 +311,6 @@ impl ElementImpl for FlutterTextureSink {
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
         match transition {
             gst::StateChange::NullToReady => {
-                info!("FlutterTextureSink::change_state(NullToReady)");
                 // Notify the pipeline about the GL display and wrapped context so that any other
                 // elements in the pipeline ideally use the same / create GL contexts that are
                 // sharing with this one.
@@ -360,7 +347,6 @@ impl ElementImpl for FlutterTextureSink {
 
         match transition {
             gst::StateChange::PausedToReady => {
-                info!("FlutterTextureSink::change_state(PausedToReady)");
                 *self.config.lock().unwrap() = StreamConfig::default();
                 let _ = self.pending_frame.lock().unwrap().take();
 
@@ -374,9 +360,7 @@ impl ElementImpl for FlutterTextureSink {
                 //     }
                 // });
             }
-            gst::StateChange::ReadyToNull => {
-                info!("FlutterTextureSink::change_state(ReadyToNull)");
-            }
+            gst::StateChange::ReadyToNull => {}
             _ => (),
         }
 
@@ -398,8 +382,6 @@ impl BaseSinkImpl for FlutterTextureSink {
     }
 
     fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
-        gst::debug!(CAT, imp = self, "Setting caps {caps:?}");
-
         #[allow(unused_mut)]
         let mut video_info = None;
         #[cfg(all(target_os = "linux", feature = "dmabuf"))]
@@ -425,8 +407,6 @@ impl BaseSinkImpl for FlutterTextureSink {
         &self,
         query: &mut gst::query::Allocation,
     ) -> Result<(), gst::LoggableError> {
-        gst::debug!(CAT, imp = self, "Proposing Allocation query");
-
         self.parent_propose_allocation(query)?;
 
         query.add_allocation_meta::<gst_video::VideoMeta>(None);
@@ -434,14 +414,6 @@ impl BaseSinkImpl for FlutterTextureSink {
         let s = {
             let settings = self.settings.lock().unwrap();
             if (settings.window_width, settings.window_height) != (0, 0) {
-                gst::debug!(
-                    CAT,
-                    imp = self,
-                    "answering alloc query with size {}x{}",
-                    settings.window_width,
-                    settings.window_height
-                );
-
                 self.window_resized.store(false, atomic::Ordering::SeqCst);
 
                 Some(
@@ -474,8 +446,6 @@ impl BaseSinkImpl for FlutterTextureSink {
     }
 
     fn query(&self, query: &mut gst::QueryRef) -> bool {
-        gst::log!(CAT, imp = self, "Handling query {:?}", query);
-
         match query.view_mut() {
             gst::QueryViewMut::Context(q) => {
                 // Avoid holding the locks while we respond to the query
@@ -539,9 +509,7 @@ impl BaseSinkImpl for FlutterTextureSink {
 impl VideoSinkImpl for FlutterTextureSink {
     /// if new frame could be rendered, send a message to the main thread
     fn show_frame(&self, buffer: &gst::Buffer) -> Result<gst::FlowSuccess, gst::FlowError> {
-        trace!("VideoSinkImpl new frame: {:?}", buffer);
         if self.window_resized.swap(false, atomic::Ordering::SeqCst) {
-            debug!("Window size changed, needs to reconfigure");
             let obj = self.obj();
             let sink = obj.sink_pad();
             sink.push_event(gst::event::Reconfigure::builder().build());
@@ -549,17 +517,14 @@ impl VideoSinkImpl for FlutterTextureSink {
 
         // Empty buffer, nothing to render
         if buffer.n_memory() == 0 {
-            trace!("Empty buffer, nothing to render. Returning.");
             return Ok(gst::FlowSuccess::Ok);
         };
-        trace!("getting config");
         let config = self.config.lock().unwrap();
         let info = config.info.as_ref().ok_or_else(|| {
             error!("Received no caps yet");
             gst::FlowError::NotNegotiated
         })?;
         if info.format() != gst_video::VideoFormat::Rgba {
-            info!("Converting buffer to RGBA");
             let sample = self
                 .playbin3
                 .borrow()
@@ -624,11 +589,8 @@ impl FlutterTextureSink {
             .as_ref()
             .inspect(|p| p.sendable_txt.mark_frame_available());
         match sender.try_send(SinkEvent::FrameChanged(frame)) {
-            Ok(_) => {
-                trace!("Sent frame to main thread");
-            }
-            Err(flume::TrySendError::Full(_)) => warn!("Main thread receiver is full"),
-            Err(flume::TrySendError::Disconnected(_)) => {
+            Ok(_) => {}
+            Err(flume::TrySendError::Full(_)) => warn!("Main thread receiver is full"),            Err(flume::TrySendError::Disconnected(_)) => {
                 error!("Main thread receiver is disconnected");
                 return Err(gst::FlowError::Flushing);
             }

@@ -1,15 +1,3 @@
-//
-// Copyright (C) 2021 Bilal Elmoussaoui <bil.elmoussaoui@gmail.com>
-// Copyright (C) 2021 Jordan Petridis <jordan@centricular.com>
-// Copyright (C) 2021 Sebastian Dröge <sebastian@centricular.com>
-//
-// This Source Code Form is subject to the terms of the Mozilla Public License, v2.0.
-// If a copy of the MPL was not distributed with this file, You can obtain one at
-// <https://mozilla.org/MPL/2.0/>.
-//
-// SPDX-License-Identifier: MPL-2.0
-
-// ported from gstreamer-rs-plugins gtk4sink
 mod frame;
 pub mod gltexture;
 pub(super) mod imp;
@@ -26,7 +14,7 @@ use glib::{
 use gltexture::GLTextureSource;
 use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, GstObjectExt};
 use imp::ArcSendableTexture;
-use log::{debug, error, info};
+use log::{error, info};
 
 pub(crate) enum SinkEvent {
     FrameChanged(Frame),
@@ -63,13 +51,11 @@ fn create_flutter_texture(
     engine_handle: i64,
 ) -> anyhow::Result<(ArcSendableTexture, i64, FrameSender)> {
     return utils::invoke_on_platform_main_thread(move || {
-        debug!("Creating Flutter texture");
         let (tx, rx) = flume::bounded(3);
 
         let provider = Arc::new(GLTextureSource::new(rx)?);
         let texture =
             irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
-        debug!("Created Flutter texture with id {}", texture.id());
         let tx_id = texture.id();
         let sendable_texture = texture.into_sendable_texture();
         Ok((sendable_texture, tx_id, tx))
@@ -103,7 +89,6 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
             match msg.view() {
                 MessageView::Info(info) => {
                     if let Some(s) = info.structure() {
-                        info!("Info: {:?}", s);
                     }
                 }
                 MessageView::Eos(..) => info!("End of stream"),

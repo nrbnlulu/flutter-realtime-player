@@ -1,6 +1,6 @@
 use glib;
 use irondash_run_loop::RunLoop;
-use log::{debug, error};
+use log::error;
 
 pub(crate) fn invoke_on_gs_main_thread<F, T>(func: F) -> T
 where
@@ -23,7 +23,6 @@ where
     T: Send + 'static,
 {
     if RunLoop::is_main_thread().unwrap_or(false) {
-        debug!("`invoke_on_platform_main_thread()` was called on the main thread");
         return func();
     }
     let (send, recv) = flume::bounded(1);

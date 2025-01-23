@@ -7,7 +7,7 @@ use std::{
 
 use glow::HasContext;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider};
-use log::{debug, error, info, trace};
+use log::error;
 
 use crate::core::fluttersink::frame;
 
@@ -52,8 +52,6 @@ impl GLTexture {
 
 impl GLTextureProvider for GLTexture {
     fn get(&self) -> irondash_texture::GLTexture {
-        info!("Returning GLTexture");
-
         irondash_texture::GLTexture {
             target: self.target,
             name: &self.name_raw,
@@ -116,17 +114,14 @@ impl GLTextureSource {
     fn recv_frame(&self) -> anyhow::Result<BoxedGLTexture> {
         match self.texture_receiver.recv() {
             Ok(SinkEvent::FrameChanged(frame)) => {
-                trace!("trying to get cacged textures");
                 let mut cached_textures = self
                     .cached_textures
                     .lock()
                     .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-                trace!("got cached textures");
 
                 if let Ok(textures) =
                     frame.into_textures(self.gl_context.clone(), &mut cached_textures)
                 {
-                    trace!("got textures");
                     let flip_width_height =
                         |(width, height, orientation): (u32, u32, frame::Orientation)| {
                             if orientation.is_flip_width_height() {
@@ -160,14 +155,12 @@ impl GLTextureSource {
                     //     debug!("Size changed from {old_size:?} to {new_size:?}",);
                     // }
                     if let Some(first_frame) = textures.first() {
-                        trace!("Returning first frame");
                         return Ok(Box::new(first_frame.texture.clone()));
                     };
                 }
                 Err(anyhow::anyhow!("Failed to get first frame"))
             }
             Err(e) => {
-                info!("Error receiving frame changed event: {:?}", e);
                 Err(anyhow::anyhow!(
                     "Error receiving frame changed event {:?}",
                     e
@@ -193,10 +186,8 @@ impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
     fn get_payload(&self) -> BoxedGLTexture {
         self.recv_frame().unwrap_or_else(|e| {
             error!("Error receiving frame: {:?}", e);
-            self.get_fallback_texture()
+        self.get_fallback_texture()
         })
-
-        // fallback to a green screen
     }
 }
 
