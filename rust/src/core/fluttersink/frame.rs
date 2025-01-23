@@ -1,20 +1,8 @@
-//
-// Copyright (C) 2021 Bilal Elmoussaoui <bil.elmoussaoui@gmail.com>
-// Copyright (C) 2021 Jordan Petridis <jordan@centricular.com>
-// Copyright (C) 2021 Sebastian Dröge <sebastian@centricular.com>
-//
-// This Source Code Form is subject to the terms of the Mozilla Public License, v2.0.
-// If a copy of the MPL was not distributed with this file, You can obtain one at
-// <https://mozilla.org/MPL/2.0/>.
-//
-// SPDX-License-Identifier: MPL-2.0
-
 use glow::HasContext;
 use gst_video::{prelude::*, VideoFormat};
 
 use gst_gl::prelude::*;
 use irondash_texture::BoxedGLTexture;
-use log::trace;
 use std::{
     collections::{HashMap, HashSet},
     ops,
@@ -322,12 +310,10 @@ impl Frame {
     ) -> anyhow::Result<Vec<Texture>> {
         let mut textures = Vec::with_capacity(1 + self.overlays.len());
         let mut used_textures = HashSet::with_capacity(1 + self.overlays.len());
-        trace!("1");
         let width = self.frame.width();
         let height = self.frame.height();
         let has_alpha = self.frame.format_info().has_alpha();
         let orientation = self.frame.orientation();
-        trace!("2");
         let (texture, pixel_aspect_ratio) = match self.frame {
             MappedFrame::SysMem { frame, .. } => video_frame_to_memory_texture(
                 frame,
@@ -401,14 +387,12 @@ impl Frame {
         // Remove all textures that were not used
         for (id, texture) in cached_textures.iter() {
             if !used_textures.contains(id) {
-                trace!("deleting texture {:?}", texture);
                 unsafe { gl_context.delete_texture(texture.name) };
                 unused_textures.insert(id.clone());
             }
         }
         cached_textures.retain(|id, _| !unused_textures.contains(id));
 
-        trace!("number of cached textures: {}", cached_textures.len());
         Ok(textures)
     }
 }
@@ -540,7 +524,6 @@ impl Frame {
             },
             overlays: vec![],
         };
-        trace!("format is: {:?}", frame.frame.format_info());
         frame.overlays = frame
             .frame
             .buffer()
@@ -588,15 +571,12 @@ fn video_frame_to_memory_texture(
     cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
     used_textures: &mut HashSet<TextureCacheId>,
 ) -> anyhow::Result<(GLTexture, f64)> {
-    trace!("video_frame_to_memory_texture");
     let ptr = frame.plane_data(0)?.as_ptr() as usize;
-    trace!("frame ptr is {}", ptr);
     let pixel_aspect_ratio =
         (frame.info().par().numer() as f64) / (frame.info().par().denom() as f64); // typos: ignore
 
     if let Some(texture) = cached_textures.get(&TextureCacheId::Memory(ptr)) {
         used_textures.insert(TextureCacheId::Memory(ptr));
-        trace!("returning cached texture");
         return Ok((texture.clone(), pixel_aspect_ratio));
     }
 
@@ -632,7 +612,6 @@ fn video_frame_to_memory_texture(
         );
         gl.generate_mipmap(glow::TEXTURE_2D);
     }
-    trace!("end gl stuff");
     let gl_tex = GLTexture::from_glow(texture, width as i32, height as i32, gl.clone());
     cached_textures.insert(TextureCacheId::Memory(ptr), gl_tex.clone());
     used_textures.insert(TextureCacheId::Memory(ptr));

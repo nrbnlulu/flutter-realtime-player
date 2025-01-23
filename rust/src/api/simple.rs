@@ -1,6 +1,5 @@
 use flume::bounded;
 use irondash_run_loop::RunLoop;
-use log::info;
 use simple_logger::SimpleLogger;
 
 use crate::core::fluttersink::{self, testit, utils};
@@ -13,7 +12,6 @@ pub fn greet(name: String) -> String {
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     SimpleLogger::new().init().unwrap();
-    info!("Initializing app");
     fluttersink::init().unwrap();
 
     // Default utilities - feel free to custom
