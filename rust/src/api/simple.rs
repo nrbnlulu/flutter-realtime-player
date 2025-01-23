@@ -21,5 +21,5 @@ pub fn init_app() {
 }
 
 pub fn get_opengl_texture(engine_handle: i64) -> anyhow::Result<i64> {
-    return utils::invoke_on_platform_main_thread(move || return testit(engine_handle));
+    return utils::invoke_on_platform_main_thread(move || testit(engine_handle));
 }

@@ -591,7 +591,7 @@ impl VideoSinkImpl for FlutterTextureSink {
                 }
             }
         };
-        
+
         let frame = Frame::new(buffer, info, orientation, wrapped_context.as_ref()).inspect_err(
             |_err| {
                 error!("Failed to create frame from buffer");

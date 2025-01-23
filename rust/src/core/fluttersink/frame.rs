@@ -21,7 +21,7 @@ use std::{
     rc::Rc,
 };
 
-use super::gltexture::GLTexture;
+use super::{gltexture::GLTexture, types::GlCtx};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum VideoInfo {
@@ -65,7 +65,7 @@ impl VideoInfo {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum TextureCacheId {
     Memory(usize),
     GL(usize),
@@ -238,6 +238,7 @@ fn video_frame_to_gl_texture(
     cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
     used_textures: &mut HashSet<TextureCacheId>,
     #[allow(unused)] wrapped_context: &gst_gl::GLContext,
+    gl_ctx: &GlCtx,
 ) -> anyhow::Result<(GLTexture, f64)> {
     let texture_name = frame.texture_id(0).expect("Invalid texture id") as usize;
 
@@ -255,7 +256,12 @@ fn video_frame_to_gl_texture(
     let sync_meta = frame.buffer().meta::<gst_gl::GLSyncMeta>().unwrap();
     let format = frame.format();
 
-    let texture = GLTexture::try_new(texture_name as u32, width as i32, height as i32)?;
+    let texture = GLTexture::try_new(
+        texture_name as u32,
+        width as i32,
+        height as i32,
+        gl_ctx.clone(),
+    )?;
 
     cached_textures.insert(TextureCacheId::GL(texture_name), texture.clone());
     used_textures.insert(TextureCacheId::GL(texture_name));
@@ -311,7 +317,7 @@ fn video_frame_to_dmabuf_texture(
 impl Frame {
     pub(crate) fn into_textures(
         self,
-        #[allow(unused_variables)] gl_context: Option<&glow::Context>,
+        gl_context: GlCtx,
         cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
     ) -> anyhow::Result<Vec<Texture>> {
         let mut textures = Vec::with_capacity(1 + self.overlays.len());
@@ -325,7 +331,7 @@ impl Frame {
         let (texture, pixel_aspect_ratio) = match self.frame {
             MappedFrame::SysMem { frame, .. } => video_frame_to_memory_texture(
                 frame,
-                gl_context.unwrap(),
+                &gl_context,
                 cached_textures,
                 &mut used_textures,
             )?,
@@ -334,17 +340,18 @@ impl Frame {
                 wrapped_context,
                 ..
             } => {
-                let Some(gdk_context) = gl_context else {
-                    // This will fail badly if the video frame was actually mapped as GL texture
-                    // but this case can't really happen as we only do that if we actually have a
-                    // GDK GL context.
-                    unreachable!();
-                };
+                // let Some(gdk_context) = gl_context else {
+                //     // This will fail badly if the video frame was actually mapped as GL texture
+                //     // but this case can't really happen as we only do that if we actually have a
+                //     // GDK GL context.
+                //     unreachable!();
+                // };
                 video_frame_to_gl_texture(
                     frame,
                     cached_textures,
                     &mut used_textures,
                     &wrapped_context,
+                    &gl_context,
                 )
                 .unwrap()
             }
@@ -390,8 +397,17 @@ impl Frame {
             );
         }
 
-        // Remove textures that were not used this time
-        cached_textures.retain(|id, _| used_textures.contains(id));
+        let mut unused_textures: HashSet<TextureCacheId> = HashSet::new();
+        // Remove all textures that were not used
+        for (id, texture) in cached_textures.iter() {
+            if !used_textures.contains(id) {
+                trace!("deleting texture {:?}", texture);
+                unsafe { gl_context.delete_texture(texture.name) };
+                unused_textures.insert(id.clone());
+            }
+        }
+        cached_textures.retain(|id, _| !unused_textures.contains(id));
+
         trace!("number of cached textures: {}", cached_textures.len());
         Ok(textures)
     }
@@ -568,7 +584,7 @@ impl Frame {
 
 fn video_frame_to_memory_texture(
     frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
-    gl: &glow::Context,
+    gl: &GlCtx,
     cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
     used_textures: &mut HashSet<TextureCacheId>,
 ) -> anyhow::Result<(GLTexture, f64)> {
@@ -577,7 +593,6 @@ fn video_frame_to_memory_texture(
     trace!("frame ptr is {}", ptr);
     let pixel_aspect_ratio =
         (frame.info().par().numer() as f64) / (frame.info().par().denom() as f64); // typos: ignore
-
 
     if let Some(texture) = cached_textures.get(&TextureCacheId::Memory(ptr)) {
         used_textures.insert(TextureCacheId::Memory(ptr));
@@ -592,18 +607,17 @@ fn video_frame_to_memory_texture(
     let texture = unsafe { gl.create_texture().map_err(|e| anyhow::anyhow!(e))? };
     trace!("created texture {:?}", texture);
     unsafe {
-        
         gl.bind_texture(glow::TEXTURE_2D, Some(texture));
         trace!("successfully bound texture");
         let frame_data = frame.plane_data(0).ok();
         gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, (rowstride / 4) as i32);
         fn map_format_to_glow(gst_fmt: VideoFormat) -> u32 {
-            match gst_fmt{
+            match gst_fmt {
                 VideoFormat::Rgba => glow::RGBA,
                 VideoFormat::Bgra => glow::BGRA,
                 VideoFormat::Rgb => glow::RGB,
                 VideoFormat::Bgr => glow::BGR,
-                _ => glow::RGBA
+                _ => glow::RGBA,
             }
         }
         let fmt = map_format_to_glow(frame.format());
@@ -620,30 +634,30 @@ fn video_frame_to_memory_texture(
         );
         gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
         trace!("tex image 2d");
-        // gl.tex_parameter_i32(
-        //     glow::TEXTURE_2D,
-        //     glow::TEXTURE_WRAP_S,
-        //     glow::CLAMP_TO_EDGE as i32,
-        // );
-        
-        // gl.tex_parameter_i32(
-        //     glow::TEXTURE_2D,
-        //     glow::TEXTURE_WRAP_T,
-        //     glow::CLAMP_TO_EDGE as i32,
-        // );
-        // gl.tex_parameter_i32(
-        //     glow::TEXTURE_2D,
-        //     glow::TEXTURE_MIN_FILTER,
-        //     glow::LINEAR as i32,
-        // );
-        // gl.tex_parameter_i32(
-        //     glow::TEXTURE_2D,
-        //     glow::TEXTURE_MAG_FILTER,
-        //     glow::LINEAR as i32,
-        // );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_S,
+            glow::CLAMP_TO_EDGE as i32,
+        );
+
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_T,
+            glow::CLAMP_TO_EDGE as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MIN_FILTER,
+            glow::LINEAR as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MAG_FILTER,
+            glow::LINEAR as i32,
+        );
     }
     trace!("end gl stuff");
-    let gl_tex = GLTexture::from_glow(texture, width as i32, height as i32);
+    let gl_tex = GLTexture::from_glow(texture, width as i32, height as i32, gl.clone());
     cached_textures.insert(TextureCacheId::Memory(ptr), gl_tex.clone());
     used_textures.insert(TextureCacheId::Memory(ptr));
 

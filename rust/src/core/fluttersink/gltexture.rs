@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, sync::Mutex};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use glow::HasContext;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider};
@@ -6,7 +11,7 @@ use log::{debug, error, info, trace};
 
 use crate::core::fluttersink::frame;
 
-use super::SinkEvent;
+use super::{types::GlCtx, utils, SinkEvent};
 
 #[derive(Debug, Clone)]
 pub struct GLTexture {
@@ -15,10 +20,11 @@ pub struct GLTexture {
     pub name: glow::Texture,
     pub width: i32,
     pub height: i32,
+    gl_ctx: GlCtx,
 }
 
 impl GLTexture {
-    pub fn try_new(name_raw: u32, width: i32, height: i32) -> anyhow::Result<Self> {
+    pub fn try_new(name_raw: u32, width: i32, height: i32, gl_ctx: GlCtx) -> anyhow::Result<Self> {
         let name = glow::NativeTexture {
             0: std::num::NonZeroU32::new(name_raw).ok_or(anyhow::anyhow!("fdsaf"))?,
         };
@@ -28,16 +34,18 @@ impl GLTexture {
             name,
             width,
             height,
+            gl_ctx,
         })
     }
 
-    pub fn from_glow(name: glow::Texture, width: i32, height: i32) -> Self {
+    pub fn from_glow(name: glow::Texture, width: i32, height: i32, gl_ctx: GlCtx) -> Self {
         Self {
             target: glow::TEXTURE_2D,
             name_raw: name.0.get(),
             name,
             width,
             height,
+            gl_ctx,
         }
     }
 }
@@ -60,12 +68,15 @@ pub struct GLTextureSource {
     height: i32,
     texture_receiver: flume::Receiver<SinkEvent>,
     cached_textures: Mutex<HashMap<frame::TextureCacheId, GLTexture>>,
-    gl_context: Mutex<glow::Context>,
+    gl_context: GlCtx,
     green_texture_name: u32,
 }
 
+unsafe impl Sync for GLTextureSource {}
+unsafe impl Send for GLTextureSource {}
+
 impl GLTextureSource {
-    pub fn new(texture_receiver: flume::Receiver<SinkEvent>) -> anyhow::Result<Self> {
+    pub(crate) fn new(texture_receiver: flume::Receiver<SinkEvent>) -> anyhow::Result<Self> {
         gl_loader::init_gl();
         let gl_context = unsafe {
             glow::Context::from_loader_function(|s| {
@@ -98,25 +109,22 @@ impl GLTextureSource {
             texture_receiver,
             green_texture_name: texture_name,
             cached_textures: Mutex::new(HashMap::new()),
-            gl_context: Mutex::new(gl_context),
+            gl_context: Rc::new(gl_context),
         })
     }
 
     fn recv_frame(&self) -> anyhow::Result<BoxedGLTexture> {
         match self.texture_receiver.recv() {
             Ok(SinkEvent::FrameChanged(frame)) => {
-                let context: std::sync::MutexGuard<'_, glow::Context> = self
-                    .gl_context
-                    .lock()
-                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 trace!("trying to get cacged textures");
                 let mut cached_textures = self
                     .cached_textures
                     .lock()
                     .map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 trace!("got cached textures");
+
                 if let Ok(textures) =
-                    frame.into_textures(Some(&context), &mut cached_textures)
+                    frame.into_textures(self.gl_context.clone(), &mut cached_textures)
                 {
                     trace!("got textures");
                     let flip_width_height =
@@ -160,13 +168,24 @@ impl GLTextureSource {
             }
             Err(e) => {
                 info!("Error receiving frame changed event: {:?}", e);
-                Err(anyhow::anyhow!("Error receiving frame changed event {:?}", e))
+                Err(anyhow::anyhow!(
+                    "Error receiving frame changed event {:?}",
+                    e
+                ))
             }
         }
     }
 
     fn get_fallback_texture(&self) -> BoxedGLTexture {
-        Box::new(GLTexture::try_new(self.green_texture_name, self.width, self.height).unwrap())
+        Box::new(
+            GLTexture::try_new(
+                self.green_texture_name,
+                self.width,
+                self.height,
+                self.gl_context.clone(),
+            )
+            .unwrap(),
+        )
     }
 }
 

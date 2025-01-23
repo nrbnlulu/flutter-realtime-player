@@ -6,6 +6,8 @@ import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'package:my_app/src/rust/api/simple.dart' as rlib;
 import 'package:my_app/src/rust/frb_generated.dart';
 
+
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
@@ -33,7 +35,12 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      
     );
   }  
 }
+
+
+
+
+
+

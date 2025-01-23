@@ -10,7 +10,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // ported from gstreamer-rs-plugins gtk4sink
-
+mod frame;
+pub mod gltexture;
+pub(super) mod imp;
+pub mod types;
+pub mod utils;
 use std::sync::Arc;
 
 use frame::Frame;
@@ -20,10 +24,6 @@ use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, Gst
 use imp::ArcSendableTexture;
 use log::{debug, error, info};
 
-mod frame;
-pub mod gltexture;
-pub(super) mod imp;
-pub mod utils;
 pub(crate) enum SinkEvent {
     FrameChanged(Frame),
 }
