@@ -2058,6 +2058,7 @@ dependencies = [
  "irondash_texture",
  "lazy_static",
  "log",
+ "rayon",
  "simple-log",
  "simple_logger",
  "tokio",

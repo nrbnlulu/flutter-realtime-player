@@ -35,3 +35,4 @@ gst-gl = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch
 gst-video = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-video" , features = ["v1_16"]}
 gst-base = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-base", features = ["v1_16"] }
 gst-allocators = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-allocators", features = ["v1_24"] }
+rayon = "1.10.0"
