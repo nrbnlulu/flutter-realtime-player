@@ -7,9 +7,15 @@ use std::{
     collections::{HashMap, HashSet},
     ops,
     rc::Rc,
+    sync::Arc,
 };
 
-use super::{gltexture::GLTexture, types::GlCtx};
+use crate::core::{
+    ffi::gst_egl_ext::gst_egl_image_from_texture,
+    platform::{EglImageWrapper, GlCtx, GstNativeFrameType},
+};
+
+use super::gltexture::GLTexture;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum VideoInfo {
@@ -196,7 +202,7 @@ struct Overlay {
 }
 
 #[derive(Debug)]
-pub(crate) struct Texture {
+pub(crate) struct EglImage {
     pub texture: GLTexture,
     pub x: f32,
     pub y: f32,
@@ -223,11 +229,11 @@ fn video_frame_to_pixel_buffer(
 
 fn video_frame_to_gl_texture(
     frame: gst_gl::GLVideoFrame<gst_gl::gl_video_frame::Readable>,
-    cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
+    cached_textures: &mut HashMap<TextureCacheId, GstNativeFrameType>,
     used_textures: &mut HashSet<TextureCacheId>,
     #[allow(unused)] wrapped_context: &gst_gl::GLContext,
     gl_ctx: &GlCtx,
-) -> anyhow::Result<(GLTexture, f64)> {
+) -> anyhow::Result<(GstNativeFrameType, f64)> {
     let texture_name = frame.texture_id(0).expect("Invalid texture id") as usize;
 
     let pixel_aspect_ratio =
@@ -244,70 +250,32 @@ fn video_frame_to_gl_texture(
     let sync_meta = frame.buffer().meta::<gst_gl::GLSyncMeta>().unwrap();
     let format = frame.format();
 
-    let texture = GLTexture::try_new(
-        texture_name as u32,
-        width as i32,
-        height as i32,
-        gl_ctx.clone(),
-    )?;
-
-    cached_textures.insert(TextureCacheId::GL(texture_name), texture.clone());
-    used_textures.insert(TextureCacheId::GL(texture_name));
-    Ok((texture, pixel_aspect_ratio))
-}
-
-#[cfg(all(target_os = "linux", feature = "dmabuf"))]
-#[allow(clippy::too_many_arguments)]
-fn video_frame_to_dmabuf_texture(
-    buffer: gst::Buffer,
-    cached_textures: &mut HashMap<TextureCacheId, gdk::Texture>,
-    used_textures: &mut HashSet<TextureCacheId>,
-    info: &gst_video::VideoInfoDmaDrm,
-    n_planes: u32,
-    fds: &[i32; 4],
-    offsets: &[usize; 4],
-    strides: &[usize; 4],
-    width: u32,
-    height: u32,
-) -> Result<(gdk::Texture, f64), glib::Error> {
-    let pixel_aspect_ratio = (info.par().numer() as f64) / (info.par().denom() as f64);
-
-    if let Some(texture) = cached_textures.get(&TextureCacheId::DmaBuf(*fds)) {
-        used_textures.insert(TextureCacheId::DmaBuf(*fds));
-        return Ok((texture.clone(), pixel_aspect_ratio));
-    }
-
-    let builder = gdk::DmabufTextureBuilder::new();
-    builder.set_display(&gdk::Display::default().unwrap());
-    builder.set_fourcc(info.fourcc());
-    builder.set_modifier(info.modifier());
-    builder.set_width(width);
-    builder.set_height(height);
-    builder.set_n_planes(n_planes);
-    for plane in 0..(n_planes as usize) {
-        builder.set_fd(plane as u32, fds[plane]);
-        builder.set_offset(plane as u32, offsets[plane] as u32);
-        builder.set_stride(plane as u32, strides[plane] as u32);
-    }
-
-    let texture = unsafe {
-        builder.build_with_release_func(move || {
-            drop(buffer);
-        })?
+    let egl_image_ptr = unsafe {
+        gst_egl_image_from_texture(
+            gl_ctx.as_ptr(),
+            frame.buffer().memory(0).unwrap().as_ptr() as *mut gst_gl_sys::GstGLMemory,
+            std::ptr::null_mut(),
+        )
     };
-
-    cached_textures.insert(TextureCacheId::DmaBuf(*fds), texture.clone());
-    used_textures.insert(TextureCacheId::DmaBuf(*fds));
-
-    Ok((texture, pixel_aspect_ratio))
+    let egl_img_wrapper = EglImageWrapper::new(
+        egl_image_ptr,
+        width,
+        height,
+        format,
+    );
+    cached_textures.insert(TextureCacheId::GL(texture_name), egl_img_wrapper.clone());
+    used_textures.insert(TextureCacheId::GL(texture_name));
+    Ok((egl_img_wrapper, pixel_aspect_ratio))
 }
 
 impl Frame {
     pub(crate) fn into_textures(
         self,
-        gl_context: GlCtx,
-        cached_textures: &mut HashMap<TextureCacheId, GLTexture>,
-    ) -> anyhow::Result<Vec<Texture>> {
+        gl_context: &GlCtx,
+        cached_textures: &mut HashMap<TextureCacheId, GstNativeFrameType>,
+    ) -> anyhow::Result<Vec<EglImage>> {
+        gl_context.activate(true);
+
         let mut textures = Vec::with_capacity(1 + self.overlays.len());
         let mut used_textures = HashSet::with_capacity(1 + self.overlays.len());
         let width = self.frame.width();
@@ -341,32 +309,9 @@ impl Frame {
                 )
                 .unwrap()
             }
-            #[cfg(all(target_os = "linux", feature = "dmabuf"))]
-            MappedFrame::DmaBuf {
-                buffer,
-                info,
-                n_planes,
-                fds,
-                offsets,
-                strides,
-                width,
-                height,
-                ..
-            } => video_frame_to_dmabuf_texture(
-                buffer,
-                cached_textures,
-                &mut used_textures,
-                &info,
-                n_planes,
-                &fds,
-                &offsets,
-                &strides,
-                width,
-                height,
-            )?,
         };
 
-        textures.push(Texture {
+        textures.push(EglImage {
             texture,
             x: 0.0,
             y: 0.0,
@@ -409,61 +354,6 @@ impl Frame {
 
         #[allow(unused_mut)]
         let mut frame = None;
-
-        // Check we received a buffer with dmabuf memory and if so do some checks before
-        // passing it onwards
-        #[cfg(all(target_os = "linux", feature = "dmabuf"))]
-        if frame.is_none()
-            && buffer
-                .peek_memory(0)
-                .is_memory_type::<gst_allocators::DmaBufMemory>()
-        {
-            if let Some((vmeta, info)) =
-                Option::zip(buffer.meta::<gst_video::VideoMeta>(), info.dma_drm())
-            {
-                let mut fds = [-1i32; 4];
-                let mut offsets = [0; 4];
-                let mut strides = [0; 4];
-                let n_planes = vmeta.n_planes() as usize;
-
-                let vmeta_offsets = vmeta.offset();
-                let vmeta_strides = vmeta.stride();
-
-                for plane in 0..n_planes {
-                    let Some((range, skip)) =
-                        buffer.find_memory(vmeta_offsets[plane]..(vmeta_offsets[plane] + 1))
-                    else {
-                        break;
-                    };
-
-                    let mem = buffer.peek_memory(range.start);
-                    let Some(mem) = mem.downcast_memory_ref::<gst_allocators::DmaBufMemory>()
-                    else {
-                        break;
-                    };
-
-                    let fd = mem.fd();
-                    fds[plane] = fd;
-                    offsets[plane] = mem.offset() + skip;
-                    strides[plane] = vmeta_strides[plane] as usize;
-                }
-
-                // All fds valid?
-                if fds[0..n_planes].iter().all(|fd| *fd != -1) {
-                    frame = Some(MappedFrame::DmaBuf {
-                        buffer: buffer.clone(),
-                        info: info.clone(),
-                        n_planes: n_planes as u32,
-                        fds,
-                        offsets,
-                        strides,
-                        width: vmeta.width(),
-                        height: vmeta.height(),
-                        orientation,
-                    });
-                }
-            }
-        }
 
         if frame.is_none() {
             // Check we received a buffer with GL memory and if the context of that memory

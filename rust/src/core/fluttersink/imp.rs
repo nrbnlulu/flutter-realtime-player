@@ -2,8 +2,8 @@ use crate::core::fluttersink::frame::Frame;
 use crate::core::fluttersink::utils;
 use crate::core::platform;
 
-use super::frame::VideoInfo;
-use super::gltexture::GLTextureSource;
+use super::frame::{TextureCacheId, VideoInfo};
+use super::gltexture::{GLTexture, GLTextureSource};
 use super::utils::{invoke_on_gs_main_thread, make_element};
 use super::{frame, FrameSender, SinkEvent};
 
@@ -18,6 +18,7 @@ use gst_video::subclass::prelude::*;
 use log::{error, trace, warn};
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{
     atomic::{self, AtomicBool},
@@ -414,28 +415,17 @@ impl FlutterTextureSink {
             .stream_orientation
             .unwrap_or(config.global_orientation);
 
-        let wrapped_context = {
-            {
-                let gl_context = GL_CONTEXT.lock().map_err(|_| {
-                    error!("Failed to lock GL context");
-                    gst::FlowError::Error
-                })?;
-                if let GLContext::Initialized {
-                    wrapped_context, ..
-                } = &*gl_context
-                {
-                    Some(wrapped_context.clone())
-                } else {
-                    None
-                }
-            }
-        };
+        let wrapped_context = gst_gl::GLContext::current().expect("Failed to get current GL context");
 
-        let frame = Frame::new(&buffer, info, orientation, wrapped_context.as_ref()).inspect_err(
+
+        let frame = Frame::new(&buffer, info, orientation, Some(wrapped_context.as_ref())).inspect_err(
             |_err| {
                 error!("Failed to create frame from buffer");
             },
         )?;
+        let mut cached_textures: HashMap<TextureCacheId, GLTexture> = HashMap::new();
+        let res = frame.into_textures(&wrapped_context, &mut cached_textures);
+
 
         let sender = self
             .fl_config
