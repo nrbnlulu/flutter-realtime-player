@@ -1,17 +1,15 @@
 use std::{
-    cell::RefCell,
-    collections::HashMap,
-    rc::Rc,
-    sync::{Arc, Mutex, RwLock},
+    cell::RefCell, collections::HashMap, ops::Deref, rc::Rc, sync::{Arc, Mutex, RwLock}
 };
 
 use glow::HasContext;
+use gst_gl::prelude::GLContextExt;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider};
 use log::error;
 
-use crate::core::fluttersink::frame;
+use crate::core::{fluttersink::frame, platform::GlCtx};
 
-use super::{types::GlCtx, utils, SinkEvent};
+use super::{ utils, SinkEvent};
 
 #[derive(Debug, Clone)]
 pub struct GLTexture {
@@ -113,34 +111,38 @@ impl GLTextureSource {
 
     fn recv_frame(&self) -> anyhow::Result<BoxedGLTexture> {
         match self.texture_receiver.recv() {
-            Ok(SinkEvent::FrameChanged(frame)) => {
-                let mut cached_textures = self
-                    .cached_textures
-                    .lock()
-                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            Ok(SinkEvent::FrameChanged(native_frame)) => {
+                let a = gleam::gl::GlFns::load_with(|s| {
+                    self.gl_context.get_proc_address(s) as *const _
+                });
 
-                if let Ok(textures) =
-                    frame.into_textures(self.gl_context.clone(), &mut cached_textures)
-                {
-                    let flip_width_height =
-                        |(width, height, orientation): (u32, u32, frame::Orientation)| {
-                            if orientation.is_flip_width_height() {
-                                (height, width)
-                            } else {
-                                (width, height)
-                            }
-                        };
+                // let mut cached_textures = self
+                //     .cached_textures
+                //     .lock()
+                //     .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
-                    let new_size = textures
-                        .first()
-                        .map(|p| {
-                            flip_width_height((
-                                f32::round(p.width) as u32,
-                                f32::round(p.height) as u32,
-                                p.orientation,
-                            ))
-                        })
-                        .ok_or_else(|| anyhow::anyhow!("Failed to get new size"))?;
+                // if let Ok(textures) =
+                //     frame.into_textures(self.gl_context.clone(), &mut cached_textures)
+                // {
+                //     let flip_width_height =
+                //         |(width, height, orientation): (u32, u32, frame::Orientation)| {
+                //             if orientation.is_flip_width_height() {
+                //                 (height, width)
+                //             } else {
+                //                 (width, height)
+                //             }
+                //         };
+
+                //     let new_size = textures
+                //         .first()
+                //         .map(|p| {
+                //             flip_width_height((
+                //                 f32::round(p.width) as u32,
+                //                 f32::round(p.height) as u32,
+                //                 p.orientation,
+                //             ))
+                //         })
+                //         .ok_or_else(|| anyhow::anyhow!("Failed to get new size"))?;
 
                     // let old_paintables = self.paintables.replace(new_paintables);
                     // let old_size = old_paintables.first().map(|p| {

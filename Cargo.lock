@@ -850,6 +850,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gl_generator"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a95dfc23a2b4a9a2f5ab41d194f8bfda3cabec42af4e39f08c339eb2a0c124d"
+dependencies = [
+ "khronos_api",
+ "log",
+ "xml-rs",
+]
+
+[[package]]
 name = "gl_loader"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -857,6 +868,15 @@ checksum = "e32d96dd5f881490e537041d5532320812ba096097f07fccb4626578da0b99d3"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "gleam"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0173481f2bb6e809bf4985de2e86c83876d84d2805830e3301cd37355e897f0f"
+dependencies = [
+ "gl_generator",
 ]
 
 [[package]]
@@ -1415,6 +1435,12 @@ dependencies = [
  "once_cell",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "khronos_api"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kstring"
@@ -2063,6 +2089,7 @@ dependencies = [
  "flutter_rust_bridge",
  "gdk-sys",
  "gl_loader",
+ "gleam",
  "glib",
  "glib-macros",
  "glib-sys 0.18.1",
@@ -2842,6 +2869,12 @@ checksum = "c8d71a593cc5c42ad7876e2c1fda56f314f3754c084128833e64f1345ff8a03a"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "xml-rs"
+version = "0.8.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5b940ebc25896e71dd073bad2dbaa2abfe97b0a391415e22ad1326d9c54e3c4"
 
 [[package]]
 name = "zerocopy"

@@ -3,7 +3,7 @@ pub mod gltexture;
 pub(super) mod imp;
 pub mod types;
 pub mod utils;
-use std::{rc::Rc, sync::Arc};
+use std::{rc::Rc, sync::{Arc, Mutex}, thread};
 
 use frame::Frame;
 use glib::{
@@ -16,9 +16,13 @@ use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, Gst
 use imp::ArcSendableTexture;
 use log::{error, info};
 
+use super::platform::GstNativeFrameType;
+
 pub(crate) enum SinkEvent {
-    FrameChanged(Frame),
+    FrameChanged(GstNativeFrameType),
 }
+pub(crate) type FrameSender = flume::Sender<SinkEvent>;
+
 
 glib::wrapper! {
     pub struct FlutterTextureSink(ObjectSubclass<imp::FlutterTextureSink>)
@@ -45,28 +49,26 @@ pub fn init() -> anyhow::Result<()> {
     gst::init()?;
     register(None)
 }
-pub(crate) type FrameSender = flume::Sender<SinkEvent>;
 
 fn create_flutter_texture(
     engine_handle: i64,
 ) -> anyhow::Result<(ArcSendableTexture, i64, FrameSender)> {
-    return utils::invoke_on_platform_main_thread(move || {
+    utils::invoke_on_platform_main_thread(move || {
         let (tx, rx) = flume::bounded(3);
-
+        
         let provider = Arc::new(GLTextureSource::new(rx)?);
         let texture =
             irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
         let tx_id = texture.id();
-        let sendable_texture = texture.into_sendable_texture();
-        Ok((sendable_texture, tx_id, tx))
-    });
+        Ok((texture.into_sendable_texture(), tx_id, tx))
+    })
 }
 
 pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     let (sendable_fl_txt, id, tx) = create_flutter_texture(engine_handle)?;
 
     let flsink = utils::make_element("fluttertexturesink", None)?;
-    let fl_config = imp::FlutterConfig::new(id, tx, sendable_fl_txt);
+    let fl_config = imp::FlutterConfig::new(id,engine_handle, tx, sendable_fl_txt);
 
     let fl_imp = flsink.downcast_ref::<FlutterTextureSink>().unwrap().imp();
     fl_imp.set_fl_config(fl_config);
@@ -108,3 +110,5 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
         .expect("Failed to add bus watch");
     Ok(id)
 }
+
+

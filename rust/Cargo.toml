@@ -38,3 +38,4 @@ gst-video = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", bra
 gst-base = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-base", features = ["v1_16"] }
 gst-allocators = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-allocators", features = ["v1_24"] }
 rayon = "1.10.0"
+gleam = "0.15.0"

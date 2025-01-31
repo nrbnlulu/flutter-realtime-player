@@ -5,7 +5,7 @@ use crate::core::platform;
 use super::frame::{TextureCacheId, VideoInfo};
 use super::gltexture::{GLTexture, GLTextureSource};
 use super::utils::{invoke_on_gs_main_thread, make_element};
-use super::{frame, FrameSender, SinkEvent};
+use super::{frame, types, FrameSender, SinkEvent};
 
 use glib::clone::Downgrade;
 use glib::thread_guard::ThreadGuard;
@@ -52,16 +52,16 @@ pub(crate) static CAT: LazyLock<gst::DebugCategory> = LazyLock::new(|| {
 struct StreamConfig {
     info: Option<super::frame::VideoInfo>,
     /// Orientation from a global scope tag
-    global_orientation: frame::Orientation,
+    global_orientation: types::Orientation,
     /// Orientation from a stream scope tag
-    stream_orientation: Option<frame::Orientation>,
+    stream_orientation: Option<types::Orientation>,
 }
 
 impl Default for StreamConfig {
     fn default() -> Self {
         StreamConfig {
             info: None,
-            global_orientation: frame::Orientation::Rotate0,
+            global_orientation: types::Orientation::Rotate0,
             stream_orientation: None,
         }
     }
@@ -348,17 +348,17 @@ impl BaseSinkImpl for FlutterTextureSink {
         match event.view() {
             gst::EventView::StreamStart(_) => {
                 let mut config = self.config.lock().unwrap();
-                config.global_orientation = frame::Orientation::Rotate0;
+                config.global_orientation = types::Orientation::Rotate0;
                 config.stream_orientation = None;
             }
             gst::EventView::Tag(ev) => {
                 let mut config = self.config.lock().unwrap();
                 let tags = ev.tag();
                 let scope = tags.scope();
-                let orientation = frame::Orientation::from_tags(tags);
+                let orientation = types::Orientation::from_tags(tags);
 
                 if scope == gst::TagScope::Global {
-                    config.global_orientation = orientation.unwrap_or(frame::Orientation::Rotate0);
+                    config.global_orientation = orientation.unwrap_or(types::Orientation::Rotate0);
                 } else {
                     config.stream_orientation = orientation;
                 }
@@ -474,47 +474,6 @@ impl FlutterTextureSink {
         #[allow(unused_mut)]
         let mut tmp_caps = Self::pad_templates()[0].caps().clone();
 
-        #[cfg(all(target_os = "linux", feature = "dmabuf"))]
-        {
-            let formats = utils::invoke_on_gs_main_thread(move || {
-                let Some(display) = gdk::Display::default() else {
-                    return vec![];
-                };
-                let dmabuf_formats = display.dmabuf_formats();
-
-                let mut formats = vec![];
-                let n_formats = dmabuf_formats.n_formats();
-                for i in 0..n_formats {
-                    let (fourcc, modifier) = dmabuf_formats.format(i);
-
-                    if fourcc == 0 || modifier == (u64::MAX >> 8) {
-                        continue;
-                    }
-
-                    formats.push(gst_video::dma_drm_fourcc_to_string(fourcc, modifier));
-                }
-
-                formats
-            });
-
-            if formats.is_empty() {
-                // Filter out dmabufs caps from the template pads if we have no supported formats
-                tmp_caps = tmp_caps
-                    .iter_with_features()
-                    .filter(|(_, features)| {
-                        !features.contains(gst_allocators::CAPS_FEATURE_MEMORY_DMABUF)
-                    })
-                    .map(|(s, c)| (s.to_owned(), c.to_owned()))
-                    .collect::<gst::Caps>();
-            } else {
-                let tmp_caps = tmp_caps.make_mut();
-                for (s, f) in tmp_caps.iter_with_features_mut() {
-                    if f.contains(gst_allocators::CAPS_FEATURE_MEMORY_DMABUF) {
-                        s.set("drm-format", gst::List::new(&formats));
-                    }
-                }
-            }
-        }
 
         {
             // Filter out GL caps from the template pads if we have no context

@@ -10,30 +10,34 @@ mod linux {
 
     use irondash_engine_context::EngineContext;
 
-    use crate::core::ffi::gst_egl_ext;
+    use crate::core::{ffi::gst_egl_ext, fluttersink::types::Orientation};
 
     pub type GlCtx = gst_gl::GLContext;
     pub struct EglImageWrapper {
-        image_ptr: gst_egl_ext::GstEGLImage,
-        width: u32,
-        height: u32,
-        format: gst_video::VideoFormat,
+        pub image_ptr: gst_egl_ext::EGLImage,
+        pub width: u32,
+        pub height: u32,
+        pub format: gst_video::VideoFormat,
+        pub orientation: Orientation,
     }
     impl EglImageWrapper {
         pub fn new(
-            image_ptr: gst_egl_ext::GstEGLImage,
+            image_ptr: gst_egl_ext::EGLImage,
             width: u32,
             height: u32,
             format: gst_video::VideoFormat,
+            orientation:    Orientation,
         ) -> GstNativeFrameType {
             Arc::new(Self {
                 image_ptr,
                 width,
                 height,
                 format,
+                orientation,
             })
         }
     }
+    
     pub(crate) type GstNativeFrameType = Arc<EglImageWrapper>;
 
     pub struct GlManager {
