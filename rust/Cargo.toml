@@ -39,3 +39,8 @@ gst-base = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", bran
 gst-allocators = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-allocators", features = ["v1_24"] }
 rayon = "1.10.0"
 gleam = "0.15.0"
+glutin = { git = "https://github.com/MarijnS95/glutin.git", branch = "gbm"}
+
+[build-dependencies]
+gl_generator = "0.14"
+cfg_aliases = "0.2.1"

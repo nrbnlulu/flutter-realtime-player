@@ -2,14 +2,14 @@ use std::{
     cell::RefCell, collections::HashMap, ops::Deref, rc::Rc, sync::{Arc, Mutex, RwLock}
 };
 
-use glow::HasContext;
-use gst_gl::prelude::GLContextExt;
 use irondash_texture::{BoxedGLTexture, GLTextureProvider};
 use log::error;
 
 use crate::core::{fluttersink::frame, platform::GlCtx};
 
 use super::{ utils, SinkEvent};
+
+
 
 #[derive(Debug, Clone)]
 pub struct GLTexture {
@@ -59,51 +59,40 @@ impl GLTextureProvider for GLTexture {
     }
 }
 
+
+pub mod gl {
+    #![allow(clippy::all)]
+    include!(concat!(env!("OUT_DIR"), "/gl_bindings.rs"));
+
+    pub use Gles2 as Gl;
+}
+
+
+
 pub struct GLTextureSource {
     width: i32,
     height: i32,
     texture_receiver: flume::Receiver<SinkEvent>,
     cached_textures: Mutex<HashMap<frame::TextureCacheId, GLTexture>>,
     gl_context: GlCtx,
-    green_texture_name: u32,
+    gl: gl::Gl,
 }
 
 unsafe impl Sync for GLTextureSource {}
 unsafe impl Send for GLTextureSource {}
 
-impl GLTextureSource {
-    pub(crate) fn new(texture_receiver: flume::Receiver<SinkEvent>) -> anyhow::Result<Self> {
-        gl_loader::init_gl();
-        let gl_context = unsafe {
-            glow::Context::from_loader_function(|s| {
-                std::mem::transmute(gl_loader::get_proc_address(s))
-            })
-        };
-        let mut texture_name = 0;
 
-        if let Some(texture) = unsafe { gl_context.create_texture().ok() } {
-            texture_name = texture.0.get();
-            unsafe {
-                gl_context.bind_texture(glow::TEXTURE_2D, Some(texture));
-                gl_context.tex_image_2d(
-                    glow::TEXTURE_2D,
-                    0,
-                    glow::RGBA as i32,
-                    200,
-                    500,
-                    0,
-                    glow::RGBA,
-                    glow::UNSIGNED_BYTE,
-                    glow::PixelUnpackData::Slice(Some(&vec![0, 255, 0, 255].repeat(200 * 500))),
-                );
-                gl_context.bind_texture(glow::TEXTURE_2D, Some(texture));
-            }
-        }
+
+impl GLTextureSource {
+    pub(crate) fn new(texture_receiver: flume::Receiver<SinkEvent>, 
+        gl: glutin::api::glx::Glx,
+    
+    ) -> anyhow::Result<Self> {
+
         Ok(Self {
             width: 0,
             height: 0,
             texture_receiver,
-            green_texture_name: texture_name,
             cached_textures: Mutex::new(HashMap::new()),
             gl_context: Rc::new(gl_context),
         })
@@ -112,9 +101,30 @@ impl GLTextureSource {
     fn recv_frame(&self) -> anyhow::Result<BoxedGLTexture> {
         match self.texture_receiver.recv() {
             Ok(SinkEvent::FrameChanged(native_frame)) => {
-                let a = gleam::gl::GlFns::load_with(|s| {
-                    self.gl_context.get_proc_address(s) as *const _
-                });
+       
+                let mut texture_name = 0;
+                unsafe { self.gl.GenTextures(1, &mut texture_name);
+                
+                self.gl.BindTexture(gl::TEXTURE_2D, texture_name);
+                self.gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+                self.gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+                self.gl.EGLImageTargetTexture2DOES(gl::TEXTURE_2D, native_frame.image_ptr as *const std::ffi::c_void);
+                 };
+
+                trace!(unsafe { self.gl.GetError() });
+                unsafe { self.gl.BindRenderbuffer(gl::RENDERBUFFER, texture_name) }
+                trace!(unsafe { self.gl.GetError() });
+                unsafe { self.gl.EGLImageTargetRenderbufferStorageOES(gl::RENDERBUFFER, image) };
+                trace!(unsafe { self.gl.GetError() });
+                unsafe {
+                    self.gl.FramebufferRenderbuffer(
+                        gl::FRAMEBUFFER,
+                        gl::COLOR_ATTACHMENT0,
+                        gl::RENDERBUFFER,
+                        texture_name,
+                    )
+                }
+            
 
                 // let mut cached_textures = self
                 //     .cached_textures
@@ -169,7 +179,6 @@ impl GLTextureSource {
                 ))
             }
         }
-    }
 
     fn get_fallback_texture(&self) -> BoxedGLTexture {
         Box::new(
