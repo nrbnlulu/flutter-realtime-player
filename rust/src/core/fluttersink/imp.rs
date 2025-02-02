@@ -35,7 +35,6 @@ enum GLContext {
     Initialized {
         display: gst_gl::GLDisplay,
         wrapped_context: gst_gl::GLContext,
-        glow_context: ThreadGuard<glow::Context>,
     },
 }
 
@@ -99,7 +98,7 @@ pub struct FlutterTextureSink {
     cached_caps: Mutex<Option<gst::Caps>>,
     settings: Mutex<Settings>,
     window_resized: AtomicBool,
-    wrapped_gl_ctx: Option<gst_gl::GLContext>,
+    wrapped_gl_ctx: RefCell<Option<gst_gl::GLContext>>,
     playbin3: RefCell<Option<Rc<gst::Element>>>,
 }
 
@@ -300,12 +299,6 @@ impl BaseSinkImpl for FlutterTextureSink {
     fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
         #[allow(unused_mut)]
         let mut video_info = None;
-        #[cfg(all(target_os = "linux", feature = "dmabuf"))]
-        {
-            if let Ok(info) = gst_video::VideoInfoDmaDrm::from_caps(caps) {
-                video_info = Some(info.into());
-            }
-        }
 
         let video_info = match video_info {
             Some(info) => info,
@@ -387,10 +380,11 @@ impl FlutterTextureSink {
         let orientation = config
             .stream_orientation
             .unwrap_or(config.global_orientation);
-
-        let wrapped_context =
-            gst_gl::GLContext::current().expect("Failed to get current GL context");
-
+        let binding = self.wrapped_gl_ctx.borrow();
+        let wrapped_context = binding.as_ref().ok_or_else(|| {
+            error!("has no GL context");
+            gst::FlowError::Error
+        })?;
         let frame = MappedFrame::from_gst_buffer(
             &buffer,
             info,
@@ -439,7 +433,9 @@ impl FlutterTextureSink {
     pub fn set_playbin3(&self, playbin3: Rc<gst::Element>) {
         *self.playbin3.borrow_mut() = Some(playbin3);
     }
-
+    pub fn set_gl_ctx(&self, gl_ctx: gst_gl::GLContext) {
+        *self.wrapped_gl_ctx.borrow_mut() = Some(gl_ctx);
+    }
     fn caps(&self) -> gst::Caps {
         gst::Caps::builder("video/x-raw(memory:GLMemory, meta:GstVideoOverlayComposition)")
             .field("format", &gst_video::VideoFormat::Rgba.to_string())
@@ -455,7 +451,7 @@ impl FlutterTextureSink {
 
         {
             // Filter out GL caps from the template pads if we have no context
-            if self.wrapped_gl_ctx.is_some() {
+            if self.wrapped_gl_ctx.borrow().is_some() {
                 tmp_caps = tmp_caps
                     .iter_with_features()
                     .filter(|(_, features)| {

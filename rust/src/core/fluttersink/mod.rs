@@ -84,6 +84,16 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
             .unwrap(),
     );
     fl_imp.set_playbin3(pipeline.clone());
+    fl_imp.set_gl_ctx(
+        unsafe {
+            gst_gl::GLContext::new_wrapped(
+            &gst_gl::GLDisplay::default(),
+            0,
+            gst_gl::GLPlatform::GLX,
+            gst_gl::GLAPI::GLES2,
+            ).unwrap()
+        }
+    );
     let bus = pipeline.bus().unwrap();
 
     pipeline

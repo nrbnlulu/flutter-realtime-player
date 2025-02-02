@@ -1,4 +1,5 @@
 {
   "cmake.sourceDirectory": "/home/dev/Desktop/tmp/my_app/linux",
-  "discord.enabled": false
+  "discord.enabled": false,
+  "vscord.enabled": false
 }

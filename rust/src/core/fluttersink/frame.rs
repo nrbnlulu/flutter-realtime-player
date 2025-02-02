@@ -1,4 +1,3 @@
-use glow::HasContext;
 use gst_video::{prelude::*, VideoFormat, VideoOrientation};
 
 use gst_gl::prelude::*;
