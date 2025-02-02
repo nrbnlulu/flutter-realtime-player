@@ -34,7 +34,13 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     let mut file = File::create(dest.join("gl_bindings.rs")).unwrap();
-    Registry::new(Api::Gles2, (3, 0), Profile::Core, Fallbacks::All, ["GL_OES_EGL_image"])
-        .write_bindings(StructGenerator, &mut file)
-        .unwrap();
+    Registry::new(
+        Api::Gles2,
+        (3, 0),
+        Profile::Core,
+        Fallbacks::All,
+        ["GL_OES_EGL_image"],
+    )
+    .write_bindings(StructGenerator, &mut file)
+    .unwrap();
 }

@@ -1,5 +1,5 @@
 pub mod gst_egl_ext {
-    use glib::translate::*;
+    use glib::{ffi::gpointer, translate::*};
     use gst_gl_sys::{GstGLContext, GstGLMemory};
     macro_rules! skip_assert_initialized {
         () => {};
@@ -36,23 +36,30 @@ pub mod gst_egl_ext {
             ) -> *mut GstEGLImage;
 
             pub fn gst_egl_image_get_type() -> glib::ffi::GType;
+
+            pub fn gst_egl_image_get_image(image: *const GstEGLImage) -> gpointer;
         }
     }
     gst::mini_object_wrapper!(EGLImage, EGLImageRef, ffi::GstEGLImage, || {
         ffi::gst_egl_image_get_type()
     });
 
-    pub fn egl_image_from_texture(
-        context: *mut GstGLContext,
-        gl_mem: *mut GstGLMemory,
-        attribs: &mut [usize],
-    ) -> EGLImage {
-        unsafe {
-            EGLImage::from_glib_full(ffi::gst_egl_image_from_texture(
-                context,
-                gl_mem,
-                attribs.as_mut_ptr(),
-            ))
+    impl EGLImage {
+        pub fn get_image(&self) -> gpointer {
+            unsafe { ffi::gst_egl_image_get_image(self.as_mut_ptr()) }
+        }
+        pub fn from_texture(
+            context: *mut GstGLContext,
+            gl_mem: *mut GstGLMemory,
+            attribs: &mut [usize],
+        ) -> Self {
+            unsafe {
+                EGLImage::from_glib_full(ffi::gst_egl_image_from_texture(
+                    context,
+                    gl_mem,
+                    attribs.as_mut_ptr(),
+                ))
+            }
         }
     }
 }

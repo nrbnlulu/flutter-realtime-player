@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::core::{
-    ffi::gst_egl_ext::egl_image_from_texture,
+    ffi::gst_egl_ext::EGLImage,
     platform::{EglImageWrapper, GlCtx, GstNativeFrameType},
 };
 
@@ -45,7 +45,7 @@ pub enum TextureCacheId {
 }
 
 #[derive(Debug)]
-enum MappedFrame {
+pub(crate) enum MappedFrame {
     SysMem {
         frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
         orientation: Orientation,
@@ -58,174 +58,7 @@ enum MappedFrame {
 }
 
 impl MappedFrame {
-    fn buffer(&self) -> &gst::BufferRef {
-        match self {
-            MappedFrame::SysMem { frame, .. } => frame.buffer(),
-            MappedFrame::GL { frame, .. } => frame.buffer(),
-        }
-    }
-
-    fn width(&self) -> u32 {
-        match self {
-            MappedFrame::SysMem { frame, .. } => frame.width(),
-            MappedFrame::GL { frame, .. } => frame.width(),
-        }
-    }
-
-    fn height(&self) -> u32 {
-        match self {
-            MappedFrame::SysMem { frame, .. } => frame.height(),
-            MappedFrame::GL { frame, .. } => frame.height(),
-        }
-    }
-
-    fn format_info(&self) -> gst_video::VideoFormatInfo {
-        match self {
-            MappedFrame::SysMem { frame, .. } => frame.format_info(),
-            MappedFrame::GL { frame, .. } => frame.format_info(),
-        }
-    }
-
-    fn orientation(&self) -> Orientation {
-        match self {
-            MappedFrame::SysMem { orientation, .. } => *orientation,
-            MappedFrame::GL { orientation, .. } => *orientation,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Frame {
-    frame: MappedFrame,
-    overlays: Vec<Overlay>,
-}
-
-#[derive(Debug)]
-struct Overlay {
-    frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
-    global_alpha: f32,
-}
-
-#[derive(Debug)]
-pub(crate) struct GlTextureWrapper {
-    pub texture: GLTexture,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-    pub global_alpha: f32,
-    pub has_alpha: bool,
-    pub orientation: VideoOrientation,
-}
-
-struct FrameWrapper(gst_video::VideoFrame<gst_video::video_frame::Readable>);
-impl AsRef<[u8]> for FrameWrapper {
-    fn as_ref(&self) -> &[u8] {
-        self.0.plane_data(0).unwrap()
-    }
-}
-
-/// Convert a video frame to a
-fn video_frame_to_pixel_buffer(
-    frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
-) -> anyhow::Result<()> {
-    unimplemented!("video_frame_to_pixel_buffer")
-}
-
-fn gl_frame_to_egl_img(
-    frame: gst_gl::GLVideoFrame<gst_gl::gl_video_frame::Readable>,
-    cached_textures: &mut HashMap<TextureCacheId, GstNativeFrameType>,
-    used_textures: &mut HashSet<TextureCacheId>,
-    wrapped_context: gst_gl::GLContext,
-    orientation: Orientation,
-) -> anyhow::Result<(GstNativeFrameType, f64)> {
-    let texture_name = frame.texture_id(0).expect("Invalid texture id") as usize;
-
-    let pixel_aspect_ratio =
-        (frame.info().par().numer() as f64) / (frame.info().par().denom() as f64);
-
-    if let Some(texture) = cached_textures.get(&TextureCacheId::GL(texture_name)) {
-        used_textures.insert(TextureCacheId::GL(texture_name));
-        return Ok((texture.clone(), pixel_aspect_ratio));
-    }
-
-    let width = frame.width();
-    let height = frame.height();
-
-    let sync_meta = frame.buffer().meta::<gst_gl::GLSyncMeta>().unwrap();
-    let format = frame.format();
-
-    let egl_image_ptr = egl_image_from_texture(
-        wrapped_context.as_ptr(),
-        frame
-            .memory(0)
-            .unwrap()
-            .downcast_memory_ref::<gst_gl::GLMemory>()
-            .unwrap()
-            .as_mut_ptr(),
-        &mut [],
-    );
-    let egl_img_wrapper = EglImageWrapper::new(egl_image_ptr, width, height, format, orientation);
-    cached_textures.insert(TextureCacheId::GL(texture_name), egl_img_wrapper.clone());
-    used_textures.insert(TextureCacheId::GL(texture_name));
-    Ok((egl_img_wrapper, pixel_aspect_ratio))
-}
-
-impl Frame {
-    pub(crate) fn into_textures(
-        self,
-        gl_context: &GlCtx,
-        cached_textures: &mut HashMap<TextureCacheId, GstNativeFrameType>,
-    ) -> anyhow::Result<Vec<GstNativeFrameType>> {
-        gl_context.activate(true);
-
-        let mut native_frames = Vec::with_capacity(1 + self.overlays.len());
-        let mut used_frames = HashSet::with_capacity(1 + self.overlays.len());
-        let width = self.frame.width();
-        let height = self.frame.height();
-        let has_alpha = self.frame.format_info().has_alpha();
-        let orientation = self.frame.orientation();
-        let (native_frame, pixel_aspect_ratio) = match self.frame {
-            MappedFrame::SysMem { .. } => {
-                // this should only be called if we do software rendering
-                unimplemented!("memory_frame_to_egl_img");
-            }
-            MappedFrame::GL {
-                frame,
-                wrapped_context,
-                ..
-            } => gl_frame_to_egl_img(
-                frame,
-                cached_textures,
-                &mut used_frames,
-                wrapped_context.clone(),
-                orientation,
-            )
-            .unwrap(),
-        };
-
-        native_frames.push(native_frame);
-
-        for overlay in self.overlays {
-            unimplemented!(
-                "This is an in memory frame, we need to implement this using pixel buffer"
-            );
-        }
-
-        // Remove all textures that were not used
-        // gstreamer would call eglDestroyImage when the object is deleted (has no more refs).
-        cached_textures.retain(|k, _| used_frames.contains(k));
-
-        Ok(native_frames)
-    }
-}
-
-impl Frame {
-    pub(crate) fn new(
+    pub(crate) fn from_gst_buffer(
         buffer: &gst::Buffer,
         info: &VideoInfo,
         orientation: Orientation,
@@ -286,56 +119,170 @@ impl Frame {
             }
         }
 
-        let mut frame = Self {
-            frame: match frame {
-                Some(frame) => frame,
-                None => MappedFrame::SysMem {
-                    frame: gst_video::VideoFrame::from_buffer_readable(buffer.clone(), info)
-                        .map_err(|_| gst::FlowError::Error)?,
-                    orientation,
-                },
+        Ok(match frame {
+            Some(frame) => frame,
+            None => MappedFrame::SysMem {
+                frame: gst_video::VideoFrame::from_buffer_readable(buffer.clone(), info)
+                    .map_err(|_| gst::FlowError::Error)?,
+                orientation,
             },
-            overlays: vec![],
-        };
-        frame.overlays = frame
-            .frame
-            .buffer()
-            .iter_meta::<gst_video::VideoOverlayCompositionMeta>()
-            .flat_map(|meta| {
-                meta.overlay()
-                    .iter()
-                    .filter_map(|rect| {
-                        let buffer = rect
-                            .pixels_unscaled_argb(gst_video::VideoOverlayFormatFlags::GLOBAL_ALPHA);
-                        let (x, y, width, height) = rect.render_rectangle();
-                        let global_alpha = rect.global_alpha();
-
-                        let vmeta = buffer.meta::<gst_video::VideoMeta>().unwrap();
-                        let info = gst_video::VideoInfo::builder(
-                            vmeta.format(),
-                            vmeta.width(),
-                            vmeta.height(),
-                        )
-                        .build()
-                        .unwrap();
-                        let frame =
-                            gst_video::VideoFrame::from_buffer_readable(buffer, &info).ok()?;
-
-                        Some(Overlay {
-                            frame,
-                            x,
-                            y,
-                            width,
-                            height,
-                            global_alpha,
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-
-        Ok(frame)
+        })
     }
+
+    fn buffer(&self) -> &gst::BufferRef {
+        match self {
+            MappedFrame::SysMem { frame, .. } => frame.buffer(),
+            MappedFrame::GL { frame, .. } => frame.buffer(),
+        }
+    }
+
+    fn width(&self) -> u32 {
+        match self {
+            MappedFrame::SysMem { frame, .. } => frame.width(),
+            MappedFrame::GL { frame, .. } => frame.width(),
+        }
+    }
+
+    fn height(&self) -> u32 {
+        match self {
+            MappedFrame::SysMem { frame, .. } => frame.height(),
+            MappedFrame::GL { frame, .. } => frame.height(),
+        }
+    }
+
+    fn format_info(&self) -> gst_video::VideoFormatInfo {
+        match self {
+            MappedFrame::SysMem { frame, .. } => frame.format_info(),
+            MappedFrame::GL { frame, .. } => frame.format_info(),
+        }
+    }
+
+    fn orientation(&self) -> Orientation {
+        match self {
+            MappedFrame::SysMem { orientation, .. } => *orientation,
+            MappedFrame::GL { orientation, .. } => *orientation,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Overlay {
+    frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    global_alpha: f32,
+}
+
+#[derive(Debug)]
+pub(crate) struct GlTextureWrapper {
+    pub texture: GLTexture,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub global_alpha: f32,
+    pub has_alpha: bool,
+    pub orientation: VideoOrientation,
+}
+
+struct FrameWrapper(gst_video::VideoFrame<gst_video::video_frame::Readable>);
+impl AsRef<[u8]> for FrameWrapper {
+    fn as_ref(&self) -> &[u8] {
+        self.0.plane_data(0).unwrap()
+    }
+}
+
+/// Convert a video frame to a
+fn video_frame_to_pixel_buffer(
+    frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
+) -> anyhow::Result<()> {
+    unimplemented!("video_frame_to_pixel_buffer")
+}
+
+pub enum ResolvedFrame {
+    GL((GstNativeFrameType, f64)),
+    Memory(Box<[u8]>),
+}
+
+impl ResolvedFrame {
+    pub(crate) fn from_mapped_frame(
+        frame: &MappedFrame,
+        gl_context: &GlCtx,
+        cached_textures: &mut HashMap<TextureCacheId, GstNativeFrameType>,
+    ) -> anyhow::Result<Self> {
+        gl_context.activate(true);
+        let mut used_frames = HashSet::new();
+        let width = frame.width();
+        let height = frame.height();
+        let has_alpha = frame.format_info().has_alpha();
+        let orientation = frame.orientation();
+        let (res) = match frame {
+            MappedFrame::SysMem { .. } => {
+                // this should only be called if we do software rendering
+                unimplemented!("memory_frame_to_egl_img");
+            }
+            MappedFrame::GL {
+                frame,
+                wrapped_context,
+                ..
+            } => ResolvedFrame::GL(
+                gl_frame_to_egl_img(
+                    frame,
+                    cached_textures,
+                    &mut used_frames,
+                    wrapped_context.clone(),
+                    orientation,
+                )
+                .unwrap(),
+            ),
+        };
+
+        // Remove all textures that were not used
+        // gstreamer would call eglDestroyImage when the object is deleted (has no more refs).
+        cached_textures.retain(|k, _| used_frames.contains(k));
+
+        Ok(res)
+    }
+}
+
+fn gl_frame_to_egl_img(
+    frame: &gst_gl::GLVideoFrame<gst_gl::gl_video_frame::Readable>,
+    cached_frames: &mut HashMap<TextureCacheId, GstNativeFrameType>,
+    used_frames: &mut HashSet<TextureCacheId>,
+    wrapped_context: gst_gl::GLContext,
+    orientation: Orientation,
+) -> anyhow::Result<(GstNativeFrameType, f64)> {
+    let texture_name = frame.texture_id(0).expect("Invalid texture id") as usize;
+
+    let pixel_aspect_ratio =
+        (frame.info().par().numer() as f64) / (frame.info().par().denom() as f64);
+
+    if let Some(texture) = cached_frames.get(&TextureCacheId::GL(texture_name)) {
+        used_frames.insert(TextureCacheId::GL(texture_name));
+        return Ok((texture.clone(), pixel_aspect_ratio));
+    }
+
+    let width = frame.width();
+    let height = frame.height();
+
+    let format = frame.format();
+
+    let egl_image_ptr = EGLImage::from_texture(
+        wrapped_context.as_ptr(),
+        frame
+            .memory(0)
+            .unwrap()
+            .downcast_memory_ref::<gst_gl::GLMemory>()
+            .unwrap()
+            .as_mut_ptr(),
+        &mut [],
+    );
+    let egl_img_wrapper = EglImageWrapper::new(egl_image_ptr, width, height, format, orientation);
+    cached_frames.insert(TextureCacheId::GL(texture_name), egl_img_wrapper.clone());
+    used_frames.insert(TextureCacheId::GL(texture_name));
+    Ok((egl_img_wrapper, pixel_aspect_ratio))
 }
 
 // fn memory_frame_to_egl_img(

@@ -1,8 +1,7 @@
-use crate::core::fluttersink::frame::Frame;
 use crate::core::fluttersink::utils;
-use crate::core::platform;
+use crate::core::platform::{self, GstNativeFrameType};
 
-use super::frame::{TextureCacheId, VideoInfo};
+use super::frame::{MappedFrame, ResolvedFrame, TextureCacheId, VideoInfo};
 use super::gltexture::{GLTexture, GLTextureSource};
 use super::utils::{invoke_on_gs_main_thread, make_element};
 use super::{frame, types, FrameSender, SinkEvent};
@@ -39,7 +38,6 @@ enum GLContext {
         glow_context: ThreadGuard<glow::Context>,
     },
 }
-
 
 pub(crate) static CAT: LazyLock<gst::DebugCategory> = LazyLock::new(|| {
     gst::DebugCategory::new(
@@ -97,10 +95,11 @@ pub type ArcSendableTexture =
 pub struct FlutterTextureSink {
     config: Mutex<StreamConfig>,
     fl_config: RefCell<Option<FlutterConfig>>,
-    pending_frame: Mutex<Option<Frame>>,
+    cached_textures: Mutex<HashMap<TextureCacheId, GstNativeFrameType>>,
     cached_caps: Mutex<Option<gst::Caps>>,
     settings: Mutex<Settings>,
     window_resized: AtomicBool,
+    wrapped_gl_ctx: Option<gst_gl::GLContext>,
     playbin3: RefCell<Option<Rc<gst::Element>>>,
 }
 
@@ -223,20 +222,12 @@ impl ElementImpl for FlutterTextureSink {
                 }
 
                 for features in [
-                    #[cfg(any(
-                        target_os = "macos",
-                        target_os = "windows",
-                        target_os = "linux"
-                    ))]
+                    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                     Some(gst::CapsFeatures::new([
                         gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY,
                         gst_video::CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION,
                     ])),
-                    #[cfg(any(
-                        target_os = "macos",
-                        target_os = "windows",
-                        target_os = "linux"
-                    ))]
+                    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                     Some(gst::CapsFeatures::new([
                         gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY,
                     ])),
@@ -250,8 +241,7 @@ impl ElementImpl for FlutterTextureSink {
                     None,
                 ] {
                     {
-
-                        let formats =  &[gst_video::VideoFormat::Rgba];
+                        let formats = &[gst_video::VideoFormat::Rgba];
 
                         let mut c = gst_video::video_make_raw_caps(formats).build();
 
@@ -287,7 +277,6 @@ impl ElementImpl for FlutterTextureSink {
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
         match transition {
             gst::StateChange::NullToReady => {
-    
                 trace!("NullToReady");
             }
             _ => (),
@@ -298,17 +287,6 @@ impl ElementImpl for FlutterTextureSink {
         match transition {
             gst::StateChange::PausedToReady => {
                 *self.config.lock().unwrap() = StreamConfig::default();
-                let _ = self.pending_frame.lock().unwrap().take();
-
-                // Flush frames from the GDK paintable but don't wait
-                // for this to finish as this can other deadlock.
-                // let self_ = self.to_owned();
-                // invoke_on_main_thread(move || {
-                //     let paintable = self_.paintable.lock().unwrap();
-                //     if let Some(paintable) = &*paintable {
-                //         paintable.get_ref().handle_flush_frames();
-                //     }
-                // });
             }
             gst::StateChange::ReadyToNull => {}
             _ => (),
@@ -319,8 +297,6 @@ impl ElementImpl for FlutterTextureSink {
 }
 
 impl BaseSinkImpl for FlutterTextureSink {
-
-
     fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
         #[allow(unused_mut)]
         let mut video_info = None;
@@ -342,7 +318,6 @@ impl BaseSinkImpl for FlutterTextureSink {
 
         Ok(())
     }
-
 
     fn event(&self, event: gst::Event) -> bool {
         match event.view() {
@@ -409,23 +384,30 @@ impl FlutterTextureSink {
         buffer: &gst::Buffer,
         info: &VideoInfo,
     ) -> Result<gst::FlowSuccess, gst::FlowError> {
-        // TODO: upload the buffer EGLImage
-        // see https://stackoverflow.com/questions/22063044/how-to-transfer-textures-from-one-opengl-context-to-another
         let orientation = config
             .stream_orientation
             .unwrap_or(config.global_orientation);
 
-        let wrapped_context = gst_gl::GLContext::current().expect("Failed to get current GL context");
+        let wrapped_context =
+            gst_gl::GLContext::current().expect("Failed to get current GL context");
 
-
-        let frame = Frame::new(&buffer, info, orientation, Some(wrapped_context.as_ref())).inspect_err(
-            |_err| {
-                error!("Failed to create frame from buffer");
-            },
-        )?;
-        let mut cached_textures: HashMap<TextureCacheId, GLTexture> = HashMap::new();
-        let res = frame.into_textures(&wrapped_context, &mut cached_textures);
-
+        let frame = MappedFrame::from_gst_buffer(
+            &buffer,
+            info,
+            orientation,
+            Some(wrapped_context.as_ref()),
+        )
+        .inspect_err(|_err| {
+            error!("Failed to create frame from buffer");
+        })?;
+        let cached_textures = &mut self.cached_textures.lock().unwrap();
+        let resolved_frame =
+            ResolvedFrame::from_mapped_frame(&frame, &wrapped_context, cached_textures).map_err(
+                |err| {
+                    error!("Failed to resolve frame: {:?}", err);
+                    gst::FlowError::Error
+                },
+            )?;
 
         let sender = self
             .fl_config
@@ -443,18 +425,15 @@ impl FlutterTextureSink {
             .borrow()
             .as_ref()
             .inspect(|p| p.sendable_txt.mark_frame_available());
-        match sender.try_send(SinkEvent::FrameChanged(frame)) {
+        match sender.try_send(SinkEvent::FrameChanged(resolved_frame)) {
             Ok(_) => {}
-            Err(flume::TrySendError::Full(_)) => warn!("Main thread receiver is full"),            Err(flume::TrySendError::Disconnected(_)) => {
+            Err(flume::TrySendError::Full(_)) => warn!("Main thread receiver is full"),
+            Err(flume::TrySendError::Disconnected(_)) => {
                 error!("Main thread receiver is disconnected");
                 return Err(gst::FlowError::Flushing);
             }
         }
         Ok(gst::FlowSuccess::Ok)
-    }
-
-    fn pending_frame(&self) -> Option<Frame> {
-        self.pending_frame.lock().unwrap().take()
     }
 
     pub fn set_playbin3(&self, playbin3: Rc<gst::Element>) {
@@ -474,10 +453,9 @@ impl FlutterTextureSink {
         #[allow(unused_mut)]
         let mut tmp_caps = Self::pad_templates()[0].caps().clone();
 
-
         {
             // Filter out GL caps from the template pads if we have no context
-            if !matches!(&*GL_CONTEXT.lock().unwrap(), GLContext::Initialized { .. }) {
+            if self.wrapped_gl_ctx.is_some() {
                 tmp_caps = tmp_caps
                     .iter_with_features()
                     .filter(|(_, features)| {

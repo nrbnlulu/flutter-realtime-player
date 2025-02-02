@@ -5,16 +5,21 @@ mod linux {
     use std::{
         collections::HashMap,
         iter::Map,
+        ops::Deref,
         sync::{Arc, Mutex},
     };
 
     use irondash_engine_context::EngineContext;
 
-    use crate::core::{ffi::gst_egl_ext, fluttersink::types::Orientation};
+    use crate::core::{
+        ffi::{self, gst_egl_ext},
+        fluttersink::types::Orientation,
+        gl,
+    };
 
     pub type GlCtx = gst_gl::GLContext;
     pub struct EglImageWrapper {
-        pub image_ptr: gst_egl_ext::EGLImage,
+        pub image: gst_egl_ext::EGLImage,
         pub width: u32,
         pub height: u32,
         pub format: gst_video::VideoFormat,
@@ -26,10 +31,10 @@ mod linux {
             width: u32,
             height: u32,
             format: gst_video::VideoFormat,
-            orientation:    Orientation,
+            orientation: Orientation,
         ) -> GstNativeFrameType {
             Arc::new(Self {
-                image_ptr,
+                image: image_ptr,
                 width,
                 height,
                 format,
@@ -37,7 +42,7 @@ mod linux {
             })
         }
     }
-    
+
     pub(crate) type GstNativeFrameType = Arc<EglImageWrapper>;
 
     pub struct GlManager {
@@ -52,7 +57,7 @@ mod linux {
         }
         /// This function MUST be called from the platform's main thread
         /// because we want to use gtk's gl context.
-        fn create_gl_ctx(&self, engine_handle: i64) -> GlCtx {
+        fn create_gl_ctx(&self, engine_handle: i64) -> Arc<gdk_sys::GdkGLContext> {
             let engine = EngineContext::get().unwrap();
             let fl_view = engine.get_flutter_view(engine_handle).unwrap();
             let fl_view = unsafe { std::mem::transmute(fl_view) };

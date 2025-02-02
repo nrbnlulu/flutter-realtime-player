@@ -910,15 +910,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gleam"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0173481f2bb6e809bf4985de2e86c83876d84d2805830e3301cd37355e897f0f"
-dependencies = [
- "gl_generator",
-]
-
-[[package]]
 name = "glib"
 version = "0.21.0"
 source = "git+https://github.com/gtk-rs/gtk-rs-core?branch=main#7728982000b5ceec876560c9ae1011a1e75e52fa"
@@ -2274,7 +2265,6 @@ dependencies = [
  "gdk-sys",
  "gl_generator",
  "gl_loader",
- "gleam",
  "glib",
  "glib-macros",
  "glib-sys 0.18.1",
