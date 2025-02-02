@@ -69,7 +69,8 @@ impl GLTextureSource {
     }
 
     fn recv_frame(&self) -> anyhow::Result<BoxedGLTexture> {
-        match self.texture_receiver.recv() {
+        trace!("Waiting for frame");
+        match self.texture_receiver.recv_timeout(std::time::Duration::from_millis(10)) {
             Ok(SinkEvent::FrameChanged(resolved_frame)) => match resolved_frame {
                 ResolvedFrame::Memory(_) => unimplemented!("Memory"),
                 ResolvedFrame::GL((egl_image, pixel_res)) => {

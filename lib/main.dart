@@ -10,11 +10,13 @@ import 'package:my_app/src/rust/frb_generated.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+
+
   await RustLib.init();
   rlib.flutterGstreamerInit(ffiPtr: NativeApi.initializeApiDLData.address);
-
   runApp(const MyApp());
 }
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -25,7 +27,7 @@ class MyApp extends StatelessWidget {
       home: Scaffold(
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
         body: Center(
-          child: Container(
+          child: SizedBox(
             height: 500,
             width: 500,
             child: FutureBuilder(
@@ -34,8 +36,7 @@ class MyApp extends StatelessWidget {
                 // play demo video
                 final texture = await rlib.getOpenglTexture(
                     engineHandle: handle,
-                    uri:
-                        "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4");
+                    uri: "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4");
 
                 return texture;
               }(),
@@ -50,6 +51,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
+      
     );
   }
 }

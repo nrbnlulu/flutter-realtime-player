@@ -56,7 +56,7 @@ pub fn init() -> anyhow::Result<()> {
 fn create_flutter_texture(
     engine_handle: i64,
 ) -> anyhow::Result<(ArcSendableTexture, i64, FrameSender)> {
-    let (tx, rx) = flume::bounded(3);
+    let (tx, rx) = flume::bounded(1);
 
     let provider = Arc::new(GLTextureSource::new(rx)?);
     let texture = irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
