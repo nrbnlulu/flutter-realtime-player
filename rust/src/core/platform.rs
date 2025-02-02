@@ -1,13 +1,17 @@
 mod linux {
-    use gdk::glib::{translate::{FromGlibPtrNone, ToGlibPtr}, Cast};
+    use gdk::glib::{
+        translate::{FromGlibPtrNone, ToGlibPtr},
+        Cast,
+    };
     use lazy_static::lazy_static;
-    use log::{error, info};
+    use log::{error, info, trace};
 
     use std::{
         collections::HashMap,
         iter::Map,
         ops::Deref,
         sync::{Arc, Mutex},
+        cell::RefCell,
     };
 
     use irondash_engine_context::EngineContext;
@@ -60,10 +64,13 @@ mod linux {
         /// Get the context for the given window id
         /// if there is no context for the given window id, we create a new one
         pub fn get_context(&self, engine_handle: i64) -> Option<GlCtx> {
+            trace!("Creating new GL context for engine handle: {}", engine_handle);
+
             let mut store = self.store.lock().unwrap();
             if let Some(context) = store.get(&engine_handle) {
                 return Some(context.clone());
             } else {
+                trace!("Creating new GL context for engine handle: {}", engine_handle);
                 let context = self.create_gl_ctx(engine_handle).unwrap();
                 store.insert(engine_handle, context.clone());
                 Some(context)
@@ -91,8 +98,6 @@ mod linux {
             let (_, wrapped_context) = initialize_waylandegl(&display)?;
             Ok(wrapped_context)
         }
-
-
     }
 
     fn initialize_waylandegl(
@@ -118,7 +123,7 @@ mod linux {
                 .downcast_ref::<gdkwayland::WaylandDisplay>()
                 .unwrap();
             let wayland_display =
-            gdkwayland::ffi::gdk_wayland_display_get_wl_display(display.to_glib_none().0);
+                gdkwayland::ffi::gdk_wayland_display_get_wl_display(display.to_glib_none().0);
             if wayland_display.is_null() {
                 return Err(anyhow::anyhow!("Failed to get Wayland display"));
             }
@@ -140,6 +145,10 @@ mod linux {
 
             Ok((gst_display, wrapped_context))
         }
+    }
+
+    thread_local! {
+        pub static GL_MANAGER: RefCell<GlManager> = RefCell::new(GlManager::new());
     }
 }
 

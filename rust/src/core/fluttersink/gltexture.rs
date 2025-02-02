@@ -28,7 +28,6 @@ pub struct GLTexture {
 
 impl GLTexture {
     pub fn try_new(name_raw: u32, width: i32, height: i32) -> anyhow::Result<Self> {
-     
         Ok(Self {
             target: gl::TEXTURE_2D,
             name_raw,

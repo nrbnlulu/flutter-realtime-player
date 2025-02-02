@@ -20,7 +20,7 @@ use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, Gst
 use imp::ArcSendableTexture;
 use log::{error, info};
 
-use super::platform::GstNativeFrameType;
+use super::platform::{GstNativeFrameType, GL_MANAGER};
 
 pub(crate) enum SinkEvent {
     FrameChanged(ResolvedFrame),
@@ -56,19 +56,17 @@ pub fn init() -> anyhow::Result<()> {
 fn create_flutter_texture(
     engine_handle: i64,
 ) -> anyhow::Result<(ArcSendableTexture, i64, FrameSender)> {
-    utils::invoke_on_platform_main_thread(move || {
-        let (tx, rx) = flume::bounded(3);
+    let (tx, rx) = flume::bounded(3);
 
-        let provider = Arc::new(GLTextureSource::new(rx)?);
-        let texture =
-            irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
-        let tx_id = texture.id();
-        Ok((texture.into_sendable_texture(), tx_id, tx))
-    })
+    let provider = Arc::new(GLTextureSource::new(rx)?);
+    let texture = irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
+    let tx_id = texture.id();
+    Ok((texture.into_sendable_texture(), tx_id, tx))
 }
 
 pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
-    let (sendable_fl_txt, id, tx) = create_flutter_texture(engine_handle)?;
+    let (sendable_fl_txt, id, tx) =
+        utils::invoke_on_platform_main_thread(move || create_flutter_texture(engine_handle))?;
 
     let flsink = utils::make_element("fluttertexturesink", None)?;
     let fl_config = imp::FlutterConfig::new(id, engine_handle, tx, sendable_fl_txt);
@@ -76,49 +74,36 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     let fl_imp = flsink.downcast_ref::<FlutterTextureSink>().unwrap().imp();
     fl_imp.set_fl_config(fl_config);
 
-    let pipeline = Rc::new(
-        gst::ElementFactory::make("playbin3")
-            .property("video-sink", &flsink)
-            .property("uri", uri)
-            .build()
-            .unwrap(),
-    );
+    let pipeline = gst::ElementFactory::make("playbin3")
+        .property("video-sink", &flsink)
+        .property("uri", uri)
+        .build()
+        .unwrap();
     fl_imp.set_playbin3(pipeline.clone());
-    fl_imp.set_gl_ctx(
-        unsafe {
-            gst_gl::GLContext::new_wrapped(
-            &gst_gl::GLDisplay::default(),
-            0,
-            gst_gl::GLPlatform::GLX,
-            gst_gl::GLAPI::GLES2,
-            ).unwrap()
-        }
-    );
-    let bus = pipeline.bus().unwrap();
-
-    pipeline
-        .set_state(gst::State::Playing)
-        .expect("Unable to set the pipeline to the `Playing` state");
-    let bus_watch = bus
-        .add_watch_local(move |_, msg| {
-            use gst::MessageView;
-
+    thread::spawn(move || {
+        pipeline
+            .set_state(gst::State::Playing)
+            .expect("Unable to set the pipeline to the `Playing` state");
+        let bus = pipeline.bus().unwrap();
+        for msg in bus.iter_timed(gst::ClockTime::from_seconds(1)) {
             match msg.view() {
-                MessageView::Info(info) => if let Some(s) = info.structure() {},
-                MessageView::Eos(..) => info!("End of stream"),
-                MessageView::Error(err) => {
+                gst::MessageView::Eos(..) => {
+                    info!("End of stream");
+                    break;
+                }
+                gst::MessageView::Error(err) => {
                     error!(
                         "Error from {:?}: {} ({:?})",
                         err.src().map(|s| s.path_string()),
                         err.error(),
                         err.debug()
                     );
+                    break;
                 }
                 _ => (),
-            };
+            }
+        }
+    });
 
-            glib::ControlFlow::Continue
-        })
-        .expect("Failed to add bus watch");
     Ok(id)
 }

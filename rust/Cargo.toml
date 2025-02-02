@@ -32,6 +32,7 @@ gst-video = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", bra
 gst-base = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-base", features = ["v1_16"] }
 gst-allocators = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-allocators", features = ["v1_24"] }
 glutin = { git = "https://github.com/MarijnS95/glutin.git", branch = "gbm"}
+thread_local = "1.1.8"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 glib = { git = "https://github.com/gtk-rs/gtk-rs-core", branch = "main" }

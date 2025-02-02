@@ -1,5 +1,5 @@
 use crate::core::fluttersink::utils;
-use crate::core::platform::{self, GstNativeFrameType};
+use crate::core::platform::{self, GstNativeFrameType, GL_MANAGER};
 
 use super::frame::{MappedFrame, ResolvedFrame, TextureCacheId, VideoInfo};
 use super::gltexture::{GLTexture, GLTextureSource};
@@ -14,7 +14,7 @@ use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
 use gst_video::subclass::prelude::*;
-use log::{error, trace, warn};
+use log::{debug, error, trace, warn};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -99,7 +99,7 @@ pub struct FlutterTextureSink {
     settings: Mutex<Settings>,
     window_resized: AtomicBool,
     wrapped_gl_ctx: RefCell<Option<gst_gl::GLContext>>,
-    playbin3: RefCell<Option<Rc<gst::Element>>>,
+    playbin3: RefCell<Option<gst::Element>>,
 }
 
 #[derive(Default)]
@@ -202,24 +202,6 @@ impl ElementImpl for FlutterTextureSink {
             {
                 let caps = caps.get_mut().unwrap();
 
-                #[cfg(all(target_os = "linux", feature = "dmabuf"))]
-                {
-                    for features in [
-                        [
-                            gst_allocators::CAPS_FEATURE_MEMORY_DMABUF,
-                            gst_video::CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION,
-                        ]
-                        .as_slice(),
-                        [gst_allocators::CAPS_FEATURE_MEMORY_DMABUF].as_slice(),
-                    ] {
-                        let c = gst_video::VideoCapsBuilder::new()
-                            .format(gst_video::VideoFormat::DmaDrm)
-                            .features(features.iter().copied())
-                            .build();
-                        caps.append(c);
-                    }
-                }
-
                 for features in [
                     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                     Some(gst::CapsFeatures::new([
@@ -276,7 +258,36 @@ impl ElementImpl for FlutterTextureSink {
     ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
         match transition {
             gst::StateChange::NullToReady => {
-                trace!("NullToReady");
+                // Notify the pipeline about the GL display and wrapped context so that any other
+                // elements in the pipeline ideally use the same / create GL contexts that are
+                // sharing with this one.
+                debug!("Advertising GL context to gstreamer pipeline");
+
+                let fl_config = self.fl_config.borrow();
+                let engine_id = fl_config.as_ref().unwrap().fl_engine_handle;
+                drop(fl_config);
+                let gl_ctx = utils::invoke_on_gs_main_thread(move || {
+                    trace!("here");
+                    GL_MANAGER.with_borrow(
+                        |manager| manager.get_context(engine_id)
+                    )
+                }).unwrap();
+                trace!("GL context: {:?}", gl_ctx);
+                self.wrapped_gl_ctx.borrow_mut().replace(gl_ctx.clone());
+
+                // let display = display.clone();
+
+                // gst_gl::gl_element_propagate_display_context(&*self.obj(), &display);
+                let mut ctx = gst::Context::new("gst.gl.app_context", true);
+                {
+                    let ctx = ctx.get_mut().unwrap();
+                    ctx.structure_mut().set("context", gl_ctx);
+                }
+                let _ = self.obj().post_message(
+                    gst::message::HaveContext::builder(ctx)
+                        .src(&*self.obj())
+                        .build(),
+                );
             }
             _ => (),
         }
@@ -285,9 +296,11 @@ impl ElementImpl for FlutterTextureSink {
 
         match transition {
             gst::StateChange::PausedToReady => {
-                *self.config.lock().unwrap() = StreamConfig::default();
+                trace!("paused to ready");
             }
-            gst::StateChange::ReadyToNull => {}
+            gst::StateChange::ReadyToNull => {
+                trace!("ready to null");
+            }
             _ => (),
         }
 
@@ -430,12 +443,10 @@ impl FlutterTextureSink {
         Ok(gst::FlowSuccess::Ok)
     }
 
-    pub fn set_playbin3(&self, playbin3: Rc<gst::Element>) {
+    pub fn set_playbin3(&self, playbin3: gst::Element) {
         *self.playbin3.borrow_mut() = Some(playbin3);
     }
-    pub fn set_gl_ctx(&self, gl_ctx: gst_gl::GLContext) {
-        *self.wrapped_gl_ctx.borrow_mut() = Some(gl_ctx);
-    }
+
     fn caps(&self) -> gst::Caps {
         gst::Caps::builder("video/x-raw(memory:GLMemory, meta:GstVideoOverlayComposition)")
             .field("format", &gst_video::VideoFormat::Rgba.to_string())

@@ -9,6 +9,9 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 String greet({required String name}) =>
     RustLib.instance.api.crateApiSimpleGreet(name: name);
 
+Future<void> flutterGstreamerInit({required PlatformInt64 ffiPtr}) =>
+    RustLib.instance.api.crateApiSimpleFlutterGstreamerInit(ffiPtr: ffiPtr);
+
 Future<PlatformInt64> getOpenglTexture(
         {required PlatformInt64 engineHandle, required String uri}) =>
     RustLib.instance.api
