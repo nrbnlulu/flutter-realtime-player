@@ -3,15 +3,16 @@ mod linux {
         translate::{FromGlibPtrNone, ToGlibPtr},
         Cast,
     };
+    use glow::HasContext;
     use lazy_static::lazy_static;
     use log::{error, info, trace};
 
     use std::{
+        cell::RefCell,
         collections::HashMap,
         iter::Map,
         ops::Deref,
         sync::{Arc, Mutex},
-        cell::RefCell,
     };
 
     use irondash_engine_context::EngineContext;
@@ -19,7 +20,7 @@ mod linux {
     use crate::core::{
         ffi::{self, gst_egl_ext},
         fluttersink::types::Orientation,
-        gl,
+        gl::{self, GL},
     };
 
     pub type GlCtx = gst_gl::GLContext;
@@ -53,24 +54,67 @@ mod linux {
     pub struct GlManager {
         // stores the context for each window
         store: Mutex<HashMap<i64, GlCtx>>,
+        fallback_texture: Mutex<HashMap<i64, u32>>,
     }
     impl GlManager {
         fn new() -> Self {
             Self {
                 store: Mutex::new(HashMap::new()),
+                fallback_texture: Mutex::new(HashMap::new()),
             }
+        }
+
+        pub fn get_fallback_texture_name(&self, engine_id: i64) -> u32 {
+            // check if we have a fallback texture for the given engine id
+            let mut store = self.fallback_texture.lock().unwrap();
+            if let Some(texture_name) = store.get(&engine_id) {
+                return *texture_name;
+            } else {
+                gl_loader::init_gl();
+                let gl_context = unsafe {
+                    glow::Context::from_loader_function(|s| {
+                        std::mem::transmute(gl_loader::get_proc_address(s))
+                    })
+                };
+
+                unsafe {
+                    let texture = gl_context.create_texture().unwrap();
+                    let texture_name = texture.0.get();
+                    gl_context.bind_texture(glow::TEXTURE_2D, Some(texture));
+                    gl_context.tex_image_2d(
+                        glow::TEXTURE_2D,
+                        0,
+                        glow::RGBA as i32,
+                        200,
+                        500,
+                        0,
+                        glow::RGBA,
+                        glow::UNSIGNED_BYTE,
+                        glow::PixelUnpackData::Slice(Some(&vec![0, 255, 0, 255].repeat(200 * 500))),
+                    );
+                    gl_context.bind_texture(glow::TEXTURE_2D, Some(texture));
+                    store.insert(engine_id, texture_name);
+                    return texture_name;
+                }
+            };
         }
 
         /// Get the context for the given window id
         /// if there is no context for the given window id, we create a new one
         pub fn get_context(&self, engine_handle: i64) -> Option<GlCtx> {
-            trace!("Creating new GL context for engine handle: {}", engine_handle);
+            trace!(
+                "Creating new GL context for engine handle: {}",
+                engine_handle
+            );
 
             let mut store = self.store.lock().unwrap();
             if let Some(context) = store.get(&engine_handle) {
                 return Some(context.clone());
             } else {
-                trace!("Creating new GL context for engine handle: {}", engine_handle);
+                trace!(
+                    "Creating new GL context for engine handle: {}",
+                    engine_handle
+                );
                 let context = self.create_gl_ctx(engine_handle).unwrap();
                 store.insert(engine_handle, context.clone());
                 Some(context)
@@ -95,25 +139,54 @@ mod linux {
             let window = unsafe { gtk_sys::gtk_widget_get_parent_window(gtk_widget) };
             let display = unsafe { gdk_sys::gdk_window_get_display(window) };
             let display = unsafe { gdk::Display::from_glib_none(display) };
-            let (_, wrapped_context) = initialize_waylandegl(&display)?;
+            trace!("Creating GL context for window: {:?}", window);
+            trace!("Creating GL context for display: {:?}", display);
+
+            let (_, wrapped_context) = initialize_x11(&display, window)?;
             Ok(wrapped_context)
+        }
+    }
+
+    fn initialize_x11(
+        display: &gdk::Display,
+        gdk_window: *mut gdk_sys::GdkWindow,
+    ) -> anyhow::Result<(gst_gl::GLDisplay, gst_gl::GLContext)> {
+        info!("Initializing GL for X11 backend and display");
+
+        unsafe {
+            use glib::translate::*;
+
+            // let wayland_display = gdk_wayland::WaylandDisplay::wl_display(display.downcast());
+            // get the ptr directly since we are going to use it raw
+            let display: &gdkx11::X11Display =
+                display.downcast_ref::<gdkx11::X11Display>().unwrap();
+            let x11_display = gdkx11::ffi::gdk_x11_display_get_xdisplay(display.to_glib_none().0);
+
+            let gst_display: *mut gst_gl_wayland::ffi::GstGLDisplayWayland =
+                gst_gl_wayland::ffi::gst_gl_display_wayland_new_with_display(x11_display as _);
+            let gst_display =
+                gst_gl::GLDisplay::from_glib_full(gst_display as *mut gst_gl::ffi::GstGLDisplay);
+            let current_gdk_gl_ctx = gdk_sys::gdk_gl_context_get_current();
+
+            let wrapped_context = gst_gl::GLContext::new_wrapped(
+                &gst_display,
+                current_gdk_gl_ctx as _,
+                gst_gl::GLPlatform::EGL,
+                gst_gl::GLAPI::OPENGL,
+            );
+            let wrapped_context =
+                wrapped_context.ok_or(anyhow::anyhow!("Failed to create wrapped GL context"))?;
+
+            Ok((gst_display, wrapped_context))
         }
     }
 
     fn initialize_waylandegl(
         display: &gdk::Display,
+        gdk_window: *mut gdk_sys::GdkWindow,
     ) -> anyhow::Result<(gst_gl::GLDisplay, gst_gl::GLContext)> {
         info!("Initializing GL for Wayland EGL backend and display");
 
-        let platform = gst_gl::GLPlatform::EGL;
-        let (gl_api, _, _) = gst_gl::GLContext::current_gl_api(platform);
-        let gl_ctx = gst_gl::GLContext::current_gl_context(platform);
-
-        if gl_ctx == 0 {
-            return Err(anyhow::anyhow!("Failed to get handle from GdkGLContext"));
-        }
-
-        // FIXME: bindings
         unsafe {
             use glib::translate::*;
 
@@ -132,16 +205,16 @@ mod linux {
                 gst_gl_wayland::ffi::gst_gl_display_wayland_new_with_display(wayland_display);
             let gst_display =
                 gst_gl::GLDisplay::from_glib_full(gst_display as *mut gst_gl::ffi::GstGLDisplay);
+            let current_gdk_gl_ctx = gdk_sys::gdk_gl_context_get_current();
 
+            let wrapped_context = gst_gl::GLContext::new_wrapped(
+                &gst_display,
+                current_gdk_gl_ctx as _,
+                gst_gl::GLPlatform::EGL,
+                gst_gl::GLAPI::OPENGL,
+            );
             let wrapped_context =
-                gst_gl::GLContext::new_wrapped(&gst_display, gl_ctx, platform, gl_api);
-
-            let wrapped_context = match wrapped_context {
-                None => {
-                    return Err(anyhow::anyhow!("Failed to create wrapped GL context"));
-                }
-                Some(wrapped_context) => wrapped_context,
-            };
+                wrapped_context.ok_or(anyhow::anyhow!("Failed to create wrapped GL context"))?;
 
             Ok((gst_display, wrapped_context))
         }

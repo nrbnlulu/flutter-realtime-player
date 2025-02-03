@@ -10,13 +10,10 @@ import 'package:my_app/src/rust/frb_generated.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-
-
   await RustLib.init();
   rlib.flutterGstreamerInit(ffiPtr: NativeApi.initializeApiDLData.address);
   runApp(const MyApp());
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -49,9 +46,10 @@ class MyApp extends StatelessWidget {
               },
             ),
           ),
+
         ),
+        
       ),
-      
     );
   }
 }

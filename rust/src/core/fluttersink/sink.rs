@@ -10,33 +10,23 @@ use glib::clone::Downgrade;
 use glib::thread_guard::ThreadGuard;
 
 use glib::translate::FromGlibPtrFull;
+use gst::Caps;
 use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{GLContextExt as _, *};
+use gst_video::ffi::GST_VIDEO_SIZE_RANGE;
 use gst_video::subclass::prelude::*;
 use log::{debug, error, trace, warn};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::{
     atomic::{self, AtomicBool},
     Mutex,
 };
 use std::sync::{Arc, LazyLock};
-
-// Global GL context that is created by the first sink and kept around until the end of the
-// process. This is provided to other elements in the pipeline to make sure they create GL contexts
-// that are sharing with the GTK GL context.
-enum GLContext {
-    Uninitialized,
-    Unsupported,
-    #[allow(unused)]
-    Initialized {
-        display: gst_gl::GLDisplay,
-        wrapped_context: gst_gl::GLContext,
-    },
-}
 
 pub(crate) static CAT: LazyLock<gst::DebugCategory> = LazyLock::new(|| {
     gst::DebugCategory::new(
@@ -99,7 +89,6 @@ pub struct FlutterTextureSink {
     settings: Mutex<Settings>,
     window_resized: AtomicBool,
     wrapped_gl_ctx: RefCell<Option<gst_gl::GLContext>>,
-    playbin3: RefCell<Option<gst::Element>>,
 }
 
 #[derive(Default)]
@@ -197,48 +186,13 @@ impl ElementImpl for FlutterTextureSink {
 
     fn pad_templates() -> &'static [gst::PadTemplate] {
         static PAD_TEMPLATES: LazyLock<Vec<gst::PadTemplate>> = LazyLock::new(|| {
-            // Those are the supported formats by a gdk::Texture
-            let mut caps = gst::Caps::new_empty();
-            {
-                let caps = caps.get_mut().unwrap();
-
-                for features in [
-                    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-                    Some(gst::CapsFeatures::new([
-                        gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY,
-                        gst_video::CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION,
-                    ])),
-                    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-                    Some(gst::CapsFeatures::new([
-                        gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY,
-                    ])),
-                    Some(gst::CapsFeatures::new([
-                        "memory:SystemMemory",
-                        gst_video::CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION,
-                    ])),
-                    Some(gst::CapsFeatures::new([
-                        gst_video::CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION,
-                    ])),
-                    None,
-                ] {
-                    {
-                        let formats = &[gst_video::VideoFormat::Rgba];
-
-                        let mut c = gst_video::video_make_raw_caps(formats).build();
-
-                        if let Some(features) = features {
-                            let c = c.get_mut().unwrap();
-
-                            if features.contains(gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY) {
-                                c.set("texture-target", "2D")
-                            }
-                            c.set_features_simple(Some(features));
-                        }
-                        caps.append(c);
-                    }
-                }
-            }
-
+            let caps =  &gst_video::VideoCapsBuilder::new()
+            .features([gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY])
+            .format(gst_video::VideoFormat::Rgba)
+            .field("texture-target", "2D")
+            .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
+            .build();
+            debug!("caps: {:?}", caps);
             vec![gst::PadTemplate::new(
                 "sink",
                 gst::PadDirection::Sink,
@@ -267,11 +221,9 @@ impl ElementImpl for FlutterTextureSink {
                 let engine_id = fl_config.as_ref().unwrap().fl_engine_handle;
                 drop(fl_config);
                 let gl_ctx = utils::invoke_on_gs_main_thread(move || {
-                    trace!("here");
-                    GL_MANAGER.with_borrow(
-                        |manager| manager.get_context(engine_id)
-                    )
-                }).unwrap();
+                    GL_MANAGER.with_borrow(|manager| manager.get_context(engine_id))
+                })
+                .unwrap();
                 trace!("GL context: {:?}", gl_ctx);
                 self.wrapped_gl_ctx.borrow_mut().replace(gl_ctx.clone());
 
@@ -288,21 +240,14 @@ impl ElementImpl for FlutterTextureSink {
                         .src(&*self.obj())
                         .build(),
                 );
+                trace!("GL context advertised to gstreamer pipeline");
             }
             _ => (),
         }
 
         let res = self.parent_change_state(transition);
 
-        match transition {
-            gst::StateChange::PausedToReady => {
-                trace!("paused to ready");
-            }
-            gst::StateChange::ReadyToNull => {
-                trace!("ready to null");
-            }
-            _ => (),
-        }
+        trace!("transition changed: {:?}", transition);
 
         res
     }
@@ -310,6 +255,7 @@ impl ElementImpl for FlutterTextureSink {
 
 impl BaseSinkImpl for FlutterTextureSink {
     fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
+        trace!("set_caps");
         #[allow(unused_mut)]
         let mut video_info = None;
 
@@ -328,11 +274,13 @@ impl BaseSinkImpl for FlutterTextureSink {
     fn event(&self, event: gst::Event) -> bool {
         match event.view() {
             gst::EventView::StreamStart(_) => {
+                trace!("Stream start");
                 let mut config = self.config.lock().unwrap();
                 config.global_orientation = types::Orientation::Rotate0;
                 config.stream_orientation = None;
             }
             gst::EventView::Tag(ev) => {
+                trace!("Tag event {:?}", ev.tag());
                 let mut config = self.config.lock().unwrap();
                 let tags = ev.tag();
                 let scope = tags.scope();
@@ -354,6 +302,7 @@ impl BaseSinkImpl for FlutterTextureSink {
 impl VideoSinkImpl for FlutterTextureSink {
     /// if new frame could be rendered, send a message to the main thread
     fn show_frame(&self, buffer: &gst::Buffer) -> Result<gst::FlowSuccess, gst::FlowError> {
+        trace!("show_frame");
         if self.window_resized.swap(false, atomic::Ordering::SeqCst) {
             let obj = self.obj();
             let sink = obj.sink_pad();
@@ -370,14 +319,15 @@ impl VideoSinkImpl for FlutterTextureSink {
             gst::FlowError::NotNegotiated
         })?;
         if info.format() != gst_video::VideoFormat::Rgba {
-            let sample = self
-                .playbin3
-                .borrow()
-                .as_ref()
-                .unwrap()
-                .emit_by_name::<gst::Sample>("convert-sample", &[&self.caps()]);
+            unimplemented!("Unsupported format: {:?}", info.format());
+            // let sample = self
+            //     .playbin3
+            //     .borrow()
+            //     .as_ref()
+            //     .unwrap()
+            //     .emit_by_name::<gst::Sample>("convert-sample", &[&self.caps()]);
 
-            return self.show_frame_from_buffer(&config, &sample.buffer_owned().unwrap(), info);
+            // return self.show_frame_from_buffer(&config, &sample.buffer_owned().unwrap(), info);
         }
         self.show_frame_from_buffer(&config, buffer, info)
     }
@@ -441,42 +391,6 @@ impl FlutterTextureSink {
             }
         }
         Ok(gst::FlowSuccess::Ok)
-    }
-
-    pub fn set_playbin3(&self, playbin3: gst::Element) {
-        *self.playbin3.borrow_mut() = Some(playbin3);
-    }
-
-    fn caps(&self) -> gst::Caps {
-        gst::Caps::builder("video/x-raw(memory:GLMemory, meta:GstVideoOverlayComposition)")
-            .field("format", &gst_video::VideoFormat::Rgba.to_string())
-            .field("width", &640)
-            .field("height", &480)
-            .field("framerate", &gst::Fraction::new(30, 1))
-            .build()
-    }
-
-    fn configure_caps(&self) {
-        #[allow(unused_mut)]
-        let mut tmp_caps = Self::pad_templates()[0].caps().clone();
-
-        {
-            // Filter out GL caps from the template pads if we have no context
-            if self.wrapped_gl_ctx.borrow().is_some() {
-                tmp_caps = tmp_caps
-                    .iter_with_features()
-                    .filter(|(_, features)| {
-                        !features.contains(gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY)
-                    })
-                    .map(|(s, c)| (s.to_owned(), c.to_owned()))
-                    .collect::<gst::Caps>();
-            }
-        }
-
-        self.cached_caps
-            .lock()
-            .expect("Failed to lock Mutex")
-            .replace(tmp_caps);
     }
 
     pub(crate) fn set_fl_config(&self, config: FlutterConfig) {

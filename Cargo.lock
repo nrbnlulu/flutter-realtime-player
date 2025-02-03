@@ -208,15 +208,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "block2"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c132eebf10f5cad5289222520a4a058514204aed6d791f1cf4fe8088b82d15f"
-dependencies = [
- "objc2",
-]
-
-[[package]]
 name = "build-target"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -317,15 +308,6 @@ name = "cfg_aliases"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
-
-[[package]]
-name = "cgl"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ced0551234e87afee12411d535648dd89d2e7f34c78b753395567aff3d447ff"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "chrono"
@@ -473,12 +455,6 @@ dependencies = [
  "block-buffer",
  "crypto-common",
 ]
-
-[[package]]
-name = "dispatch"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
 
 [[package]]
 name = "dlib"
@@ -763,6 +739,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "gdkx11"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3caa00e14351bebbc8183b3c36690327eb77c49abc2268dd4bd36b856db3fbfe"
+dependencies = [
+ "gdk",
+ "gdkx11-sys",
+ "gio",
+ "glib 0.18.5",
+ "libc",
+ "x11",
+]
+
+[[package]]
+name = "gdkx11-sys"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e2e7445fe01ac26f11601db260dd8608fe172514eb63b3b5e261ea6b0f4428d"
+dependencies = [
+ "gdk-sys",
+ "glib-sys 0.18.1",
+ "libc",
+ "system-deps 6.2.2",
+ "x11",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -955,53 +958,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "glutin"
-version = "0.32.1"
-source = "git+https://github.com/MarijnS95/glutin.git?branch=gbm#ac10a0af36b0e4e0093fc04103ee28aeed5815b0"
+name = "glow"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5e5ea60d70410161c8bf5da3fdfeaa1c72ed2c15f8bbb9d19fe3a4fad085f08"
 dependencies = [
- "bitflags 2.8.0",
- "cfg_aliases",
- "cgl",
- "core-foundation",
- "dispatch",
- "glutin_egl_sys",
- "glutin_glx_sys",
- "glutin_wgl_sys",
- "libloading",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "once_cell",
- "raw-window-handle",
- "wayland-sys 0.31.5",
- "windows-sys 0.52.0",
- "x11-dl",
-]
-
-[[package]]
-name = "glutin_egl_sys"
-version = "0.7.0"
-source = "git+https://github.com/MarijnS95/glutin.git?branch=gbm#ac10a0af36b0e4e0093fc04103ee28aeed5815b0"
-dependencies = [
- "gl_generator",
- "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "glutin_glx_sys"
-version = "0.6.0"
-source = "git+https://github.com/MarijnS95/glutin.git?branch=gbm#ac10a0af36b0e4e0093fc04103ee28aeed5815b0"
-dependencies = [
- "gl_generator",
- "x11-dl",
-]
-
-[[package]]
-name = "glutin_wgl_sys"
-version = "0.6.0"
-source = "git+https://github.com/MarijnS95/glutin.git?branch=gbm#ac10a0af36b0e4e0093fc04103ee28aeed5815b0"
-dependencies = [
- "gl_generator",
+ "js-sys",
+ "slotmap",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -1313,7 +1278,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fb69199826926eb864697bddd27f73d9fddcffc004f5733131e15b465e30642"
 dependencies = [
- "block2 0.4.0",
+ "block2",
  "objc2",
 ]
 
@@ -1685,88 +1650,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "objc2-app-kit"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4e89ad9e3d7d297152b17d39ed92cd50ca8063a89a9fa569046d41568891eff"
-dependencies = [
- "bitflags 2.8.0",
- "block2 0.5.1",
- "libc",
- "objc2",
- "objc2-core-data",
- "objc2-core-image",
- "objc2-foundation",
- "objc2-quartz-core",
-]
-
-[[package]]
-name = "objc2-core-data"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "617fbf49e071c178c0b24c080767db52958f716d9eabdf0890523aeae54773ef"
-dependencies = [
- "bitflags 2.8.0",
- "block2 0.5.1",
- "objc2",
- "objc2-foundation",
-]
-
-[[package]]
-name = "objc2-core-image"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55260963a527c99f1819c4f8e3b47fe04f9650694ef348ffd2227e8196d34c80"
-dependencies = [
- "block2 0.5.1",
- "objc2",
- "objc2-foundation",
- "objc2-metal",
-]
-
-[[package]]
 name = "objc2-encode"
 version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7891e71393cd1f227313c9379a26a584ff3d7e6e7159e988851f0934c993f0f8"
-
-[[package]]
-name = "objc2-foundation"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ee638a5da3799329310ad4cfa62fbf045d5f56e3ef5ba4149e7452dcf89d5a8"
-dependencies = [
- "bitflags 2.8.0",
- "block2 0.5.1",
- "dispatch",
- "libc",
- "objc2",
-]
-
-[[package]]
-name = "objc2-metal"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd0cba1276f6023976a406a14ffa85e1fdd19df6b0f737b063b95f6c8c7aadd6"
-dependencies = [
- "bitflags 2.8.0",
- "block2 0.5.1",
- "objc2",
- "objc2-foundation",
-]
-
-[[package]]
-name = "objc2-quartz-core"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e42bee7bff906b14b167da2bac5efe6b6a07e6f7c0a21a7308d40c960242dc7a"
-dependencies = [
- "bitflags 2.8.0",
- "block2 0.5.1",
- "objc2",
- "objc2-foundation",
- "objc2-metal",
-]
 
 [[package]]
 name = "object"
@@ -2005,12 +1892,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "raw-window-handle"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2060,12 +1941,13 @@ dependencies = [
  "gdk",
  "gdk-sys",
  "gdkwayland",
+ "gdkx11",
  "gl_generator",
  "gl_loader",
  "glib 0.21.0",
  "glib-macros 0.21.0",
  "glib-sys 0.16.3",
- "glutin",
+ "glow",
  "gobject-sys 0.16.3",
  "gstreamer",
  "gstreamer-allocators",
@@ -2239,6 +2121,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "slotmap"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]
@@ -2631,7 +2522,7 @@ dependencies = [
  "nix",
  "scoped-tls",
  "smallvec",
- "wayland-sys 0.30.1",
+ "wayland-sys",
 ]
 
 [[package]]
@@ -2665,18 +2556,6 @@ checksum = "96b2a02ac608e07132978689a6f9bf4214949c85998c247abadd4f4129b1aa06"
 dependencies = [
  "dlib",
  "log",
- "pkg-config",
-]
-
-[[package]]
-name = "wayland-sys"
-version = "0.31.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efa8ac0d8e8ed3e3b5c9fc92c7881406a268e11555abe36493efabe649a29e09"
-dependencies = [
- "dlib",
- "log",
- "once_cell",
  "pkg-config",
 ]
 
@@ -2954,13 +2833,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "x11-dl"
+name = "x11"
 version = "2.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38735924fedd5314a6e548792904ed8c6de6636285cb9fec04d5b1db85c1516f"
+checksum = "502da5464ccd04011667b11c435cb992822c2c0dbde1770c988480d312a0db2e"
 dependencies = [
  "libc",
- "once_cell",
  "pkg-config",
 ]
 
