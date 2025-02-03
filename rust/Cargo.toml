@@ -22,25 +22,25 @@ simple-log = "2.1.1"
 irondash_engine_context = "0.5.0"
 lazy_static = "1.5.0"
 
-
-glib-macros = {git = "https://github.com/gtk-rs/gtk-rs-core", branch = "main" }
-gst = {package = "gstreamer", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", features = ["v1_16"]}
-gst-gl = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-gl" , features = ["v1_16"]}
-gst-gl-sys = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-gl-sys" , features = ["v1_16"]}
-
-gst-gl-egl = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-gl-egl" , features = ["v1_16"]}
-gst-video = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-video" , features = ["v1_16"]}
-gst-base = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-base", features = ["v1_16"] }
-gst-allocators = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-allocators", features = ["v1_24"] }
+gst = {package = "gstreamer", version = "0.23.4", features = ["v1_16"]}
+gst-video = { version = "0.23.4", package = "gstreamer-video" , features = ["v1_16"]}
+gst-base = { version = "0.23.4", package = "gstreamer-base", features = ["v1_16"] }
+gst-allocators = { version = "0.23.4", package = "gstreamer-allocators", features = ["v1_16"] }
 thread_local = "1.1.8"
 glow = "0.16.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-glib = { git = "https://github.com/gtk-rs/gtk-rs-core", branch = "main" }
-gst_gl_wayland = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-gl-wayland", features = ["v1_16"] }
+glib = "0.16.3"
+glib-macros = "0.16.3"
+
+gst-gl-sys = { version = "0.23.4", package = "gstreamer-gl-sys" , features = ["v1_16"]}
+gst-gl = { version = "0.23.4", package = "gstreamer-gl" , features = ["v1_16"]}
+gst-gl-egl = { version = "0.23.4", package = "gstreamer-gl-egl" , features = ["v1_16"]}
+
+gst_gl_wayland = { version = "0.23.4", package = "gstreamer-gl-wayland", features = ["v1_16"] }
 glib-sys = "0.16.3"
 gobject-sys = "0.16.3"
-gdk = "0.18.0"
+gdk = "0.18.0" 
 gdk-sys = "0.18.0"
 gdkwayland = "0.18.2"
 gdkx11 = "0.18.2"

@@ -1,27 +1,19 @@
 use crate::core::fluttersink::utils;
-use crate::core::platform::{self, GstNativeFrameType, GL_MANAGER};
+use crate::core::platform::{GstNativeFrameType, GL_MANAGER};
 
 use super::frame::{MappedFrame, ResolvedFrame, TextureCacheId, VideoInfo};
-use super::gltexture::{GLTexture, GLTextureSource};
-use super::utils::{invoke_on_gs_main_thread, make_element};
-use super::{frame, types, FrameSender, SinkEvent};
+use super::{types, FrameSender, SinkEvent};
 
-use glib::clone::Downgrade;
-use glib::thread_guard::ThreadGuard;
-
-use glib::translate::FromGlibPtrFull;
-use gst::Caps;
-use gst::{prelude::*, subclass::prelude::*};
 use gst_base::subclass::prelude::*;
-use gst_gl::prelude::{GLContextExt as _, *};
-use gst_video::ffi::GST_VIDEO_SIZE_RANGE;
 use gst_video::subclass::prelude::*;
 use log::{debug, error, trace, warn};
+use gst::prelude::*;
+use gst::subclass::prelude::*;
+use gst_base::subclass::prelude::*;
+use gst_video::subclass::prelude::*;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::str::FromStr;
 use std::sync::{
     atomic::{self, AtomicBool},
     Mutex,
@@ -241,7 +233,7 @@ impl ElementImpl for FlutterTextureSink {
                         .build(),
                 );
                 trace!("GL context advertised to gstreamer pipeline");
-            }
+            },  
             _ => (),
         }
 
@@ -273,8 +265,8 @@ impl BaseSinkImpl for FlutterTextureSink {
 
     fn event(&self, event: gst::Event) -> bool {
         match event.view() {
-            gst::EventView::StreamStart(_) => {
-                trace!("Stream start");
+            gst::EventView::StreamStart(msg) => {
+                trace!("Stream start {:?}", msg);
                 let mut config = self.config.lock().unwrap();
                 config.global_orientation = types::Orientation::Rotate0;
                 config.stream_orientation = None;

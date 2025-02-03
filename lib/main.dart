@@ -23,9 +23,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
+
         body: Center(
           child: SizedBox(
             height: 500,
+
+
             width: 500,
             child: FutureBuilder(
               future: () async {

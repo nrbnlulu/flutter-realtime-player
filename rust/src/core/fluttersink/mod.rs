@@ -4,7 +4,6 @@ pub(super) mod sink;
 pub mod types;
 pub mod utils;
 use std::{
-    rc::Rc,
     sync::{Arc, Mutex},
     thread,
 };
@@ -13,14 +12,16 @@ use frame::ResolvedFrame;
 use glib::{
     object::{Cast, ObjectExt},
     subclass::types::ObjectSubclassIsExt,
-    types::StaticType,
+    types::StaticType, value::ToValue,
 };
 use gltexture::GLTextureSource;
-use gst::{prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, GstObjectExt}, trace};
+use gst::{
+    prelude::{ElementExt, GstObjectExt},
+    trace,
+};
 use log::{error, info};
 use sink::ArcSendableTexture;
 
-use super::platform::{GstNativeFrameType, GL_MANAGER};
 
 pub(crate) enum SinkEvent {
     FrameChanged(ResolvedFrame),
@@ -30,11 +31,14 @@ pub(crate) type FrameSender = flume::Sender<SinkEvent>;
 glib::wrapper! {
     pub struct FlutterTextureSink(ObjectSubclass<sink::FlutterTextureSink>)
     @extends gst_video::VideoSink, gst_base::BaseSink, gst::Element, gst::Object;
-}
+}   
 
 impl FlutterTextureSink {
     pub fn new(name: Option<&str>) -> Self {
-        gst::Object::builder().name_if_some(name).build().unwrap()
+        glib::Object::builder::<FlutterTextureSink>().property(
+            "name",
+            &name.unwrap_or("fluttertexturesink"),
+        ).build()
     }
 }
 
@@ -78,7 +82,7 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
         .build()
         .expect("Fatal: Unable to create glsink");
 
-    let pipeline = gst::ElementFactory::make("playbin3")
+    let pipeline = gst::ElementFactory::make("playbin")
         .property("video-sink", &glsink)
         .property("uri", uri)
         .build()
