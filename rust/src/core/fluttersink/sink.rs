@@ -8,16 +8,10 @@ use super::utils::LogErr;
 use super::{types, FrameSender, SinkEvent};
 
 use gst::prelude::*;
-use gst::subclass::prelude::*;
-use gst_base::subclass::prelude::*;
-use gst_base::subclass::prelude::*;
 use gst_gl::prelude::{ContextGLExt, GLContextExt};
-use gst_video::subclass::prelude::*;
-use gst_video::subclass::prelude::*;
 use irondash_texture::BoxedGLTexture;
 use log::{debug, error, trace, warn};
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{
     atomic::{self, AtomicBool},
@@ -53,7 +47,6 @@ impl Default for StreamConfig {
 
 pub(crate) struct FlutterConfig {
     fl_txt_id: i64,
-    frame_sender: FrameSender,
     fl_engine_handle: i64,
     sendable_txt: ArcSendableTexture,
 }
@@ -62,13 +55,11 @@ impl FlutterConfig {
     pub(crate) fn new(
         fl_txt_id: i64,
         fl_engine_handle: i64,
-        frame_sender: FrameSender,
         sendable_txt: ArcSendableTexture,
     ) -> Self {
         FlutterConfig {
             fl_txt_id,
             fl_engine_handle,
-            frame_sender,
             sendable_txt,
         }
     }
@@ -80,7 +71,7 @@ pub type ArcSendableTexture =
 pub struct FlutterTextureSink {
     appsink: gst_app::AppSink,
     glsink: gst::Element,
-    current_frame: Mutex<Option<NativeFrameType>>,
+    next_frame: Arc<Mutex<Option<NativeFrameType>>>,
     cached_textures: Mutex<HashMap<TextureCacheId, NativeFrameType>>,
 }
 
@@ -107,7 +98,7 @@ impl FlutterTextureSink {
         Self {
             appsink: appsink.upcast(),
             glsink,
-            current_frame: Default::default(),
+            next_frame: Default::default(),
             cached_textures: Default::default(),
         }
     }
@@ -115,7 +106,7 @@ impl FlutterTextureSink {
         self.glsink.clone().into()
     }
 
-    pub fn connect(&mut self, bus: &gst::Bus, fl_config: FlutterConfig) {
+    pub fn connect(&self, bus: &gst::Bus, fl_config: FlutterConfig) {
         let (gst_gl_display, gst_gl_context) = GL_MANAGER
             .with_borrow(|manager| manager.get_context(fl_config.fl_engine_handle))
             .unwrap();
@@ -164,6 +155,9 @@ impl FlutterTextureSink {
             }
         });
 
+        let sendable_txt_clone = fl_config.sendable_txt.clone();
+        let next_frame_ref = self.next_frame.clone();
+
         self.appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |appsink| {
@@ -204,15 +198,12 @@ impl FlutterTextureSink {
                         return Err(gst::FlowError::NotNegotiated);
                     };
                     if let Ok(frame) = gst_gl::GLVideoFrame::from_buffer_readable(buffer, &info) {
-                        // mark the frame as available before sending it to the main thread
-                        fl_config.sendable_txt.mark_frame_available();
-
-                        fl_config
-                            .frame_sender
-                            .send(SinkEvent::FrameChanged(ResolvedFrame::GL(
-                                LinuxNativeTexture::from_gst(frame).log_err().unwrap(),
-                            )))
-                            .log_err();
+                        if let Ok(native_frame) = LinuxNativeTexture::from_gst(frame) {
+                            let next_frame_ref = next_frame_ref.clone();
+                            *next_frame_ref.lock().unwrap() = Some(native_frame);
+                            // mark the frame as available before sending it to the main thread
+                            sendable_txt_clone.mark_frame_available();
+                        }
                     }
 
                     Ok(gst::FlowSuccess::Ok)
@@ -223,13 +214,12 @@ impl FlutterTextureSink {
 
     fn get_current_frame_callback(&self) -> anyhow::Result<BoxedGLTexture> {
         trace!("on get_current_frame_callback");
-        let curr_frame = self.current_frame.lock().unwrap();
+        let curr_frame = self.next_frame.lock().unwrap();
         curr_frame
             .as_ref()
             .map(|texture| texture.as_texture_provider())
             .or(Some(self.get_fallback_texture()))
             .ok_or(anyhow::anyhow!("coudln't get texture"))
-
     }
     fn get_fallback_texture(&self) -> BoxedGLTexture {
         unimplemented!("fallback texture")

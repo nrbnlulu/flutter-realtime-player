@@ -1,4 +1,3 @@
-
 mod linux {
     use gdk::glib::{translate::FromGlibPtrNone, Cast};
     use glow::HasContext;
@@ -7,13 +6,13 @@ mod linux {
     use gst_video::VideoFrameExt;
     use irondash_texture::BoxedGLTexture;
     use log::{info, trace};
-    
+
+    use crate::core::fluttersink::{gltexture::GLTexture, utils};
     use std::{
         cell::RefCell,
         collections::HashMap,
         sync::{Arc, Mutex},
     };
-    use crate::core::fluttersink::gltexture::GLTexture;
 
     use irondash_engine_context::EngineContext;
 
@@ -39,26 +38,29 @@ mod linux {
                 format,
             }
         }
-        pub fn from_gst(frame: gst_gl::GLVideoFrame<gst_gl::gl_video_frame::Readable>) -> anyhow::Result<NativeFrameType> {
+        pub fn from_gst(
+            frame: gst_gl::GLVideoFrame<gst_gl::gl_video_frame::Readable>,
+        ) -> anyhow::Result<NativeFrameType> {
             let texture_id = frame.texture_id(0)?;
 
-            Ok(Arc::new(LinuxNativeTexture {
+            Ok(LinuxNativeTexture {
                 texture_id,
                 width: frame.width(),
                 height: frame.height(),
                 format: frame.format(),
-            }))
+            })
         }
-        
-        pub fn as_texture_provider(&self) -> BoxedGLTexture{
-            Box::new(
-                GLTexture::new(self.texture_id, self.width as _, self.height as _)
-            )
+
+        pub fn as_texture_provider(&self) -> BoxedGLTexture {
+            Box::new(GLTexture::new(
+                self.texture_id,
+                self.width as _,
+                self.height as _,
+            ))
         }
-        
     }
 
-    pub(crate) type NativeFrameType = Arc<LinuxNativeTexture>;
+    pub(crate) type NativeFrameType = LinuxNativeTexture;
 
     pub struct GlManager {
         // stores the context for each window
@@ -127,7 +129,9 @@ mod linux {
                     "Creating new GL context for engine handle: {}",
                     engine_handle
                 );
-                let context = self.create_gl_ctx(engine_handle).unwrap();
+                let context = utils::invoke_on_gs_main_thread(move || {
+                    Self::create_gl_ctx(engine_handle).unwrap()
+                });
                 store.insert(engine_handle, context.clone());
                 Some(context)
             }
@@ -143,7 +147,6 @@ mod linux {
         /// This function MUST be called from the platform's main thread
         /// because we want to use gtk's gl context.
         fn create_gl_ctx(
-            &self,
             engine_handle: i64,
         ) -> anyhow::Result<(gst_gl::GLDisplay, gst_gl::GLContext)> {
             let engine = EngineContext::get().unwrap();

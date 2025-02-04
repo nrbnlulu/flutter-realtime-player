@@ -11,12 +11,12 @@ use std::{
 use frame::ResolvedFrame;
 use glib::types::StaticType;
 use gst::{
-    glib::object::Cast,
+    glib::object::{Cast, ObjectExt},
     prelude::{ElementExt, GstObjectExt},
     trace,
 };
 use log::{error, info};
-use sink::{ArcSendableTexture, FlutterTextureSink};
+use sink::{ArcSendableTexture, FlutterConfig, FlutterTextureSink};
 
 pub(crate) enum SinkEvent {
     FrameChanged(ResolvedFrame),
@@ -28,14 +28,15 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
-    let (flutter_sink, sendable_texture) = utils::invoke_on_platform_main_thread(move || {
-        let provider = Arc::new(FlutterTextureSink::new());
+    let (flutter_sink, sendable_texture, texture_id) =
+        utils::invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
+            let provider = Arc::new(FlutterTextureSink::new());
 
-        let texture =
-            irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
-        Ok((provider, texture.into_sendable_texture()))
-    })?;
-    
+            let texture =
+                irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
+            let texture_id = texture.id();
+            Ok((provider, texture.into_sendable_texture(), texture_id))
+        })?;
     let pipeline = gst::ElementFactory::make("playbin")
         .property(
             "uri",
@@ -44,6 +45,11 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
         .build()?
         .downcast::<gst::Pipeline>()
         .unwrap();
+    pipeline.set_property("video-sink", &flutter_sink.video_sink());
+    flutter_sink.connect(
+        &pipeline.bus().unwrap(),
+        FlutterConfig::new(texture_id, engine_handle, sendable_texture),
+    );
 
     thread::spawn(move || {
         pipeline
@@ -71,5 +77,5 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
         }
     });
 
-    Ok(id)
+    Ok(texture_id)
 }
