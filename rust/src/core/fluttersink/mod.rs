@@ -10,7 +10,6 @@ use std::{
 
 use frame::ResolvedFrame;
 use glib::types::StaticType;
-use gltexture::GLTextureSource;
 use gst::{
     glib::object::Cast,
     prelude::{ElementExt, GstObjectExt},
@@ -28,21 +27,15 @@ pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
 }
 
-fn create_flutter_texture(
-    engine_handle: i64,
-) -> anyhow::Result<(ArcSendableTexture, i64, FrameSender)> {
-    let (tx, rx) = flume::bounded(1);
-
-    let provider = Arc::new(GLTextureSource::new(rx, engine_handle)?);
-    let texture = irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
-    let tx_id = texture.id();
-    Ok((texture.into_sendable_texture(), tx_id, tx))
-}
-
 pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
-    let (sendable_fl_txt, id, tx) =
-        utils::invoke_on_platform_main_thread(move || create_flutter_texture(engine_handle))?;
+    let (flutter_sink, sendable_texture) = utils::invoke_on_platform_main_thread(move || {
+        let provider = Arc::new(FlutterTextureSink::new());
 
+        let texture =
+            irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
+        Ok((provider, texture.into_sendable_texture()))
+    })?;
+    
     let pipeline = gst::ElementFactory::make("playbin")
         .property(
             "uri",
@@ -51,8 +44,6 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
         .build()?
         .downcast::<gst::Pipeline>()
         .unwrap();
-
-    let fl_sink = FlutterTextureSink::new();
 
     thread::spawn(move || {
         pipeline

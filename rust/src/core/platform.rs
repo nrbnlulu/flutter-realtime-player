@@ -1,16 +1,19 @@
+
 mod linux {
     use gdk::glib::{translate::FromGlibPtrNone, Cast};
     use glow::HasContext;
     use gst::glib::translate::FromGlibPtrFull;
     use gst_gl::GLVideoFrameExt;
     use gst_video::VideoFrameExt;
+    use irondash_texture::BoxedGLTexture;
     use log::{info, trace};
-
+    
     use std::{
         cell::RefCell,
         collections::HashMap,
         sync::{Arc, Mutex},
     };
+    use crate::core::fluttersink::gltexture::GLTexture;
 
     use irondash_engine_context::EngineContext;
 
@@ -36,7 +39,7 @@ mod linux {
                 format,
             }
         }
-        pub fn from_gst<T>(frame: gst_gl::GLVideoFrame<T>) -> anyhow::Result<NativeFrameType> {
+        pub fn from_gst(frame: gst_gl::GLVideoFrame<gst_gl::gl_video_frame::Readable>) -> anyhow::Result<NativeFrameType> {
             let texture_id = frame.texture_id(0)?;
 
             Ok(Arc::new(LinuxNativeTexture {
@@ -46,6 +49,13 @@ mod linux {
                 format: frame.format(),
             }))
         }
+        
+        pub fn as_texture_provider(&self) -> BoxedGLTexture{
+            Box::new(
+                GLTexture::new(self.texture_id, self.width as _, self.height as _)
+            )
+        }
+        
     }
 
     pub(crate) type NativeFrameType = Arc<LinuxNativeTexture>;

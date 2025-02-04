@@ -1,5 +1,6 @@
 use crate::core::fluttersink::gltexture::GLTexture;
 use crate::core::fluttersink::utils;
+use crate::core::gl::TEXTURE;
 use crate::core::platform::{LinuxNativeTexture, NativeFrameType, GL_MANAGER};
 
 use super::frame::{GstMappedFrame, ResolvedFrame, TextureCacheId, VideoInfo};
@@ -79,16 +80,12 @@ pub type ArcSendableTexture =
 pub struct FlutterTextureSink {
     appsink: gst_app::AppSink,
     glsink: gst::Element,
-    texture_rx: flume::Receiver<SinkEvent>,
-    texture_tx: flume::Sender<SinkEvent>,
+    current_frame: Mutex<Option<NativeFrameType>>,
     cached_textures: Mutex<HashMap<TextureCacheId, NativeFrameType>>,
 }
 
 impl FlutterTextureSink {
-    pub fn new(
-        texture_rx: flume::Receiver<SinkEvent>,
-        texture_tx: flume::Sender<SinkEvent>,
-    ) -> Self {
+    pub fn new() -> Self {
         let appsink = gst_app::AppSink::builder()
             .caps(
                 &gst_video::VideoCapsBuilder::new()
@@ -110,8 +107,7 @@ impl FlutterTextureSink {
         Self {
             appsink: appsink.upcast(),
             glsink,
-            texture_rx,
-            texture_tx,
+            current_frame: Default::default(),
             cached_textures: Default::default(),
         }
     }
@@ -226,27 +222,14 @@ impl FlutterTextureSink {
     }
 
     fn get_current_frame_callback(&self) -> anyhow::Result<BoxedGLTexture> {
-        trace!("Waiting for frame");
-        match self
-            .texture_rx
-            .recv_timeout(std::time::Duration::from_millis(10))
-        {
-            Ok(SinkEvent::FrameChanged(resolved_frame)) => match resolved_frame {
-                ResolvedFrame::Memory(_) => unimplemented!("Memory"),
-                ResolvedFrame::GL(frame) => {
-                    let texture = GLTexture::new(
-                        frame.texture_id,
-                        frame.width as i32,
-                        frame.height as i32,
-                    );
-                    Ok(Box::new(texture) as BoxedGLTexture)
-                }
-            },
-            Err(e) => Err(anyhow::anyhow!(
-                "Error receiving frame changed event {:?}",
-                e
-            )),
-        }.or_else(|_| Ok(self.get_fallback_texture()))
+        trace!("on get_current_frame_callback");
+        let curr_frame = self.current_frame.lock().unwrap();
+        curr_frame
+            .as_ref()
+            .map(|texture| texture.as_texture_provider())
+            .or(Some(self.get_fallback_texture()))
+            .ok_or(anyhow::anyhow!("coudln't get texture"))
+
     }
     fn get_fallback_texture(&self) -> BoxedGLTexture {
         unimplemented!("fallback texture")
