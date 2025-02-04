@@ -1,3 +1,4 @@
+use crate::core::fluttersink::gltexture::GLTexture;
 use crate::core::fluttersink::utils;
 use crate::core::platform::{LinuxNativeTexture, NativeFrameType, GL_MANAGER};
 
@@ -227,41 +228,28 @@ impl FlutterTextureSink {
     fn get_current_frame_callback(&self) -> anyhow::Result<BoxedGLTexture> {
         trace!("Waiting for frame");
         match self
-            .texture_receiver
+            .texture_rx
             .recv_timeout(std::time::Duration::from_millis(10))
         {
             Ok(SinkEvent::FrameChanged(resolved_frame)) => match resolved_frame {
                 ResolvedFrame::Memory(_) => unimplemented!("Memory"),
-                ResolvedFrame::GL((egl_image, pixel_res)) => {
-                    let mut texture_name = 0;
-                    unsafe {
-                        GL.GenTextures(1, &mut texture_name);
-
-                        GL.BindTexture(gl::TEXTURE_2D, texture_name);
-                        GL.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-                        GL.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-                        GL.EGLImageTargetTexture2DOES(
-                            gl::TEXTURE_2D,
-                            egl_image.texture_id.get_image(),
-                        );
-                    };
-                    Ok(Box::new(GLTexture::new(
-                        texture_name,
-                        egl_image.width as i32,
-                        egl_image.height as i32,
-                    )))
+                ResolvedFrame::GL(frame) => {
+                    let texture = GLTexture::new(
+                        frame.texture_id,
+                        frame.width as i32,
+                        frame.height as i32,
+                    );
+                    Ok(Box::new(texture) as BoxedGLTexture)
                 }
             },
             Err(e) => Err(anyhow::anyhow!(
                 "Error receiving frame changed event {:?}",
                 e
             )),
-        }
-        self.get_fallback_texture()
+        }.or_else(|_| Ok(self.get_fallback_texture()))
     }
     fn get_fallback_texture(&self) -> BoxedGLTexture {
-        let tx_name = GL_MANAGER.with(|p| p.borrow().get_fallback_texture_name(self.engine_id));
-        Box::new(GLTexture::new(tx_name, self.width, self.height))
+        unimplemented!("fallback texture")
     }
 }
 
