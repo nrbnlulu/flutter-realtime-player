@@ -4,7 +4,10 @@ use irondash_run_loop::RunLoop;
 use log::debug;
 use simple_logger::SimpleLogger;
 
-use crate::core::fluttersink::{self, testit, utils::{self, LogErr}};
+use crate::core::fluttersink::{
+    self, testit,
+    utils::{self, LogErr},
+};
 
 #[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
 pub fn greet(name: String) -> String {
@@ -14,7 +17,6 @@ pub fn greet(name: String) -> String {
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     SimpleLogger::new().init().unwrap();
-
 
     // Default utilities - feel free to custom
     flutter_rust_bridge::setup_default_user_utils();
@@ -26,7 +28,6 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
 
     fluttersink::init().log_err();
     debug!("Done initializing flutter gstreamer");
-    
 }
 
 pub fn get_opengl_texture(engine_handle: i64, uri: String) -> anyhow::Result<i64> {

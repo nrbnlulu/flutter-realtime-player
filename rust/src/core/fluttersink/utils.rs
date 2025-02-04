@@ -28,10 +28,12 @@ where
     }
 
     trace!("invoke_on_platform_main_thread: sending to main thread");
-    RunLoop::sender_for_main_thread().expect("failed to get main thread sender").send_and_wait(move || {
-        trace!("in main thread");
-        func()
-    })
+    RunLoop::sender_for_main_thread()
+        .expect("failed to get main thread sender")
+        .send_and_wait(move || {
+            trace!("in main thread");
+            func()
+        })
 }
 
 pub(crate) fn is_fl_main_thread() -> bool {

@@ -11,7 +11,7 @@ use std::{
 
 use crate::core::{
     ffi::gst_egl_ext::EGLImage,
-    platform::{EglImageWrapper, GlCtx, GstNativeFrameType},
+    platform::{GlCtx, LinuxNativeTexture, NativeFrameType},
 };
 
 use super::{gltexture::GLTexture, types::Orientation};
@@ -44,7 +44,7 @@ pub enum TextureCacheId {
 }
 
 #[derive(Debug)]
-pub(crate) enum MappedFrame {
+pub(crate) enum GstMappedFrame {
     SysMem {
         frame: gst_video::VideoFrame<gst_video::video_frame::Readable>,
         orientation: Orientation,
@@ -56,7 +56,7 @@ pub(crate) enum MappedFrame {
     },
 }
 
-impl MappedFrame {
+impl GstMappedFrame {
     pub(crate) fn from_gst_buffer(
         buffer: &gst::Buffer,
         info: &VideoInfo,
@@ -110,7 +110,7 @@ impl MappedFrame {
                 let meta = mapped_frame.buffer().meta::<gst_gl::GLSyncMeta>().unwrap();
                 meta.set_sync_point(memory_ctx);
 
-                frame = Some(MappedFrame::GL {
+                frame = Some(GstMappedFrame::GL {
                     frame: mapped_frame,
                     wrapped_context: wrapped_context.unwrap().clone(),
                     orientation: orientation.clone(),
@@ -120,7 +120,7 @@ impl MappedFrame {
 
         Ok(match frame {
             Some(frame) => frame,
-            None => MappedFrame::SysMem {
+            None => GstMappedFrame::SysMem {
                 frame: gst_video::VideoFrame::from_buffer_readable(buffer.clone(), info)
                     .map_err(|_| gst::FlowError::Error)?,
                 orientation,
@@ -130,36 +130,36 @@ impl MappedFrame {
 
     fn buffer(&self) -> &gst::BufferRef {
         match self {
-            MappedFrame::SysMem { frame, .. } => frame.buffer(),
-            MappedFrame::GL { frame, .. } => frame.buffer(),
+            GstMappedFrame::SysMem { frame, .. } => frame.buffer(),
+            GstMappedFrame::GL { frame, .. } => frame.buffer(),
         }
     }
 
     fn width(&self) -> u32 {
         match self {
-            MappedFrame::SysMem { frame, .. } => frame.width(),
-            MappedFrame::GL { frame, .. } => frame.width(),
+            GstMappedFrame::SysMem { frame, .. } => frame.width(),
+            GstMappedFrame::GL { frame, .. } => frame.width(),
         }
     }
 
     fn height(&self) -> u32 {
         match self {
-            MappedFrame::SysMem { frame, .. } => frame.height(),
-            MappedFrame::GL { frame, .. } => frame.height(),
+            GstMappedFrame::SysMem { frame, .. } => frame.height(),
+            GstMappedFrame::GL { frame, .. } => frame.height(),
         }
     }
 
     fn format_info(&self) -> gst_video::VideoFormatInfo {
         match self {
-            MappedFrame::SysMem { frame, .. } => frame.format_info(),
-            MappedFrame::GL { frame, .. } => frame.format_info(),
+            GstMappedFrame::SysMem { frame, .. } => frame.format_info(),
+            GstMappedFrame::GL { frame, .. } => frame.format_info(),
         }
     }
 
     fn orientation(&self) -> Orientation {
         match self {
-            MappedFrame::SysMem { orientation, .. } => *orientation,
-            MappedFrame::GL { orientation, .. } => *orientation,
+            GstMappedFrame::SysMem { orientation, .. } => *orientation,
+            GstMappedFrame::GL { orientation, .. } => *orientation,
         }
     }
 }
@@ -201,15 +201,15 @@ fn video_frame_to_pixel_buffer(
 }
 
 pub enum ResolvedFrame {
-    GL((GstNativeFrameType, f64)),
+    GL(NativeFrameType),
     Memory(Box<[u8]>),
 }
 
 impl ResolvedFrame {
     pub(crate) fn from_mapped_frame(
-        frame: &MappedFrame,
+        frame: &GstMappedFrame,
         gl_context: &GlCtx,
-        cached_textures: &mut HashMap<TextureCacheId, GstNativeFrameType>,
+        cached_textures: &mut HashMap<TextureCacheId, NativeFrameType>,
     ) -> anyhow::Result<Self> {
         gl_context.activate(true);
         let mut used_frames = HashSet::new();
@@ -218,11 +218,11 @@ impl ResolvedFrame {
         let has_alpha = frame.format_info().has_alpha();
         let orientation = frame.orientation();
         let (res) = match frame {
-            MappedFrame::SysMem { .. } => {
+            GstMappedFrame::SysMem { .. } => {
                 // this should only be called if we do software rendering
                 unimplemented!("memory_frame_to_egl_img");
             }
-            MappedFrame::GL {
+            GstMappedFrame::GL {
                 frame,
                 wrapped_context,
                 ..
@@ -248,11 +248,11 @@ impl ResolvedFrame {
 
 fn gl_frame_to_egl_img(
     frame: &gst_gl::GLVideoFrame<gst_gl::gl_video_frame::Readable>,
-    cached_frames: &mut HashMap<TextureCacheId, GstNativeFrameType>,
+    cached_frames: &mut HashMap<TextureCacheId, NativeFrameType>,
     used_frames: &mut HashSet<TextureCacheId>,
     wrapped_context: gst_gl::GLContext,
     orientation: Orientation,
-) -> anyhow::Result<(GstNativeFrameType, f64)> {
+) -> anyhow::Result<(NativeFrameType, f64)> {
     let texture_name = frame.texture_id(0).expect("Invalid texture id") as usize;
 
     let pixel_aspect_ratio =
@@ -278,7 +278,8 @@ fn gl_frame_to_egl_img(
             .as_mut_ptr(),
         &mut [],
     );
-    let egl_img_wrapper = EglImageWrapper::new(egl_image_ptr, width, height, format, orientation);
+    let egl_img_wrapper =
+        LinuxNativeTexture::new(egl_image_ptr, width, height, format, orientation);
     cached_frames.insert(TextureCacheId::GL(texture_name), egl_img_wrapper.clone());
     used_frames.insert(TextureCacheId::GL(texture_name));
     Ok((egl_img_wrapper, pixel_aspect_ratio))

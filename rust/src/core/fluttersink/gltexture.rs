@@ -1,22 +1,6 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    ops::Deref,
-    rc::Rc,
-    sync::{Arc, Mutex, RwLock},
-};
+use irondash_texture::GLTextureProvider;
 
-use gst::meta::tags::Memory;
-use irondash_texture::{BoxedGLTexture, GLTextureProvider};
-use log::{error, trace};
-
-use crate::core::{
-    fluttersink::frame,
-    gl::{self, GL},
-    platform::{GlCtx, GL_MANAGER},
-};
-
-use super::{frame::ResolvedFrame, utils, SinkEvent};
+use crate::core::gl::{self};
 
 #[derive(Debug, Clone)]
 pub struct GLTexture {
@@ -46,75 +30,4 @@ impl GLTextureProvider for GLTexture {
             height: self.height,
         }
     }
-}
-
-pub struct GLTextureSource {
-    width: i32,
-    height: i32,
-    texture_receiver: flume::Receiver<SinkEvent>,
-    cached_textures: Mutex<HashMap<frame::TextureCacheId, GLTexture>>,
-    engine_id: i64,
-}
-
-unsafe impl Sync for GLTextureSource {}
-unsafe impl Send for GLTextureSource {}
-
-impl GLTextureSource {
-    pub(crate) fn new(texture_receiver: flume::Receiver<SinkEvent>, engine_id: i64) -> anyhow::Result<Self> {
-        Ok(Self {
-            width: 0,
-            height: 0,
-            texture_receiver,
-            cached_textures: Mutex::new(HashMap::new()),
-            engine_id,
-        })
-    }
-
-    fn recv_frame(&self) -> anyhow::Result<BoxedGLTexture> {
-        trace!("Waiting for frame");
-        match self.texture_receiver.recv_timeout(std::time::Duration::from_millis(10)) {
-            Ok(SinkEvent::FrameChanged(resolved_frame)) => match resolved_frame {
-                ResolvedFrame::Memory(_) => unimplemented!("Memory"),
-                ResolvedFrame::GL((egl_image, pixel_res)) => {
-                    let mut texture_name = 0;
-                    unsafe {
-                        GL.GenTextures(1, &mut texture_name);
-
-                        GL.BindTexture(gl::TEXTURE_2D, texture_name);
-                        GL.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-                        GL.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-                        GL.EGLImageTargetTexture2DOES(gl::TEXTURE_2D, egl_image.image.get_image());
-                    };
-                    Ok(Box::new(GLTexture::new(
-                        texture_name,
-                        egl_image.width as i32,
-                        egl_image.height as i32,
-                    )))
-                }
-            },
-            Err(e) => Err(anyhow::anyhow!(
-                "Error receiving frame changed event {:?}",
-                e
-            )),
-        }
-    }
-
-    fn get_fallback_texture(&self) -> BoxedGLTexture {
-        let tx_name = GL_MANAGER.with(
-            |p| p.borrow().get_fallback_texture_name(self.engine_id),
-        );
-        Box::new(GLTexture::new(tx_name, self.width, self.height))
-    }
-}
-
-impl irondash_texture::PayloadProvider<BoxedGLTexture> for GLTextureSource {
-    fn get_payload(&self) -> BoxedGLTexture {
-        self.get_fallback_texture()
-
-    }
-}
-
-fn init() -> anyhow::Result<()> {
-    gl_loader::init_gl();
-    Ok(())
 }

@@ -9,52 +9,23 @@ use std::{
 };
 
 use frame::ResolvedFrame;
-use glib::{
-    object::{Cast, ObjectExt},
-    subclass::types::ObjectSubclassIsExt,
-    types::StaticType, value::ToValue,
-};
+use glib::types::StaticType;
 use gltexture::GLTextureSource;
 use gst::{
+    glib::object::Cast,
     prelude::{ElementExt, GstObjectExt},
     trace,
 };
 use log::{error, info};
-use sink::ArcSendableTexture;
-
+use sink::{ArcSendableTexture, FlutterTextureSink};
 
 pub(crate) enum SinkEvent {
     FrameChanged(ResolvedFrame),
 }
 pub(crate) type FrameSender = flume::Sender<SinkEvent>;
 
-glib::wrapper! {
-    pub struct FlutterTextureSink(ObjectSubclass<sink::FlutterTextureSink>)
-    @extends gst_video::VideoSink, gst_base::BaseSink, gst::Element, gst::Object;
-}   
-
-impl FlutterTextureSink {
-    pub fn new(name: Option<&str>) -> Self {
-        glib::Object::builder::<FlutterTextureSink>().property(
-            "name",
-            &name.unwrap_or("fluttertexturesink"),
-        ).build()
-    }
-}
-
-fn register(plugin: Option<&gst::Plugin>) -> anyhow::Result<()> {
-    gst::Element::register(
-        plugin,
-        "fluttertexturesink",
-        gst::Rank::NONE,
-        FlutterTextureSink::static_type(),
-    )
-    .map_err(|_| anyhow::anyhow!("Failed to register FlutterTextureSink"))
-}
-
 pub fn init() -> anyhow::Result<()> {
-    gst::init()?;
-    register(None)
+    gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
 }
 
 fn create_flutter_texture(
@@ -72,21 +43,16 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     let (sendable_fl_txt, id, tx) =
         utils::invoke_on_platform_main_thread(move || create_flutter_texture(engine_handle))?;
 
-    let flsink = utils::make_element("fluttertexturesink", None)?;
-    let fl_config = sink::FlutterConfig::new(id, engine_handle, tx, sendable_fl_txt);
-
-    let fl_imp = flsink.downcast_ref::<FlutterTextureSink>().unwrap().imp();
-    fl_imp.set_fl_config(fl_config);
-    let glsink = gst::ElementFactory::make("glsinkbin")
-        .property("sink", &flsink)
-        .build()
-        .expect("Fatal: Unable to create glsink");
-
     let pipeline = gst::ElementFactory::make("playbin")
-        .property("video-sink", &glsink)
-        .property("uri", uri)
-        .build()
+        .property(
+            "uri",
+            "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm",
+        )
+        .build()?
+        .downcast::<gst::Pipeline>()
         .unwrap();
+
+    let fl_sink = FlutterTextureSink::new();
 
     thread::spawn(move || {
         pipeline

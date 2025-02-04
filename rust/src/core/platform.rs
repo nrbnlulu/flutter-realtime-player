@@ -1,59 +1,58 @@
 mod linux {
-    use gdk::glib::{
-        translate::{FromGlibPtrNone, ToGlibPtr},
-        Cast,
-    };
+    use gdk::glib::{translate::FromGlibPtrNone, Cast};
     use glow::HasContext;
-    use lazy_static::lazy_static;
-    use log::{error, info, trace};
+    use gst::glib::translate::FromGlibPtrFull;
+    use gst_gl::GLVideoFrameExt;
+    use gst_video::VideoFrameExt;
+    use log::{info, trace};
 
     use std::{
         cell::RefCell,
         collections::HashMap,
-        iter::Map,
-        ops::Deref,
         sync::{Arc, Mutex},
     };
 
     use irondash_engine_context::EngineContext;
 
-    use crate::core::{
-        ffi::{self, gst_egl_ext},
-        fluttersink::types::Orientation,
-        gl::{self, GL},
-    };
-
     pub type GlCtx = gst_gl::GLContext;
-    pub struct EglImageWrapper {
-        pub image: gst_egl_ext::EGLImage,
+
+    pub struct LinuxNativeTexture {
+        pub texture_id: u32,
         pub width: u32,
         pub height: u32,
         pub format: gst_video::VideoFormat,
-        pub orientation: Orientation,
     }
-    impl EglImageWrapper {
+    impl LinuxNativeTexture {
         pub fn new(
-            image_ptr: gst_egl_ext::EGLImage,
+            texture_id: u32,
             width: u32,
             height: u32,
             format: gst_video::VideoFormat,
-            orientation: Orientation,
-        ) -> GstNativeFrameType {
-            Arc::new(Self {
-                image: image_ptr,
+        ) -> Self {
+            Self {
+                texture_id,
                 width,
                 height,
                 format,
-                orientation,
-            })
+            }
+        }
+        pub fn from_gst<T>(frame: gst_gl::GLVideoFrame<T>) -> anyhow::Result<NativeFrameType> {
+            let texture_id = frame.texture_id(0)?;
+
+            Ok(Arc::new(LinuxNativeTexture {
+                texture_id,
+                width: frame.width(),
+                height: frame.height(),
+                format: frame.format(),
+            }))
         }
     }
 
-    pub(crate) type GstNativeFrameType = Arc<EglImageWrapper>;
+    pub(crate) type NativeFrameType = Arc<LinuxNativeTexture>;
 
     pub struct GlManager {
         // stores the context for each window
-        store: Mutex<HashMap<i64, GlCtx>>,
+        store: Mutex<HashMap<i64, (gst_gl::GLDisplay, gst_gl::GLContext)>>,
         fallback_texture: Mutex<HashMap<i64, u32>>,
     }
     impl GlManager {
@@ -101,7 +100,10 @@ mod linux {
 
         /// Get the context for the given window id
         /// if there is no context for the given window id, we create a new one
-        pub fn get_context(&self, engine_handle: i64) -> Option<GlCtx> {
+        pub fn get_context(
+            &self,
+            engine_handle: i64,
+        ) -> Option<(gst_gl::GLDisplay, gst_gl::GLContext)> {
             trace!(
                 "Creating new GL context for engine handle: {}",
                 engine_handle
@@ -120,13 +122,20 @@ mod linux {
                 Some(context)
             }
         }
-        pub fn set_context(&self, engine_handle: i64, context: GlCtx) {
+        pub fn set_context(
+            &self,
+            engine_handle: i64,
+            context: (gst_gl::GLDisplay, gst_gl::GLContext),
+        ) {
             self.store.lock().unwrap().insert(engine_handle, context);
         }
 
         /// This function MUST be called from the platform's main thread
         /// because we want to use gtk's gl context.
-        fn create_gl_ctx(&self, engine_handle: i64) -> anyhow::Result<gst_gl::GLContext> {
+        fn create_gl_ctx(
+            &self,
+            engine_handle: i64,
+        ) -> anyhow::Result<(gst_gl::GLDisplay, gst_gl::GLContext)> {
             let engine = EngineContext::get().unwrap();
             let fl_view = engine.get_flutter_view(engine_handle).unwrap();
             let fl_view = unsafe { std::mem::transmute(fl_view) };
@@ -142,28 +151,24 @@ mod linux {
             trace!("Creating GL context for window: {:?}", window);
             trace!("Creating GL context for display: {:?}", display);
 
-            let (_, wrapped_context) = initialize_x11(&display, window)?;
-            Ok(wrapped_context)
+            initialize_x11(&display, window)
         }
     }
 
     fn initialize_x11(
         display: &gdk::Display,
-        gdk_window: *mut gdk_sys::GdkWindow,
+        _gdk_window: *mut gdk_sys::GdkWindow,
     ) -> anyhow::Result<(gst_gl::GLDisplay, gst_gl::GLContext)> {
         info!("Initializing GL for X11 backend and display");
 
         unsafe {
             use glib::translate::*;
-
-            // let wayland_display = gdk_wayland::WaylandDisplay::wl_display(display.downcast());
-            // get the ptr directly since we are going to use it raw
             let display: &gdkx11::X11Display =
                 display.downcast_ref::<gdkx11::X11Display>().unwrap();
             let x11_display = gdkx11::ffi::gdk_x11_display_get_xdisplay(display.to_glib_none().0);
 
-            let gst_display: *mut gst_gl_wayland::ffi::GstGLDisplayWayland =
-                gst_gl_wayland::ffi::gst_gl_display_wayland_new_with_display(x11_display as _);
+            let gst_display =
+                gst_gl_x11::ffi::gst_gl_display_x11_new_with_display(x11_display as _);
             let gst_display =
                 gst_gl::GLDisplay::from_glib_full(gst_display as *mut gst_gl::ffi::GstGLDisplay);
             let current_gdk_gl_ctx = gdk_sys::gdk_gl_context_get_current();
@@ -181,9 +186,10 @@ mod linux {
         }
     }
 
+    #[cfg(feature = "wayland")]
     fn initialize_waylandegl(
         display: &gdk::Display,
-        gdk_window: *mut gdk_sys::GdkWindow,
+        _gdk_window: *mut gdk_sys::GdkWindow,
     ) -> anyhow::Result<(gst_gl::GLDisplay, gst_gl::GLContext)> {
         info!("Initializing GL for Wayland EGL backend and display");
 

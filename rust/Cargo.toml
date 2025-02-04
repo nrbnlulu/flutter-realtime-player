@@ -22,32 +22,40 @@ simple-log = "2.1.1"
 irondash_engine_context = "0.5.0"
 lazy_static = "1.5.0"
 
-gst = {package = "gstreamer", version = "0.23.4", features = ["v1_16"]}
-gst-video = { version = "0.23.4", package = "gstreamer-video" , features = ["v1_16"]}
-gst-base = { version = "0.23.4", package = "gstreamer-base", features = ["v1_16"] }
-gst-allocators = { version = "0.23.4", package = "gstreamer-allocators", features = ["v1_16"] }
+# GStreamer dependencies
+gst = { package = "gstreamer", version = "0.23.4" }
+gst-base = { package = "gstreamer-base", version = "0.23.4" }
+gst-video = { package = "gstreamer-video", version = "0.23.4" }
+gst-app = { package = "gstreamer-app", version = "0.23.4" }
+gst-gl = { package = "gstreamer-gl", version = "0.23.4" }
+gst-gl-x11 = { package = "gstreamer-gl-x11", version = "0.23.4" }
+
 thread_local = "1.1.8"
 glow = "0.16.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-glib = "0.16.3"
-glib-macros = "0.16.3"
+# GDK (GIMP Drawing Kit) dependencies
+gdk = "0.17.1"
+gdk-sys = "0.17.0"
+gdkwayland = "0.17.0"
+gdkx11 = "0.17.0"
 
-gst-gl-sys = { version = "0.23.4", package = "gstreamer-gl-sys" , features = ["v1_16"]}
-gst-gl = { version = "0.23.4", package = "gstreamer-gl" , features = ["v1_16"]}
-gst-gl-egl = { version = "0.23.4", package = "gstreamer-gl-egl" , features = ["v1_16"]}
-
-gst_gl_wayland = { version = "0.23.4", package = "gstreamer-gl-wayland", features = ["v1_16"] }
-glib-sys = "0.16.3"
-gobject-sys = "0.16.3"
-gdk = "0.18.0" 
-gdk-sys = "0.18.0"
-gdkwayland = "0.18.2"
-gdkx11 = "0.18.2"
-gtk-sys = "0.18.0"
+# GLib (GIMP Library) dependencies
+glib = "0.17.4"
+glib-macros = "0.17.4"
+glib-sys = "0.17.4"
+gobject-sys = "0.17.4"
+# OpenGL loader
 gl_loader = "0.1.2"
+
+# GTK (GIMP Toolkit) dependencies
+gtk-sys = "0.17.0"
 
 
 [build-dependencies]
 gl_generator = "0.14"
 cfg_aliases = "0.2.1"
+
+
+[features]
+wayland = []
