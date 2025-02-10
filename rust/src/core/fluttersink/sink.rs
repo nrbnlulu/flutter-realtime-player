@@ -7,7 +7,8 @@ use super::frame::{GstMappedFrame, ResolvedFrame, TextureCacheId, VideoInfo};
 use super::utils::LogErr;
 use super::{types, FrameSender, SinkEvent};
 
-use gst::prelude::*;
+use gdkx11::x11::xlib::Atom;
+use gst::{prelude::*, PadProbeReturn, PadProbeType, QueryViewMut};
 use gst_gl::prelude::{ContextGLExt, GLContextExt};
 use irondash_texture::BoxedGLTexture;
 use log::{debug, error, trace, warn};
@@ -73,10 +74,13 @@ pub struct FlutterTextureSink {
     glsink: gst::Element,
     next_frame: Arc<Mutex<Option<NativeFrameType>>>,
     cached_textures: Mutex<HashMap<TextureCacheId, NativeFrameType>>,
+    initialized_signal: Arc<AtomicBool>,
+    gst_display: Mutex<Option<gst_gl::GLDisplay>>,
+    gst_context: Mutex<Option<gst_gl::GLContext>>,
 }
 
 impl FlutterTextureSink {
-    pub fn new() -> Self {
+    pub fn new(initialized_signal: Arc<AtomicBool>) -> Self {
         let appsink = gst_app::AppSink::builder()
             .caps(
                 &gst_video::VideoCapsBuilder::new()
@@ -100,6 +104,9 @@ impl FlutterTextureSink {
             glsink,
             next_frame: Default::default(),
             cached_textures: Default::default(),
+            initialized_signal,
+            gst_context: Default::default(),
+            gst_display: Default::default(),
         }
     }
     pub fn video_sink(&self) -> gst::Element {
@@ -107,56 +114,53 @@ impl FlutterTextureSink {
     }
 
     pub fn connect(&self, bus: &gst::Bus, fl_config: FlutterConfig) {
-        let (gst_gl_display, gst_gl_context) = GL_MANAGER
-            .with_borrow(|manager| manager.get_context(fl_config.fl_engine_handle))
-            .unwrap();
+        let (gst_gl_display, shared_context) =
+            GL_MANAGER.with_borrow(|manager| manager.get_context(fl_config.fl_engine_handle).unwrap());
+        self.gst_display
+            .lock()
+            .unwrap()
+            .replace(gst_gl_display.clone());
+        self.gst_context
+            .lock()
+            .unwrap()
+            .replace(shared_context.clone());
 
-        gst_gl_context
-            .activate(true)
-            .expect("could not activate GStreamer GL context");
-        gst_gl_context
-            .fill_info()
-            .expect("failed to fill GL info for wrapped context");
+        self.appsink
+            .static_pad("sink")
+            .unwrap()
+            .add_probe(PadProbeType::QUERY_DOWNSTREAM, move |pad, probe_info| {
+                if let Some(q) = probe_info.query_mut() {
+                    if let QueryViewMut::Context(cq) = q.view_mut() {
+                        trace!("Setting GL context for appsink");
 
-        bus.set_sync_handler({
-            let gst_gl_context = gst_gl_context.clone();
-            move |_, msg| {
-                match msg.view() {
-                    gst::MessageView::NeedContext(ctx) => {
-                        let ctx_type = ctx.context_type();
-                        if ctx_type == *gst_gl::GL_DISPLAY_CONTEXT_TYPE {
-                            if let Some(element) = msg
-                                .src()
-                                .and_then(|source| source.downcast_ref::<gst::Element>())
-                            {
-                                let gst_context = gst::Context::new(ctx_type, true);
-                                gst_context.set_gl_display(&gst_gl_display);
-                                element.set_context(&gst_context);
-                            }
-                        } else if ctx_type == "gst.gl.app_context" {
-                            if let Some(element) = msg
-                                .src()
-                                .and_then(|source| source.downcast_ref::<gst::Element>())
-                            {
-                                let mut gst_context = gst::Context::new(ctx_type, true);
-                                {
-                                    let gst_context = gst_context.get_mut().unwrap();
-                                    let structure = gst_context.structure_mut();
-                                    structure.set("context", &gst_gl_context);
-                                }
-                                element.set_context(&gst_context);
-                            }
+                        if gst_gl::functions::gl_handle_context_query(
+                            &pad.parent_element().unwrap(),
+                            cq,
+                            Some(&gst_gl_display),
+                            Some(&shared_context),
+                            None::<&gst_gl::GLContext>,
+                        ) {
+                            return PadProbeReturn::Handled;
                         }
-                    }
-                    _ => (),
+                    };
                 }
+                PadProbeReturn::Ok
+            })
+            .unwrap();
+        // bus.set_sync_handler({
+        //     move |_, msg| {
+        //         match msg.view() {
+        //              => trace!("Message: {:?}", msg),
+        //         }
 
-                gst::BusSyncReply::Drop
-            }
-        });
+        //         gst::BusSyncReply::Drop
+        //     }
+        // });
 
         let sendable_txt_clone = fl_config.sendable_txt.clone();
         let next_frame_ref = self.next_frame.clone();
+
+        let initialized_sig_ref = self.initialized_signal.clone();
 
         self.appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
@@ -197,12 +201,18 @@ impl FlutterTextureSink {
                         error!("Got invalid caps");
                         return Err(gst::FlowError::NotNegotiated);
                     };
+
                     if let Ok(frame) = gst_gl::GLVideoFrame::from_buffer_readable(buffer, &info) {
                         if let Ok(native_frame) = LinuxNativeTexture::from_gst(frame) {
+                            trace!("Got a frame");
                             let next_frame_ref = next_frame_ref.clone();
                             *next_frame_ref.lock().unwrap() = Some(native_frame);
                             // mark the frame as available before sending it to the main thread
                             sendable_txt_clone.mark_frame_available();
+                            // if not initialized yet, mark it as initialized
+                            if !initialized_sig_ref.load(atomic::Ordering::Relaxed) {
+                                initialized_sig_ref.store(true, atomic::Ordering::Relaxed);
+                            }
                         }
                     }
 
@@ -214,6 +224,7 @@ impl FlutterTextureSink {
 
     fn get_current_frame_callback(&self) -> anyhow::Result<BoxedGLTexture> {
         trace!("on get_current_frame_callback");
+
         let curr_frame = self.next_frame.lock().unwrap();
         curr_frame
             .as_ref()

@@ -28,6 +28,8 @@ gst-base = { package = "gstreamer-base", version = "0.23.4" }
 gst-video = { package = "gstreamer-video", version = "0.23.4" }
 gst-app = { package = "gstreamer-app", version = "0.23.4" }
 gst-gl = { package = "gstreamer-gl", version = "0.23.4" }
+gst-gl-egl = { package = "gstreamer-gl-egl", version = "0.23.4" }
+
 gst-gl-x11 = { package = "gstreamer-gl-x11", version = "0.23.4" }
 
 thread_local = "1.1.8"
@@ -39,6 +41,10 @@ gdk = "0.17.1"
 gdk-sys = "0.17.0"
 gdkwayland = "0.17.0"
 gdkx11 = "0.17.0"
+
+gst-gl-egl = { package = "gstreamer-gl-egl", version = "0.23.4" }
+glutin_egl_sys = "0.7.1"
+egli = { git = "https://github.com/Nercury/egli-rs.git", branch = "master" }
 
 # GLib (GIMP Library) dependencies
 glib = "0.17.4"

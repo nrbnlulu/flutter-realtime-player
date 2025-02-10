@@ -1,16 +1,17 @@
 mod linux {
     use gdk::glib::{translate::FromGlibPtrNone, Cast};
     use glow::HasContext;
-    use gst::glib::translate::FromGlibPtrFull;
-    use gst_gl::GLVideoFrameExt;
+    use gst::glib::translate::{FromGlibPtrFull, ToGlibPtr};
+    use gst_gl::{ffi::gst_gl_context_activate, prelude::GLContextExt, GLVideoFrameExt};
     use gst_video::VideoFrameExt;
     use irondash_texture::BoxedGLTexture;
-    use log::{info, trace};
+    use log::{debug, info, trace};
 
     use crate::core::fluttersink::{gltexture::GLTexture, utils};
     use std::{
         cell::RefCell,
         collections::HashMap,
+        ptr,
         sync::{Arc, Mutex},
     };
 
@@ -158,22 +159,30 @@ mod linux {
                     gtk_sys::gtk_widget_get_type(),
                 ))
             };
+            // usually its already realized, in the future we might want to connect to the realize signal.
             let window = unsafe { gtk_sys::gtk_widget_get_parent_window(gtk_widget) };
-            let display = unsafe { gdk_sys::gdk_window_get_display(window) };
+            let shared_ctx = _glib_err_to_result(gdk_sys::gdk_window_create_gl_context, window)?;
+            // realize the context as per https://docs.gtk.org/gdk3/method.Window.create_gl_context.html
+            let res = _glib_err_to_result(gdk_sys::gdk_gl_context_realize, shared_ctx)?;
+            debug!("GL context realized: {:?}", gbool_to_bool(res));
+            // get the display of the context
+            let display = unsafe { gdk_sys::gdk_gl_context_get_display(shared_ctx) };
             let display = unsafe { gdk::Display::from_glib_none(display) };
             trace!("Creating GL context for window: {:?}", window);
             trace!("Creating GL context for display: {:?}", display);
 
-            initialize_x11(&display, window)
+            initialize_x11(&display, shared_ctx)
         }
     }
 
+
     fn initialize_x11(
         display: &gdk::Display,
-        _gdk_window: *mut gdk_sys::GdkWindow,
+        gdk_context: *mut gdk_sys::GdkGLContext,
     ) -> anyhow::Result<(gst_gl::GLDisplay, gst_gl::GLContext)> {
         info!("Initializing GL for X11 backend and display");
-
+  
+    
         unsafe {
             use glib::translate::*;
             let display: &gdkx11::X11Display =
@@ -184,20 +193,19 @@ mod linux {
                 gst_gl_x11::ffi::gst_gl_display_x11_new_with_display(x11_display as _);
             let gst_display =
                 gst_gl::GLDisplay::from_glib_full(gst_display as *mut gst_gl::ffi::GstGLDisplay);
-            let current_gdk_gl_ctx = gdk_sys::gdk_gl_context_get_current();
-
             let wrapped_context = gst_gl::GLContext::new_wrapped(
                 &gst_display,
-                current_gdk_gl_ctx as _,
-                gst_gl::GLPlatform::EGL,
+                gdk_context as _,
+                gst_gl::GLPlatform::GLX,
                 gst_gl::GLAPI::OPENGL,
-            );
-            let wrapped_context =
-                wrapped_context.ok_or(anyhow::anyhow!("Failed to create wrapped GL context"))?;
-
+            ).ok_or(anyhow::anyhow!("Failed to create wrapped GL context"))?;
+            trace!("Created wrapped GL context gles2: {:?}", wrapped_context);
+            wrapped_context.activate(true)?;
+            wrapped_context.fill_info().expect("Failed to fill info");
             Ok((gst_display, wrapped_context))
         }
     }
+
 
     #[cfg(feature = "wayland")]
     fn initialize_waylandegl(
@@ -239,6 +247,21 @@ mod linux {
         }
     }
 
+    fn _glib_err_to_result<T, TArg>(
+        callback: unsafe extern "C" fn(TArg, *mut *mut glib_sys::GError) -> T,
+        arg: TArg,
+    ) -> anyhow::Result<T> {
+        let mut error: *mut glib_sys::GError = ptr::null_mut();
+        let result = unsafe { callback(arg, &mut error) };
+        if !error.is_null() {
+            let error: glib::Error = unsafe { glib::translate::from_glib_full(error) };
+            return Err(anyhow::anyhow!("Failed to create GL context: {:?}", error));
+        }
+        Ok(result)
+    }
+    fn gbool_to_bool(gbool: glib::ffi::gboolean) -> bool {
+        gbool != glib::ffi::GFALSE
+    }
     thread_local! {
         pub static GL_MANAGER: RefCell<GlManager> = RefCell::new(GlManager::new());
     }
