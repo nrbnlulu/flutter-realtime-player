@@ -71,7 +71,6 @@ class _RTSPStreamState extends State<RTSPStream> {
     _controller.addListener(() {
       setState(() {});
     });
-    _controller.
     _controller.setLooping(true);
     _controller.initialize().then((_) => setState(() {}));
     _controller.play();
