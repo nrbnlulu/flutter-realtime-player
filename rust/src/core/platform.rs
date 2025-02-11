@@ -163,8 +163,9 @@ mod linux {
             let window = unsafe { gtk_sys::gtk_widget_get_parent_window(gtk_widget) };
             let shared_ctx = _glib_err_to_result(gdk_sys::gdk_window_create_gl_context, window)?;
             // realize the context as per https://docs.gtk.org/gdk3/method.Window.create_gl_context.html
-            let res = _glib_err_to_result(gdk_sys::gdk_gl_context_realize, shared_ctx)?;
-            debug!("GL context realized: {:?}", gbool_to_bool(res));
+            let res = gbool_to_bool(_glib_err_to_result(gdk_sys::gdk_gl_context_realize, shared_ctx)?);
+            debug!("GL context realized: {:?}", res);
+            unsafe { gdk_sys::gdk_gl_context_make_current(shared_ctx) };
             // get the display of the context
             let display = unsafe { gdk_sys::gdk_gl_context_get_display(shared_ctx) };
             let display = unsafe { gdk::Display::from_glib_none(display) };

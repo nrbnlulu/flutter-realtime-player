@@ -1,22 +1,15 @@
-import 'dart:developer';
 import 'dart:ffi';
-import 'dart:isolate';
-import 'package:video_player/video_player.dart';
 
 import 'package:flutter/material.dart';
 import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'package:my_app/src/rust/api/simple.dart' as rlib;
 import 'package:my_app/src/rust/frb_generated.dart';
-import 'package:fvp/fvp.dart' as fvp;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await RustLib.init();
   rlib.flutterGstreamerInit(ffiPtr: NativeApi.initializeApiDLData.address);
-  fvp.registerWith(options: {
-    "lowLatency": 1,
-  });
   runApp(const MyApp());
 }
 
@@ -41,7 +34,7 @@ class MyApp extends StatelessWidget {
         SizedBox(
           height: 250,
           width: 400,
-          child: RTSPStream(url: url),
+          child: NewWidget(url: url),
         ),
         ],
       )
@@ -49,53 +42,10 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class RTSPStream extends StatefulWidget {
-  final String url;
-  const RTSPStream({
-    required this.url,
-    super.key,
-  });
-
-  @override
-  State<RTSPStream> createState() => _RTSPStreamState();
-}
-
-class _RTSPStreamState extends State<RTSPStream> {
-  late VideoPlayerController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url),
-        formatHint: VideoFormat.hls, videoPlayerOptions: VideoPlayerOptions());
-    _controller.addListener(() {
-      setState(() {});
-    });
-    _controller.setLooping(true);
-    _controller.initialize().then((_) => setState(() {}));
-    _controller.play();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.bottomCenter,
-      children: <Widget>[
-        VideoPlayer(_controller),
-        VideoProgressIndicator(_controller, allowScrubbing: true),
-      ],
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-}
-
 class NewWidget extends StatelessWidget {
+  final String url;
   const NewWidget({
+    required this.url,
     super.key,
   });
 

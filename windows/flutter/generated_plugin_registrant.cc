@@ -6,12 +6,9 @@
 
 #include "generated_plugin_registrant.h"
 
-#include <fvp/fvp_plugin_c_api.h>
 #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
-  FvpPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("FvpPluginCApi"));
   IrondashEngineContextPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("IrondashEngineContextPluginCApi"));
 }

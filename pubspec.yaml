@@ -39,8 +39,6 @@ dependencies:
     path: rust_builder
   flutter_rust_bridge: 2.7.0
   irondash_engine_context: ^0.5.4
-  fvp: ^0.29.0
-  video_player: ^2.9.2
 
 dev_dependencies:
   flutter_test:
