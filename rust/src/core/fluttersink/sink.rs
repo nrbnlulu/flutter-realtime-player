@@ -20,13 +20,6 @@ use std::sync::{
 };
 use std::sync::{Arc, LazyLock};
 
-pub(crate) static CAT: LazyLock<gst::DebugCategory> = LazyLock::new(|| {
-    gst::DebugCategory::new(
-        "fluttertexturesink",
-        gst::DebugColorFlags::empty(),
-        Some("Flutter texture sink"),
-    )
-});
 
 struct StreamConfig {
     info: Option<super::frame::VideoInfo>,
@@ -81,6 +74,7 @@ pub struct FlutterTextureSink {
 
 impl FlutterTextureSink {
     pub fn new(initialized_signal: Arc<AtomicBool>) -> Self {
+        let gl_caps = D3D11;
         let appsink = gst_app::AppSink::builder()
             .caps(
                 &gst_video::VideoCapsBuilder::new()
@@ -90,14 +84,23 @@ impl FlutterTextureSink {
                     .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
                     .build(),
             )
+
             .enable_last_sample(false)
             .max_buffers(1u32)
             .build();
-
+        
+        #[cfg(target_os = "linux")]
         let glsink = gst::ElementFactory::make("glsinkbin")
             .property("sink", &appsink)
             .build()
             .expect("Fatal: Unable to create glsink");
+        // on windows use d3d11upload
+        #[cfg((target_os = "windows"))]
+        let glsink =    gst::ElementFactory::make("d3d11upload")
+            .property("sink", &appsink)
+            .build()
+            .expect("Fatal: Unable to create d3d11upload");
+            
 
         Self {
             appsink: appsink.upcast(),
