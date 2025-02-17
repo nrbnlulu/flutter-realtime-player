@@ -1,3 +1,6 @@
+use super::types::Orientation;
+
+#[cfg(target_os = "linux")]
 mod linux {
     use gdk::glib::{translate::FromGlibPtrNone, Cast};
     use glow::HasContext;
@@ -7,7 +10,7 @@ mod linux {
     use irondash_texture::BoxedGLTexture;
     use log::{debug, info, trace};
 
-    use crate::core::fluttersink::{gltexture::GLTexture, utils};
+    use crate::core::fluttersink::utils;
     use std::{
         cell::RefCell,
         collections::HashMap,
@@ -18,6 +21,39 @@ mod linux {
     use irondash_engine_context::EngineContext;
 
     pub type GlCtx = gst_gl::GLContext;
+    use irondash_texture::GLTextureProvider;
+
+    use crate::core::gl::{self};
+
+    #[derive(Debug, Clone)]
+    pub struct GLTexture {
+        pub target: u32,
+        pub name_raw: u32,
+        pub width: i32,
+        pub height: i32,
+    }
+
+    impl GLTexture {
+        pub fn new(name_raw: u32, width: i32, height: i32) -> Self {
+            Self {
+                target: gl::TEXTURE_2D,
+                name_raw,
+                width,
+                height,
+            }
+        }
+    }
+
+    impl GLTextureProvider for GLTexture {
+        fn get(&self) -> irondash_texture::GLTexture {
+            irondash_texture::GLTexture {
+                target: self.target,
+                name: &self.name_raw,
+                width: self.width,
+                height: self.height,
+            }
+        }
+    }
 
     pub struct LinuxNativeTexture {
         pub texture_id: u32,
@@ -41,7 +77,7 @@ mod linux {
         }
         pub fn from_gst(
             frame: gst_gl::GLVideoFrame<gst_gl::gl_video_frame::Readable>,
-        ) -> anyhow::Result<NativeFrameType> {
+        ) -> anyhow::Result<NativeTextureType> {
             let texture_id = frame.texture_id(0)?;
 
             Ok(LinuxNativeTexture {
@@ -163,7 +199,10 @@ mod linux {
             let window = unsafe { gtk_sys::gtk_widget_get_parent_window(gtk_widget) };
             let shared_ctx = _glib_err_to_result(gdk_sys::gdk_window_create_gl_context, window)?;
             // realize the context as per https://docs.gtk.org/gdk3/method.Window.create_gl_context.html
-            let res = gbool_to_bool(_glib_err_to_result(gdk_sys::gdk_gl_context_realize, shared_ctx)?);
+            let res = gbool_to_bool(_glib_err_to_result(
+                gdk_sys::gdk_gl_context_realize,
+                shared_ctx,
+            )?);
             debug!("GL context realized: {:?}", res);
             unsafe { gdk_sys::gdk_gl_context_make_current(shared_ctx) };
             // get the display of the context
@@ -176,14 +215,12 @@ mod linux {
         }
     }
 
-
     fn initialize_x11(
         display: &gdk::Display,
         gdk_context: *mut gdk_sys::GdkGLContext,
     ) -> anyhow::Result<(gst_gl::GLDisplay, gst_gl::GLContext)> {
         info!("Initializing GL for X11 backend and display");
-  
-    
+
         unsafe {
             use glib::translate::*;
             let display: &gdkx11::X11Display =
@@ -199,14 +236,14 @@ mod linux {
                 gdk_context as _,
                 gst_gl::GLPlatform::GLX,
                 gst_gl::GLAPI::OPENGL,
-            ).ok_or(anyhow::anyhow!("Failed to create wrapped GL context"))?;
+            )
+            .ok_or(anyhow::anyhow!("Failed to create wrapped GL context"))?;
             trace!("Created wrapped GL context gles2: {:?}", wrapped_context);
             wrapped_context.activate(true)?;
             wrapped_context.fill_info().expect("Failed to fill info");
             Ok((gst_display, wrapped_context))
         }
     }
-
 
     #[cfg(feature = "wayland")]
     fn initialize_waylandegl(
@@ -267,5 +304,72 @@ mod linux {
         pub static GL_MANAGER: RefCell<GlManager> = RefCell::new(GlManager::new());
     }
 }
-
+use gst_video::VideoInfo;
+#[cfg(target_os = "linux")]
 pub use linux::*;
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::cell::RefCell;
+
+    use gst_video::VideoInfo;
+
+    use crate::core::types::Orientation;
+
+    struct WindowsTextureProvider {
+        current_texture: RefCell<Option<NativeTextureType>>,
+    }
+    impl WindowsTextureProvider {
+        pub fn set_current_texture(&self, texture: irondash_texture::ID3D11Texture2D) {
+            self.current_texture.replace(Some(Box::new(texture)));
+        }
+
+        fn on_d3d11_present(&self, rtv_raw: glib::Pointer) {
+            self.set_current_texture(irondash_texture::ID3D11Texture2D(rtv_raw as *mut _));
+        }
+    }
+    unsafe impl Send for WindowsTextureProvider {}
+    unsafe impl Sync for WindowsTextureProvider {}
+
+    impl irondash_texture::PayloadProvider<NativeTextureType> for WindowsTextureProvider {
+        fn get_payload(&self) -> NativeTextureType {
+            unimplemented!("get_payload")
+        }
+    }
+
+    impl super::PlatformTextureProvider for WindowsTextureProvider {
+        fn on_frame_received(
+            _buffer: &gst::Buffer,
+            _info: &VideoInfo,
+            _orientation: Orientation,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    pub(crate) type NativeTextureType = Box<irondash_texture::ID3D11Texture2D>;
+    pub(crate) type NativeTextureProviderType = irondash_texture::ID3D11Texture2D;
+}
+
+#[cfg(target_os = "windows")]
+use windows::{NativeTextureProviderType, NativeTextureType};
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum TextureCacheId {
+    Memory(usize),
+    GL(usize),
+}
+
+struct WithFrameInfo<T> {
+    frame: T,
+    info: VideoInfo,
+    orientation: Orientation,
+}
+
+pub trait PlatformTextureProvider: irondash_texture::PayloadProvider<NativeTextureType> {
+    fn on_frame_received(
+        buffer: &gst::Buffer,
+        info: &VideoInfo,
+        orientation: Orientation,
+    ) -> anyhow::Result<()>;
+}

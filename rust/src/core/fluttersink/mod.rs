@@ -1,7 +1,5 @@
 mod frame;
-pub mod gltexture;
 pub(super) mod sink;
-pub mod types;
 pub mod utils;
 use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},

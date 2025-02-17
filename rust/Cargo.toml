@@ -21,6 +21,11 @@ flume = "0.11.1"
 simple-log = "2.1.1"
 irondash_engine_context = "0.5.0"
 lazy_static = "1.5.0"
+# GLib (GIMP Library) dependencies
+glib = "0.17.4"
+glib-macros = "0.17.4"
+glib-sys = "0.17.4"
+gobject-sys = "0.17.4"
 
 # GStreamer dependencies
 gst = { package = "gstreamer", version = "0.23.4" }
@@ -30,8 +35,22 @@ gst-app = { package = "gstreamer-app", version = "0.23.4" }
 
 thread_local = "1.1.8"
 
+
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = {version = "0.61.0", features = ["Win32_System_Com", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi"]}
+windows = { version = "0.59.0", features = [
+    "Win32_Graphics_Direct3D11",
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Imaging",
+    "Win32_System_Com",
+    "Foundation_Numerics",
+] }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -48,11 +67,7 @@ gst-gl-x11 = { package = "gstreamer-gl-x11", version = "0.23.4" }
 glutin_egl_sys = "0.7.1"
 egli = { git = "https://github.com/Nercury/egli-rs.git", branch = "master" }
 
-# GLib (GIMP Library) dependencies
-glib = "0.17.4"
-glib-macros = "0.17.4"
-glib-sys = "0.17.4"
-gobject-sys = "0.17.4"
+
 # OpenGL loader
 gl_loader = "0.1.2"
 

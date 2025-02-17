@@ -12,6 +12,7 @@ use gst::{prelude::*, PadProbeReturn, PadProbeType, QueryViewMut};
 use gst_gl::prelude::{ContextGLExt, GLContextExt};
 use irondash_texture::BoxedGLTexture;
 use log::{debug, error, trace, warn};
+use windows::core::Interface;
 
 use std::collections::HashMap;
 use std::sync::{
@@ -19,7 +20,6 @@ use std::sync::{
     Mutex,
 };
 use std::sync::{Arc, LazyLock};
-
 
 struct StreamConfig {
     info: Option<super::frame::VideoInfo>,
@@ -84,11 +84,10 @@ impl FlutterTextureSink {
                     .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
                     .build(),
             )
-
             .enable_last_sample(false)
             .max_buffers(1u32)
             .build();
-        
+
         #[cfg(target_os = "linux")]
         let glsink = gst::ElementFactory::make("glsinkbin")
             .property("sink", &appsink)
@@ -96,11 +95,43 @@ impl FlutterTextureSink {
             .expect("Fatal: Unable to create glsink");
         // on windows use d3d11upload
         #[cfg((target_os = "windows"))]
-        let glsink =    gst::ElementFactory::make("d3d11upload")
-            .property("sink", &appsink)
-            .build()
-            .expect("Fatal: Unable to create d3d11upload");
-            
+        {
+            // Needs BGRA or RGBA swapchain for D2D interop,
+            // and "present" signal must be explicitly enabled
+            let glsink = gst::ElementFactory::make("d3d11videosink")
+                .property("emit-present", true)
+                .property_from_str("display-format", "DXGI_FORMAT_B8G8R8A8_UNORM")
+                .build()
+                .unwrap();
+
+            // Listen "present" signal and draw overlay from the callback
+            // Required operations here:
+            // 1) Gets IDXGISurface and ID3D11Texture2D interface from
+            //    given ID3D11RenderTargetView COM object
+            //   - ID3D11Texture2D: To get texture resolution
+            //   - IDXGISurface: To create Direct2D render target
+            // 2) Creates or reuses IDWriteTextLayout interface
+            //   - This object represents text layout we want to draw on render target
+            // 3) Draw rectangle (overlay background) and text on render target
+            //
+            // NOTE: ID2D1Factory, IDWriteFactory, IDWriteTextFormat, and
+            // IDWriteTextLayout objects are device-independent. Which can be created
+            // earlier instead of creating them in the callback.
+            // But ID2D1RenderTarget is a device-dependent resource.
+            // The client should not hold the d2d render target object outside of
+            // this callback scope because the resource must be cleared before
+            // releasing/resizing DXGI swapchain.
+            videosink.connect_closure(
+                "present",
+                false,
+                glib::closure!(move |_sink: &gst::Element,
+                                     _device: &gst::Object,
+                                     rtv_raw: glib::Pointer| {
+                    windows_present_callback(rtv_raw);
+
+                                     }),
+            );
+        }
 
         Self {
             appsink: appsink.upcast(),
@@ -112,13 +143,14 @@ impl FlutterTextureSink {
             gst_display: Default::default(),
         }
     }
+
     pub fn video_sink(&self) -> gst::Element {
         self.glsink.clone().into()
     }
 
     pub fn connect(&self, bus: &gst::Bus, fl_config: FlutterConfig) {
-        let (gst_gl_display, shared_context) =
-            GL_MANAGER.with_borrow(|manager| manager.get_context(fl_config.fl_engine_handle).unwrap());
+        let (gst_gl_display, shared_context) = GL_MANAGER
+            .with_borrow(|manager| manager.get_context(fl_config.fl_engine_handle).unwrap());
         self.gst_display
             .lock()
             .unwrap()
