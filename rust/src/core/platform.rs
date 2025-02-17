@@ -316,7 +316,7 @@ mod windows {
 
     use crate::core::types::Orientation;
 
-    struct WindowsTextureProvider {
+   pub struct WindowsTextureProvider {
         current_texture: RefCell<Option<NativeTextureType>>,
     }
     impl WindowsTextureProvider {
@@ -330,14 +330,23 @@ mod windows {
     }
     unsafe impl Send for WindowsTextureProvider {}
     unsafe impl Sync for WindowsTextureProvider {}
+    pub type GFBD = irondash_texture::BoxedTextureDescriptor<irondash_texture::ID3D11Texture2D>;
 
-    impl irondash_texture::PayloadProvider<NativeTextureType> for WindowsTextureProvider {
-        fn get_payload(&self) -> NativeTextureType {
+    impl irondash_texture::PayloadProvider<GFBD> for WindowsTextureProvider {
+        fn get_payload(&self) -> Box<NativeTextureType> {
             unimplemented!("get_payload")
         }
     }
+    impl irondash_texture::PlatformTextureWithProvider<GFBD> for WindowsTextureProvider {
+        fn create_texture(
+            engine_handle: i64,
+            payload_provider: Arc<dyn irondash_texture::PayloadProvider<GFBD>>,
+        ) -> anyhow::Result<irondash_texture::PlatformTexture<GFBD>>{
+            unimplemented!("create_texture")
+        }
+    }
 
-    impl super::PlatformTextureProvider for WindowsTextureProvider {
+    impl super::PlatformNativeTextureProviderTrait for WindowsTextureProvider {
         fn on_frame_received(
             _buffer: &gst::Buffer,
             _info: &VideoInfo,
@@ -348,11 +357,11 @@ mod windows {
     }
 
     pub(crate) type NativeTextureType = Box<irondash_texture::ID3D11Texture2D>;
-    pub(crate) type NativeTextureProviderType = irondash_texture::ID3D11Texture2D;
+
 }
 
 #[cfg(target_os = "windows")]
-use windows::{NativeTextureProviderType, NativeTextureType};
+pub(crate) use windows::{NativeTextureType, WindowsTextureProvider as PlatformNativeTextureProvider};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum TextureCacheId {
@@ -366,7 +375,7 @@ struct WithFrameInfo<T> {
     orientation: Orientation,
 }
 
-pub trait PlatformTextureProvider: irondash_texture::PayloadProvider<NativeTextureType> {
+trait PlatformNativeTextureProviderTrait: irondash_texture::PayloadProvider<GFBD> {
     fn on_frame_received(
         buffer: &gst::Buffer,
         info: &VideoInfo,

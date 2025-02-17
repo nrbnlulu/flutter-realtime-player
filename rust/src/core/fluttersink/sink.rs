@@ -1,18 +1,10 @@
-use crate::core::fluttersink::gltexture::GLTexture;
 use crate::core::fluttersink::utils;
-use crate::core::gl::TEXTURE;
-use crate::core::platform::{LinuxNativeTexture, NativeFrameType, GL_MANAGER};
+use crate::core::platform::PlatformNativeTextureProvider;
+use crate::core::types;
 
-use super::frame::{GstMappedFrame, ResolvedFrame, TextureCacheId, VideoInfo};
 use super::utils::LogErr;
-use super::{types, FrameSender, SinkEvent};
-
-use gdkx11::x11::xlib::Atom;
 use gst::{prelude::*, PadProbeReturn, PadProbeType, QueryViewMut};
-use gst_gl::prelude::{ContextGLExt, GLContextExt};
-use irondash_texture::BoxedGLTexture;
 use log::{debug, error, trace, warn};
-use windows::core::Interface;
 
 use std::collections::HashMap;
 use std::sync::{
@@ -20,24 +12,6 @@ use std::sync::{
     Mutex,
 };
 use std::sync::{Arc, LazyLock};
-
-struct StreamConfig {
-    info: Option<super::frame::VideoInfo>,
-    /// Orientation from a global scope tag
-    global_orientation: types::Orientation,
-    /// Orientation from a stream scope tag
-    stream_orientation: Option<types::Orientation>,
-}
-
-impl Default for StreamConfig {
-    fn default() -> Self {
-        StreamConfig {
-            info: None,
-            global_orientation: types::Orientation::Rotate0,
-            stream_orientation: None,
-        }
-    }
-}
 
 pub(crate) struct FlutterConfig {
     fl_txt_id: i64,
@@ -59,23 +33,17 @@ impl FlutterConfig {
     }
 }
 
-pub type ArcSendableTexture =
-    Arc<irondash_texture::SendableTexture<irondash_texture::BoxedGLTexture>>;
-
 pub struct FlutterTextureSink {
     appsink: gst_app::AppSink,
     glsink: gst::Element,
-    next_frame: Arc<Mutex<Option<NativeFrameType>>>,
-    cached_textures: Mutex<HashMap<TextureCacheId, NativeFrameType>>,
     initialized_signal: Arc<AtomicBool>,
-    gst_display: Mutex<Option<gst_gl::GLDisplay>>,
-    gst_context: Mutex<Option<gst_gl::GLContext>>,
 }
 
 impl FlutterTextureSink {
     pub fn new(initialized_signal: Arc<AtomicBool>) -> Self {
-        let gl_caps = D3D11;
-        let appsink = gst_app::AppSink::builder()
+        let appsink = gst_app::AppSink::builder();
+        #[cfg(target_os = "linux")]
+        let appsink = appsink
             .caps(
                 &gst_video::VideoCapsBuilder::new()
                     .features([gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY])
@@ -87,12 +55,15 @@ impl FlutterTextureSink {
             .enable_last_sample(false)
             .max_buffers(1u32)
             .build();
+        #[cfg(target_os = "windows")]
+        let appsink = appsink.build();
 
         #[cfg(target_os = "linux")]
         let glsink = gst::ElementFactory::make("glsinkbin")
             .property("sink", &appsink)
             .build()
             .expect("Fatal: Unable to create glsink");
+
         // on windows use d3d11upload
         #[cfg((target_os = "windows"))]
         {
@@ -128,8 +99,7 @@ impl FlutterTextureSink {
                                      _device: &gst::Object,
                                      rtv_raw: glib::Pointer| {
                     windows_present_callback(rtv_raw);
-
-                                     }),
+                }),
             );
         }
 
@@ -270,13 +240,8 @@ impl FlutterTextureSink {
     fn get_fallback_texture(&self) -> BoxedGLTexture {
         unimplemented!("fallback texture")
     }
-}
 
-unsafe impl Sync for FlutterTextureSink {}
-unsafe impl Send for FlutterTextureSink {}
-
-impl irondash_texture::PayloadProvider<BoxedGLTexture> for FlutterTextureSink {
-    fn get_payload(&self) -> BoxedGLTexture {
-        self.get_current_frame_callback().log_err().unwrap()
+    pub fn get_native_texture_provider(&self) -> Arc<PlatformNativeTextureProvider> {
+        unimplemented!("get_texture_provider")
     }
 }

@@ -1,4 +1,3 @@
-mod frame;
 pub(super) mod sink;
 pub mod utils;
 use std::{
@@ -6,7 +5,6 @@ use std::{
     thread,
 };
 
-use frame::ResolvedFrame;
 use glib::types::StaticType;
 use gst::{
     glib::object::{Cast, ObjectExt},
@@ -15,11 +13,6 @@ use gst::{
 };
 use log::{error, info};
 use sink::{ArcSendableTexture, FlutterConfig, FlutterTextureSink};
-
-pub(crate) enum SinkEvent {
-    FrameChanged(ResolvedFrame),
-}
-pub(crate) type FrameSender = flume::Sender<SinkEvent>;
 
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
@@ -31,8 +24,10 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     let texture_id: i64 = utils::invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
         let flutter_sink = Arc::new(FlutterTextureSink::new(initialized_sig_clone));
 
-        let texture =
-            irondash_texture::Texture::new_with_provider(engine_handle, flutter_sink.clone())?;
+        let texture = irondash_texture::Texture::new_with_provider(
+            engine_handle,
+            flutter_sink.get_native_texture_provider(),
+        )?;
         let texture_id = texture.id();
 
         let pipeline = gst::ElementFactory::make("playbin")
