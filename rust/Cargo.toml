@@ -9,9 +9,13 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.7.0"
-irondash_texture = { version = "0.5.0" }
-irondash_run_loop = { version = "0.5.0" }
-irondash_dart_ffi = "0.2.0"
+
+# irondash
+irondash_texture = { git = "https://github.com/nrbnlulu/irondash.git", branch = "windows-for-gstreamer"}
+irondash_run_loop = { git = "https://github.com/nrbnlulu/irondash.git", branch = "windows-for-gstreamer" }
+irondash_dart_ffi = { git = "https://github.com/nrbnlulu/irondash.git", branch = "windows-for-gstreamer" }
+
+
 simple_logger = "2.1"
 log = "0.4"
 anyhow = "1.0.81"
