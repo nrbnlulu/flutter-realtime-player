@@ -310,33 +310,20 @@ pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use std::cell::RefCell;
+    use gst_video::VideoInfo;
+    use std::{cell::RefCell, sync::Arc};
     use windows::{
         core::*,
-        Win32::Graphics::{
-            Direct3D11::*,
-            Dxgi::*,
-        },
+        Win32::Graphics::{Direct3D11::*, Dxgi::*},
     };
-    use gst_video::VideoInfo;
 
     use crate::core::types::Orientation;
 
-    use super::WithFrameInfo;
+    use super::{BoxedNativeTextureType, WithFrameInfo};
 
-    #[derive(Debug, Clone)]
-    pub struct NativeTextureType {
-        handle: irondash_texture::ID3D11Texture2D,
-    }
-    impl NativeTextureType {
-        pub fn from_gpointer(handle: glib::ffi::gpointer) -> Self {
-            Self {
-                handle: irondash_texture::ID3D11Texture2D(handle as *mut _),
-            }
-        }
-    }
+    pub type NativeTextureType = irondash_texture::ID3D11Texture2D;
 
-    type NativeFrame = WithFrameInfo<NativeTextureType>;
+    pub type NativeFrame = WithFrameInfo<NativeTextureType>;
     pub struct WindowsTextureProvider {
         current_texture: RefCell<Option<NativeFrame>>,
     }
@@ -357,7 +344,7 @@ mod windows {
             _device: &gst::Object,
             rtv_raw: glib::Pointer,
         ) {
-
+            let frame;
             unsafe {
                 let rtv = ID3D11RenderTargetView::from_raw_borrowed(&rtv_raw).unwrap();
                 let resource = rtv.GetResource().unwrap();
@@ -373,38 +360,37 @@ mod windows {
                     desc.Width as u32,
                     desc.Height as u32,
                 );
-                let frame = WithFrameInfo{
-                    frame: NativeTextureType {
-                        handle: irondash_texture::ID3D11Texture2D(rtv_raw as *mut _),
-                    },
-                    info: video_info
-                        .build()
-                        .unwrap(),
+                frame = WithFrameInfo {
+                    frame: irondash_texture::ID3D11Texture2D(rtv_raw as *mut _),
+
+                    info: video_info.build().unwrap(),
                     orientation: Orientation::Auto,
                 };
-                self.set_current_texture(frame);
-
+            }
+            self.current_texture.replace(Some(frame));
         }
-    }
     }
     unsafe impl Send for WindowsTextureProvider {}
     unsafe impl Sync for WindowsTextureProvider {}
 
-    impl irondash_texture::PayloadProvider<WithFrameInfo<NativeTextureType>>
+
+    impl irondash_texture::PayloadProvider<Box<NativeFrame>>
         for WindowsTextureProvider
     {
-        fn get_payload(&self) -> NativeFrame {
+        fn get_payload(&self) -> Box<NativeFrame> {
             let current_frame = self.current_texture.borrow();
-            current_frame.as_ref().unwrap().clone()
+            // the thought for box here is to support Drop trait for custom cleanup
+            // currently we don't have any cleanup to do
+            Box::new(current_frame.as_ref().unwrap().clone())
         }
     }
 
-    impl irondash_texture::TextureDescriptorProvider<irondash_texture::ID3D11Texture2D>
+    impl irondash_texture::TextureDescriptorProvider<NativeTextureType>
         for WithFrameInfo<NativeTextureType>
     {
-        fn get(&self) -> irondash_texture::TextureDescriptor<irondash_texture::ID3D11Texture2D> {
+        fn get(&self) -> irondash_texture::TextureDescriptor<NativeTextureType> {
             irondash_texture::TextureDescriptor {
-                handle: &self.frame.handle,
+                handle: &self.frame,
                 width: self.info.width() as _,
                 height: self.info.height() as _,
                 visible_width: self.info.width() as _,
@@ -413,29 +399,27 @@ mod windows {
             }
         }
     }
-    impl irondash_texture::PayloadProvider<NativeTextureType> for WindowsTextureProvider {
-        fn get_payload(&self) -> NativeTextureType {
-            let current_frame = self.current_texture.borrow();
-            current_frame.as_ref().unwrap().frame.clone()
-        }
-    }
 
-    impl super::PlatformNativeTextureProviderTrait for WindowsTextureProvider {
-        fn on_frame_received(
-            _buffer: &gst::Buffer,
-            _info: &VideoInfo,
-            _orientation: Orientation,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
+    impl irondash_texture::PlatformTextureWithProvider for Box<WithFrameInfo<ID3D11Texture2D>> {
+       fn create_texture(
+               engine_handle: i64,
+               payload_provider: Arc<dyn irondash_texture::PayloadProvider<Self>>,
+           ) -> irondash_texture::Result<irondash_texture::PlatformTexture<Self>> {
+                let texture = irondash_texture::PlatformTexture::new(engine_handle, payload_provider);
+                Ok(texture)
+              }
+       }
+
+
+
 }
 
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{
-    NativeTextureType, WindowsTextureProvider as PlatformNativeTextureProvider,
+    NativeTextureType, WindowsTextureProvider as PlatformNativeTextureProvider, NativeFrame
 };
 
+pub type BoxedNativeTextureType = Box<NativeTextureType>;
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum TextureCacheId {
     Memory(usize),
@@ -447,12 +431,4 @@ pub struct WithFrameInfo<T: Clone> {
     frame: T,
     info: VideoInfo,
     orientation: Orientation,
-}
-
-trait PlatformNativeTextureProviderTrait: irondash_texture::PayloadProvider<NativeTextureType> {
-    fn on_frame_received(
-        buffer: &gst::Buffer,
-        info: &VideoInfo,
-        orientation: Orientation,
-    ) -> anyhow::Result<()>;
 }

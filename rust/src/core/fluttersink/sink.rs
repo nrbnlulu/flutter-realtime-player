@@ -1,20 +1,19 @@
-use crate::core::platform::PlatformNativeTextureProvider;
+use crate::core::platform::{NativeTextureType, PlatformNativeTextureProvider};
 use gst::{glib, prelude::*};
 use std::sync::{atomic::AtomicBool, Arc};
 
 pub(crate) struct FlutterConfig {
     fl_txt_id: i64,
     fl_engine_handle: i64,
+    sendable_texture: irondash_texture::SendableTexture<NativeTextureType>,
 }
 
 impl FlutterConfig {
-    pub(crate) fn new(
-        fl_txt_id: i64,
-        fl_engine_handle: i64,
-    ) -> Self {
+    pub(crate) fn new(fl_txt_id: i64, fl_engine_handle: i64, sendable_texture: irondash_texture::SendableTexture<NativeTextureType>) -> Self {
         FlutterConfig {
             fl_txt_id,
             fl_engine_handle,
+            sendable_texture
         }
     }
 }
@@ -22,40 +21,43 @@ impl FlutterConfig {
 pub struct FlutterTextureSink {
     appsink: gst_app::AppSink,
     glsink: gst::Element,
+    provider: Arc<PlatformNativeTextureProvider>,
     initialized_signal: Arc<AtomicBool>,
 }
 
 impl FlutterTextureSink {
     pub fn new(initialized_signal: Arc<AtomicBool>) -> Self {
-        let appsink = gst_app::AppSink::builder();
-        #[cfg(target_os = "linux")]
-        let appsink = appsink
-            .caps(
-                &gst_video::VideoCapsBuilder::new()
-                    .features([gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY])
-                    .format(gst_video::VideoFormat::Rgba)
-                    .field("texture-target", "2D")
-                    .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
-                    .build(),
-            )
-            .enable_last_sample(false)
-            .max_buffers(1u32)
-            .build();
-        #[cfg(target_os = "windows")]
-        let appsink = appsink.build();
+        let appsink = gst_app::AppSink::builder().build();
+        let glsink;
 
         #[cfg(target_os = "linux")]
-        let glsink = gst::ElementFactory::make("glsinkbin")
-            .property("sink", &appsink)
-            .build()
-            .expect("Fatal: Unable to create glsink");
+        {
+            let appsink = appsink
+                .caps(
+                    &gst_video::VideoCapsBuilder::new()
+                        .features([gst_gl::CAPS_FEATURE_MEMORY_GL_MEMORY])
+                        .format(gst_video::VideoFormat::Rgba)
+                        .field("texture-target", "2D")
+                        .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
+                        .build(),
+                )
+                .enable_last_sample(false)
+                .max_buffers(1u32)
+                .build();
+
+            #[cfg(target_os = "linux")]
+            let glsink = gst::ElementFactory::make("glsinkbin")
+                .property("sink", &appsink)
+                .build()
+                .expect("Fatal: Unable to create glsink");
+        }
 
         // on windows use d3d11upload
-        #[cfg((target_os = "windows"))]
+        #[cfg(target_os = "windows")]
         {
             // Needs BGRA or RGBA swapchain for D2D interop,
             // and "present" signal must be explicitly enabled
-            let glsink = gst::ElementFactory::make("d3d11videosink")
+            glsink = gst::ElementFactory::make("d3d11videosink")
                 .property("emit-present", true)
                 .property_from_str("display-format", "DXGI_FORMAT_R8G8B8A8_UNORM")
                 .build()
@@ -84,29 +86,32 @@ impl FlutterTextureSink {
                 "present",
                 false,
                 glib::closure!(move |_sink: &gst::Element,
-                    _device: &gst::Object,
-                    rtv_raw: glib::Pointer| {
-                    provider_clone.on_present();
+                                     _device: &gst::Object,
+                                     rtv_raw: glib::Pointer| {
+                    provider_clone.on_present(_sink, _device, rtv_raw);
                 }),
             );
-        }
 
-        Self {
-            appsink: appsink.upcast(),
-            initialized_signal,
+            Self {
+                appsink: appsink.upcast(),
+                glsink: glsink,
+                provider: Arc::new(PlatformNativeTextureProvider::new()),
+                initialized_signal,
+            }
         }
     }
-
     pub fn video_sink(&self) -> gst::Element {
         self.glsink.clone().into()
     }
-
-
-    fn get_fallback_texture(&self) -> BoxedGLTexture {
-        unimplemented!("fallback texture")
+    pub fn texture_provider(&self) -> Arc<PlatformNativeTextureProvider> {
+        self.provider.clone()
     }
+    pub fn connect(
+        &self,
+        bus: &gst::Bus,
+        config: FlutterConfig,
+    ) -> (){
 
-    pub fn get_native_texture_provider(&self) -> Arc<PlatformNativeTextureProvider> {
-        unimplemented!("get_texture_provider")
+
     }
 }

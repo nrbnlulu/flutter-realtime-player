@@ -12,7 +12,9 @@ use gst::{
     trace,
 };
 use log::{error, info};
-use sink::{ArcSendableTexture, FlutterConfig, FlutterTextureSink};
+use sink::{ArcSendableTexure, FlutterConfig, FlutterTextureSink};
+
+use super::platform::{BoxedNativeTextureType, NativeFrame, NativeTextureType, WithFrameInfo};
 
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
@@ -24,10 +26,7 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     let texture_id: i64 = utils::invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
         let flutter_sink = Arc::new(FlutterTextureSink::new(initialized_sig_clone));
 
-        let texture = irondash_texture::Texture::new_with_provider(
-            engine_handle,
-            flutter_sink.get_native_texture_provider(),
-        )?;
+ 
         let texture_id = texture.id();
 
         let pipeline = gst::ElementFactory::make("playbin")
@@ -40,9 +39,17 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
             .unwrap();
 
         pipeline.set_property("video-sink", &flutter_sink.video_sink());
+        let texture_provider = flutter_sink.texture_provider();
+
+        let texture = irondash_texture::Texture::<Box<NativeFrame>>::new_with_provider(
+            engine_handle,
+            texture_provider,
+        )?;
+
+        let senable_texture = texture.into_sendable_texture();
         flutter_sink.connect(
             &pipeline.bus().unwrap(),
-            FlutterConfig::new(texture_id, engine_handle, texture.into_sendable_texture()),
+            FlutterConfig::new(texture_id, engine_handle, senable_texture),
         );
 
         thread::spawn(move || {
