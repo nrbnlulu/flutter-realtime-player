@@ -311,7 +311,13 @@ pub use linux::*;
 #[cfg(target_os = "windows")]
 mod windows {
     use std::cell::RefCell;
-
+    use windows::{
+        core::*,
+        Win32::Graphics::{
+            Direct3D11::*,
+            Dxgi::*,
+        },
+    };
     use gst_video::VideoInfo;
 
     use crate::core::types::Orientation;
@@ -335,7 +341,6 @@ mod windows {
         current_texture: RefCell<Option<NativeFrame>>,
     }
     impl WindowsTextureProvider {
-
         pub fn new() -> Self {
             Self {
                 current_texture: RefCell::new(None),
@@ -346,9 +351,42 @@ mod windows {
             self.current_texture.replace(Some(texture));
         }
 
-     
-    }
+        pub fn on_present(
+            &self,
+            _sink: &gst::Element,
+            _device: &gst::Object,
+            rtv_raw: glib::Pointer,
+        ) {
 
+            unsafe {
+                let rtv = ID3D11RenderTargetView::from_raw_borrowed(&rtv_raw).unwrap();
+                let resource = rtv.GetResource().unwrap();
+
+                let texture = resource.cast::<ID3D11Texture2D>().unwrap();
+                let desc = {
+                    let mut desc = D3D11_TEXTURE2D_DESC::default();
+                    texture.GetDesc(&mut desc);
+                    desc
+                };
+                let video_info = VideoInfo::builder(
+                    gst_video::VideoFormat::Rgba,
+                    desc.Width as u32,
+                    desc.Height as u32,
+                );
+                let frame = WithFrameInfo{
+                    frame: NativeTextureType {
+                        handle: irondash_texture::ID3D11Texture2D(rtv_raw as *mut _),
+                    },
+                    info: video_info
+                        .build()
+                        .unwrap(),
+                    orientation: Orientation::Auto,
+                };
+                self.set_current_texture(frame);
+
+        }
+    }
+    }
     unsafe impl Send for WindowsTextureProvider {}
     unsafe impl Sync for WindowsTextureProvider {}
 
