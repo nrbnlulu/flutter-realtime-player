@@ -386,7 +386,7 @@ mod windows {
     }
 
     impl irondash_texture::TextureDescriptorProvider<NativeTextureType>
-        for WithFrameInfo<NativeTextureType>
+        for NativeFrame
     {
         fn get(&self) -> irondash_texture::TextureDescriptor<NativeTextureType> {
             irondash_texture::TextureDescriptor {
@@ -399,18 +399,15 @@ mod windows {
             }
         }
     }
-
-    impl irondash_texture::PlatformTextureWithProvider for Box<WithFrameInfo<ID3D11Texture2D>> {
-       fn create_texture(
-               engine_handle: i64,
-               payload_provider: Arc<dyn irondash_texture::PayloadProvider<Self>>,
-           ) -> irondash_texture::Result<irondash_texture::PlatformTexture<Self>> {
+    impl irondash_texture::PlatformTextureWithProvider for NativeFrame{
+        fn create_texture(
+                engine_handle: i64,
+                payload_provider: Arc<dyn irondash_texture::PayloadProvider<Self>>,
+            ) -> irondash_texture::Result<PlatformTexture<Self>> {
                 let texture = irondash_texture::PlatformTexture::new(engine_handle, payload_provider);
                 Ok(texture)
-              }
-       }
-
-
+        }
+    }
 
 }
 
