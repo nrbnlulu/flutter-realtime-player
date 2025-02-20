@@ -1,4 +1,4 @@
-use crate::core::platform::{NativeTextureType, PlatformNativeTextureProvider};
+use crate::core::platform::{NativeFrame, NativeTextureType, PlatformNativeTextureProvider};
 use gst::{glib, prelude::*};
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -9,7 +9,7 @@ pub(crate) struct FlutterConfig {
 }
 
 impl FlutterConfig {
-    pub(crate) fn new(fl_txt_id: i64, fl_engine_handle: i64, sendable_texture: irondash_texture::SendableTexture<NativeTextureType>) -> Self {
+    pub(crate) fn new(fl_txt_id: i64, fl_engine_handle: i64, sendable_texture: ArcSendableNativeTexture) -> Self {
         FlutterConfig {
             fl_txt_id,
             fl_engine_handle,
@@ -29,7 +29,7 @@ impl FlutterTextureSink {
     pub fn new(initialized_signal: Arc<AtomicBool>) -> Self {
         let appsink = gst_app::AppSink::builder().build();
         let glsink;
-
+        let initialized_sig_clone = initialized_signal.clone();
         #[cfg(target_os = "linux")]
         {
             let appsink = appsink
@@ -89,6 +89,7 @@ impl FlutterTextureSink {
                                      _device: &gst::Object,
                                      rtv_raw: glib::Pointer| {
                     provider_clone.on_present(_sink, _device, rtv_raw);
+                    initialized_sig_clone.store(true, std::sync::atomic::Ordering::Relaxed);
                 }),
             );
 

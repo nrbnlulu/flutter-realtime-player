@@ -12,7 +12,7 @@ use gst::{
     trace,
 };
 use log::{error, info};
-use sink::{ArcSendableTexure, FlutterConfig, FlutterTextureSink};
+use sink::{ FlutterConfig, FlutterTextureSink};
 
 use super::platform::{BoxedNativeTextureType, NativeFrame, NativeTextureType, WithFrameInfo};
 

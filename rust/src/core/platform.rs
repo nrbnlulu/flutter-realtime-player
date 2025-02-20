@@ -311,7 +311,7 @@ pub use linux::*;
 #[cfg(target_os = "windows")]
 mod windows {
     use gst_video::VideoInfo;
-    use std::{cell::RefCell, sync::Arc};
+    use std::{cell::RefCell, sync::{Arc, Mutex}};
     use windows::{
         core::*,
         Win32::Graphics::{Direct3D11::*, Dxgi::*},
@@ -399,21 +399,27 @@ mod windows {
             }
         }
     }
-    impl irondash_texture::PlatformTextureWithProvider for NativeFrame{
+    impl irondash_texture::PlatformTextureWithProvider for Box<NativeFrame>{
         fn create_texture(
                 engine_handle: i64,
                 payload_provider: Arc<dyn irondash_texture::PayloadProvider<Self>>,
-            ) -> irondash_texture::Result<PlatformTexture<Self>> {
-                let texture = irondash_texture::PlatformTexture::new(engine_handle, payload_provider);
-                Ok(texture)
+            ) -> irondash_texture::Result<irondash_texture::PlatformTexture<Self>> {
+                let texture = Arc::new(Mutex::new(payload_provider.get_payload()));
+                let texture_raw = Arc::into_raw(texture.clone());
+                Ok(irondash_texture::PlatformTexture {
+                    engine_handle,
+                    id: texture_raw as i64,
+                    _texture: texture,
+                    texture_raw,
+                })
         }
     }
-
+    pub type ArcSendableNativeTexture = Arc<irondash_texture::SendableTexture<NativeFrame>>; 
 }
 
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{
-    NativeTextureType, WindowsTextureProvider as PlatformNativeTextureProvider, NativeFrame
+    NativeTextureType, WindowsTextureProvider as PlatformNativeTextureProvider, NativeFrame, ArcSendableNativeTexture
 };
 
 pub type BoxedNativeTextureType = Box<NativeTextureType>;
