@@ -1349,7 +1349,7 @@ dependencies = [
 [[package]]
 name = "irondash_dart_ffi"
 version = "0.2.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=windows-for-gstreamer#03809ea99453d8b9ae42e9e7f9b211a964c26058"
+source = "git+https://github.com/nrbnlulu/irondash.git?branch=windows-for-gstreamer#b7986a045d38c5d5988fe42c4c8830bafd2c9e1a"
 dependencies = [
  "once_cell",
 ]
@@ -1388,7 +1388,7 @@ dependencies = [
 [[package]]
 name = "irondash_run_loop"
 version = "0.6.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=windows-for-gstreamer#03809ea99453d8b9ae42e9e7f9b211a964c26058"
+source = "git+https://github.com/nrbnlulu/irondash.git?branch=windows-for-gstreamer#b7986a045d38c5d5988fe42c4c8830bafd2c9e1a"
 dependencies = [
  "core-foundation",
  "futures",

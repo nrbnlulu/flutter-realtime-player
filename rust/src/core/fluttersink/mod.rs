@@ -27,7 +27,6 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
         let flutter_sink = Arc::new(FlutterTextureSink::new(initialized_sig_clone));
 
         let texture_provider = flutter_sink.texture_provider();
-
         let texture =
             irondash_texture::Texture::new_with_provider(engine_handle, texture_provider)?;
 
