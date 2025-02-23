@@ -1,32 +1,16 @@
-use crate::core::platform::{NativeFrame, NativeTextureType, PlatformNativeTextureProvider};
+use crate::core::platform::{ NativeRegisteredTexture, NativeTextureProvider, NativeTextureType};
 use gst::{glib, prelude::*};
 use std::sync::{atomic::AtomicBool, Arc};
-
-pub(crate) struct FlutterConfig {
-    fl_txt_id: i64,
-    fl_engine_handle: i64,
-    sendable_texture: irondash_texture::SendableTexture<NativeTextureType>,
-}
-
-impl FlutterConfig {
-    pub(crate) fn new(fl_txt_id: i64, fl_engine_handle: i64, sendable_texture: ArcSendableNativeTexture) -> Self {
-        FlutterConfig {
-            fl_txt_id,
-            fl_engine_handle,
-            sendable_texture
-        }
-    }
-}
 
 pub struct FlutterTextureSink {
     appsink: gst_app::AppSink,
     glsink: gst::Element,
-    provider: Arc<PlatformNativeTextureProvider>,
-    initialized_signal: Arc<AtomicBool>,
+    provider: Arc<NativeTextureProvider>,
+    registered_texture: Arc<NativeRegisteredTexture>,
 }
 
 impl FlutterTextureSink {
-    pub fn new(initialized_signal: Arc<AtomicBool>) -> Self {
+    pub fn new(initialized_signal: Arc<AtomicBool>, provider: Arc<NativeTextureProvider>, registered_texture: Arc<NativeRegisteredTexture>) -> Self {
         let appsink = gst_app::AppSink::builder().build();
         let glsink;
         let initialized_sig_clone = initialized_signal.clone();
@@ -55,6 +39,8 @@ impl FlutterTextureSink {
         // on windows use d3d11upload
         #[cfg(target_os = "windows")]
         {
+            use crate::core::platform::TextureDescriptionProvider2Ext;
+
             // Needs BGRA or RGBA swapchain for D2D interop,
             // and "present" signal must be explicitly enabled
             glsink = gst::ElementFactory::make("d3d11videosink")
@@ -62,8 +48,7 @@ impl FlutterTextureSink {
                 .property_from_str("display-format", "DXGI_FORMAT_R8G8B8A8_UNORM")
                 .build()
                 .unwrap();
-            let provider = Arc::new(PlatformNativeTextureProvider::new());
-
+            let registered_texture_clone = registered_texture.clone();
             let provider_clone = provider.clone();
             // Listen "present" signal and draw overlay from the callback
             // Required operations here:
@@ -89,30 +74,24 @@ impl FlutterTextureSink {
                                      _device: &gst::Object,
                                      rtv_raw: glib::Pointer| {
                     provider_clone.on_present(_sink, _device, rtv_raw);
+                    registered_texture_clone.mark_frame_available();
                     initialized_sig_clone.store(true, std::sync::atomic::Ordering::Relaxed);
                 }),
             );
 
             Self {
                 appsink: appsink.upcast(),
-                glsink: glsink,
-                provider: Arc::new(PlatformNativeTextureProvider::new()),
-                initialized_signal,
+                glsink,
+                provider,
+                registered_texture,
             }
         }
     }
     pub fn video_sink(&self) -> gst::Element {
         self.glsink.clone().into()
     }
-    pub fn texture_provider(&self) -> Arc<PlatformNativeTextureProvider> {
+    pub fn texture_provider(&self) -> Arc<NativeTextureProvider> {
         self.provider.clone()
     }
-    pub fn connect(
-        &self,
-        bus: &gst::Bus,
-        config: FlutterConfig,
-    ) -> (){
 
-
-    }
 }
