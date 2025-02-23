@@ -20,7 +20,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     const baseUrl = "rtsp://admin:tzv12345@192.168.3.3:554/ch_10";
     final List<String> urls = [];
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 2; i++) {
       final url = "$baseUrl$i";
       urls.add(url);
     }
@@ -58,12 +58,18 @@ class NewWidget extends StatelessWidget {
         future: () async {
           final handle = await EngineContext.instance.getEngineHandle();
           // play demo video
-          final texture = await rlib.getOpenglTexture(
-              engineHandle: handle,
-              uri:
-                  "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4");
+          try{
+  final texture = await rlib.getTexture(
+                engineHandle: handle,
+                uri:
+                    "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4");
 
           return texture;
+          } catch (e) {
+            print(e);
+
+          }
+          
         }(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {

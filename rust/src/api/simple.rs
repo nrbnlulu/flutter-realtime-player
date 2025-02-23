@@ -1,7 +1,7 @@
 use flume::bounded;
 use irondash_engine_context::EngineContext;
 use irondash_run_loop::RunLoop;
-use log::debug;
+use log::{debug, trace};
 use simple_logger::SimpleLogger;
 
 use crate::core::fluttersink::{
@@ -30,6 +30,7 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
     debug!("Done initializing flutter gstreamer");
 }
 
-pub fn get_opengl_texture(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
-    testit(engine_handle, uri)
+pub fn get_texture(engine_handle: i64, uri: String) -> i64 {
+    trace!("get_texture was called");
+   testit(engine_handle, uri).unwrap()
 }

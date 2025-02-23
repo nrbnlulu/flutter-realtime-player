@@ -37,7 +37,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   rust_lib_my_app:
     path: rust_builder
-  flutter_rust_bridge: 2.7.0
+  flutter_rust_bridge: 2.8.0
   irondash_engine_context: ^0.5.4
 
 dev_dependencies:

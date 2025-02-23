@@ -312,87 +312,102 @@ pub use linux::*;
 mod windows {
     use gst_video::VideoInfo;
     use irondash_texture::TextureDescriptor;
-    use std::{cell::RefCell, sync::{Arc, Mutex}};
+    use std::{
+        cell::RefCell,
+        sync::{Arc, Mutex},
+    };
     use windows::{
         core::*,
-        Win32::Graphics::{Direct3D11::*, Dxgi::*},
+        Win32::{
+            Foundation::{HMODULE, HWND},
+            Graphics::{Direct3D::D3D_DRIVER_TYPE_HARDWARE, Direct3D11::*, Dxgi::*},
+        },
     };
 
-    use crate::core::types::Orientation;
-
-
     pub type NativeTextureType = irondash_texture::ID3D11Texture2D;
-
-
-
-    pub type D3DTextureProvider = irondash_texture::alternative_api::TextureDescriptionProvider2<NativeTextureType, ()>;
-
-    pub trait TextureDescriptionProvider2Ext<T: Clone> {
-         fn new() -> Self;
-         fn on_present(
-            &self,
-            _sink: &gst::Element,
-            _device: &gst::Object,
-            rtv_raw: glib::Pointer,
-        );
+    pub type D3DTextureProvider =
+        irondash_texture::alternative_api::TextureDescriptionProvider2<NativeTextureType, ()>;
+    pub struct D3DDevice {
+        device: ID3D11Device,
+        context: ID3D11DeviceContext,
+        adapter: IDXGIAdapter,
+    }
+    pub fn create_d3d11_device(
+        engine_handle: i64,
+        width: i64,
+        height: i64,
+    ) -> anyhow::Result<D3DDevice> {
+        let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
+        let adapter = engine_ctxs.get_dxgi_adapter(engine_handle)?;
+        let mut d3d_device = None;
+        let mut ctx = std::ptr::null_mut();
+        let device = unsafe {
+            D3D11CreateDevice(
+                adapter.into(),
+                D3D_DRIVER_TYPE_HARDWARE,
+                HMODULE::default(),
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                None,
+                D3D11_SDK_VERSION,
+                Some(&mut d3d_device),
+                None,
+                None,
+            )?;
+        };
     }
 
-    impl TextureDescriptionProvider2Ext<NativeTextureType> for irondash_texture::alternative_api::TextureDescriptionProvider2<NativeTextureType, ()> {
+    pub trait TextureDescriptionProvider2Ext<T: Clone> {
+        fn new() -> Self;
+        fn on_present(&self, _sink: &gst::Element, _device: &gst::Object, rtv_raw: glib::Pointer);
+    }
+
+    impl TextureDescriptionProvider2Ext<NativeTextureType>
+        for irondash_texture::alternative_api::TextureDescriptionProvider2<NativeTextureType, ()>
+    {
         // Implement the methods here
         fn new() -> Self {
-            Self{
+            Self {
                 current_texture: Arc::new(Mutex::new(None)),
                 context: (),
             }
         }
 
-         fn on_present(
-                    &self,
-                    _sink: &gst::Element,
-                    _device: &gst::Object,
-                    rtv_raw: glib::Pointer,
-                ) {
-                    unsafe {
-                        let rtv = ID3D11RenderTargetView::from_raw_borrowed(&rtv_raw).unwrap();
-                        let resource = rtv.GetResource().unwrap();
-        
-                        let texture = resource.cast::<ID3D11Texture2D>().unwrap();
-                        let desc = {
-                            let mut desc = D3D11_TEXTURE2D_DESC::default();
-                            texture.GetDesc(&mut desc);
-                            desc
-                        };
-                        let video_info = VideoInfo::builder(
-                            gst_video::VideoFormat::Rgba,
-                            desc.Width as u32,
-                            desc.Height as u32,
-                        );
-                        let video_info = video_info.build().unwrap();
-                        
-                        
-                        self.set_current_texture(TextureDescriptor::new(
-                            irondash_texture::ID3D11Texture2D(rtv_raw as *mut _),
-                            video_info.width() as _,
-                            video_info.height() as _,
-                            video_info.width() as _,
-                            video_info.height() as _,
-                            irondash_texture::PixelFormat::RGBA,
-                        ));
-                    }
+        fn on_present(&self, _sink: &gst::Element, _device: &gst::Object, rtv_raw: glib::Pointer) {
+            unsafe {
+                let rtv = ID3D11RenderTargetView::from_raw_borrowed(&rtv_raw).unwrap();
+                let resource = rtv.GetResource().unwrap();
 
+                let texture = resource.cast::<ID3D11Texture2D>().unwrap();
+                let desc = {
+                    let mut desc = D3D11_TEXTURE2D_DESC::default();
+                    texture.GetDesc(&mut desc);
+                    desc
+                };
+                let video_info = VideoInfo::builder(
+                    gst_video::VideoFormat::Rgba,
+                    desc.Width as u32,
+                    desc.Height as u32,
+                );
+                let video_info = video_info.build().unwrap();
+
+                self.set_current_texture(TextureDescriptor::new(
+                    irondash_texture::ID3D11Texture2D(rtv_raw as *mut _),
+                    video_info.width() as _,
+                    video_info.height() as _,
+                    video_info.width() as _,
+                    video_info.height() as _,
+                    irondash_texture::PixelFormat::BGRA,
+                ));
+            }
         }
     }
-      
 
-  
-
-    pub type NativeRegisteredTexture = irondash_texture::alternative_api::RegisteredTexture<NativeTextureType, ()>;
-
-
+    pub type NativeRegisteredTexture =
+        irondash_texture::alternative_api::RegisteredTexture<NativeTextureType, ()>;
 }
 
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{
-    NativeTextureType,  D3DTextureProvider as NativeTextureProvider, TextureDescriptionProvider2Ext,NativeRegisteredTexture
+    D3DTextureProvider as NativeTextureProvider, NativeRegisteredTexture, NativeTextureType,
+    TextureDescriptionProvider2Ext,
 };
-
