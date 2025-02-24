@@ -32,7 +32,7 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     {
         use crate::core::platform::TextureDescriptionProvider2Ext;
 
-        texture_provider = Arc::new(NativeTextureProvider::new());
+        texture_provider = Arc::new(NativeTextureProvider::new(engine_handle, 540, 960));
         let texture_provider_clone = texture_provider.clone();
         registered_texture = utils::invoke_on_platform_main_thread(
             move || -> anyhow::Result<Arc<NativeRegisteredTexture>> {

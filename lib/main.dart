@@ -20,7 +20,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     const baseUrl = "rtsp://admin:tzv12345@192.168.3.3:554/ch_10";
     final List<String> urls = [];
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 1; i++) {
       final url = "$baseUrl$i";
       urls.add(url);
     }

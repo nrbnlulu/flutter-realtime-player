@@ -310,6 +310,8 @@ pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
+    use glib_sys::gpointer;
+    use gst::glib::object::ObjectExt;
     use gst_video::VideoInfo;
     use irondash_texture::TextureDescriptor;
     use std::{
@@ -319,31 +321,40 @@ mod windows {
     use windows::{
         core::*,
         Win32::{
-            Foundation::{HMODULE, HWND},
-            Graphics::{Direct3D::D3D_DRIVER_TYPE_HARDWARE, Direct3D11::*, Dxgi::*},
+            Foundation::{HANDLE, HMODULE, HWND},
+            Graphics::{
+                Direct3D::D3D_DRIVER_TYPE_HARDWARE,
+                Direct3D11::*,
+                Dxgi::{
+                    Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
+                    *,
+                },
+            },
         },
     };
 
+    use crate::core::fluttersink::utils::LogErr;
+
     pub type NativeTextureType = irondash_texture::ID3D11Texture2D;
-    pub type D3DTextureProvider =
-        irondash_texture::alternative_api::TextureDescriptionProvider2<NativeTextureType, ()>;
-    pub struct D3DDevice {
-        device: ID3D11Device,
-        context: ID3D11DeviceContext,
-        adapter: IDXGIAdapter,
+    pub type D3DTextureProvider = irondash_texture::alternative_api::TextureDescriptionProvider2<
+        NativeTextureType,
+        TextureProviderCtx,
+    >;
+    pub struct D3D11Texture {
+        texture: ID3D11Texture2D,
+        handle: HANDLE,
     }
-    pub fn create_d3d11_device(
+    pub fn create_d3d11_texture(
         engine_handle: i64,
-        width: i64,
-        height: i64,
-    ) -> anyhow::Result<D3DDevice> {
+        width: u32,
+        height: u32,
+    ) -> anyhow::Result<D3D11Texture> {
         let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
-        let adapter = engine_ctxs.get_dxgi_adapter(engine_handle)?;
+        let _ = engine_ctxs.get_dxgi_adapter(engine_handle)?;
         let mut d3d_device = None;
-        let mut ctx = std::ptr::null_mut();
-        let device = unsafe {
+        unsafe {
             D3D11CreateDevice(
-                adapter.into(),
+                None, // TODO: adapter needed?
                 D3D_DRIVER_TYPE_HARDWARE,
                 HMODULE::default(),
                 D3D11_CREATE_DEVICE_BGRA_SUPPORT,
@@ -354,56 +365,110 @@ mod windows {
                 None,
             )?;
         };
+        let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
+        let mt_device: ID3D11Multithread = d3d_device.cast()?;
+        unsafe { mt_device.SetMultithreadProtected(true) };
+
+        let texture_desc = D3D11_TEXTURE2D_DESC {
+            Width: width,
+            Height: height,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+        let mut texture = None;
+        unsafe {
+            d3d_device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
+        };
+        let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
+        let texture_as_resource: IDXGIResource = texture.cast()?;
+        let handle = unsafe { texture_as_resource.GetSharedHandle()? };
+        Ok(D3D11Texture { texture, handle })
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
-        fn new() -> Self;
-        fn on_present(&self, _sink: &gst::Element, _device: &gst::Object, rtv_raw: glib::Pointer);
+        fn new(engine_handle: i64, width: u32, height: u32) -> Self;
+        fn on_begin_draw(&self, _sink: &gst::Element, udata: glib::Pointer);
+    }
+
+    pub struct TextureProviderCtx {
+        texture: Mutex<Option<D3D11Texture>>,
+        engine_handle: i64,
+        width: u32,
+        height: u32,
     }
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
-        for irondash_texture::alternative_api::TextureDescriptionProvider2<NativeTextureType, ()>
+        for irondash_texture::alternative_api::TextureDescriptionProvider2<
+            NativeTextureType,
+            TextureProviderCtx,
+        >
     {
         // Implement the methods here
-        fn new() -> Self {
+        fn new(engine_handle: i64, width: u32, height: u32) -> Self {
             Self {
                 current_texture: Arc::new(Mutex::new(None)),
-                context: (),
+                context: TextureProviderCtx {
+                    texture: Mutex::new(None),
+                    engine_handle,
+                    width,
+                    height,
+                },
             }
         }
 
-        fn on_present(&self, _sink: &gst::Element, _device: &gst::Object, rtv_raw: glib::Pointer) {
-            unsafe {
-                let rtv = ID3D11RenderTargetView::from_raw_borrowed(&rtv_raw).unwrap();
-                let resource = rtv.GetResource().unwrap();
+        fn on_begin_draw(&self, sink: &gst::Element, _udata: glib::Pointer) {
+            let handle;
+            {
+                let mut texture = self.context.texture.lock().unwrap();
+                handle = match texture.as_ref() {
+                    Some(texture) => Ok(texture.handle),
+                    None => create_d3d11_texture(
+                        self.context.engine_handle,
+                        self.context.width,
+                        self.context.height,
+                    )
+                    .map(|texture_wrapper| {
+                        let handle = texture_wrapper.handle;
 
-                let texture = resource.cast::<ID3D11Texture2D>().unwrap();
-                let desc = {
-                    let mut desc = D3D11_TEXTURE2D_DESC::default();
-                    texture.GetDesc(&mut desc);
-                    desc
-                };
-                let video_info = VideoInfo::builder(
-                    gst_video::VideoFormat::Rgba,
-                    desc.Width as u32,
-                    desc.Height as u32,
+                        self.set_current_texture(TextureDescriptor::new(
+                            irondash_texture::ID3D11Texture2D(handle.0 as *mut _),
+                            self.context.width as _,
+                            self.context.height as _,
+                            self.context.width as _,
+                            self.context.height as _,
+                            irondash_texture::PixelFormat::BGRA,
+                        ));
+                        *texture = Some(texture_wrapper);
+                        handle
+                    }),
+                }
+                .log_err();
+            }
+            if let Some(handle) = handle {
+                let _ = sink.emit_by_name::<()>(
+                    "draw",
+                    &[
+                        &handle.0,
+                        &D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS.0,
+                        &0i64,
+                        &0i64,
+                    ],
                 );
-                let video_info = video_info.build().unwrap();
-
-                self.set_current_texture(TextureDescriptor::new(
-                    irondash_texture::ID3D11Texture2D(rtv_raw as *mut _),
-                    video_info.width() as _,
-                    video_info.height() as _,
-                    video_info.width() as _,
-                    video_info.height() as _,
-                    irondash_texture::PixelFormat::BGRA,
-                ));
             }
         }
     }
 
     pub type NativeRegisteredTexture =
-        irondash_texture::alternative_api::RegisteredTexture<NativeTextureType, ()>;
+        irondash_texture::alternative_api::RegisteredTexture<NativeTextureType, TextureProviderCtx>;
 }
 
 #[cfg(target_os = "windows")]

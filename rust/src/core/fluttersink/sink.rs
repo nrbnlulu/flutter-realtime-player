@@ -59,10 +59,9 @@ impl FlutterTextureSink {
             glsink.connect_closure(
                 "begin-draw",
                 false,
-                glib::closure!(move |_sink: &gst::Element,
-                                     _device: &gst::Object,
-                                     rtv_raw: glib::Pointer| {
-                    provider_clone.on_present(_sink, _device, rtv_raw);
+                glib::closure!(move |sink: &gst::Element,
+                                     udata: glib::Pointer| {
+                    provider_clone.on_begin_draw(sink, udata);
                     registered_texture_clone.mark_frame_available().log_err();
                     initialized_sig_clone.store(true, std::sync::atomic::Ordering::Relaxed);
                 }),
