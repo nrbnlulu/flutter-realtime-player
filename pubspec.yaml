@@ -38,7 +38,8 @@ dependencies:
   rust_lib_my_app:
     path: rust_builder
   flutter_rust_bridge: 2.8.0
-  irondash_engine_context: ^0.5.4
+  irondash_engine_context:
+    path: ../OS/irondash/engine_context/dart
 
 dev_dependencies:
   flutter_test:

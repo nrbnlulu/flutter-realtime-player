@@ -310,10 +310,11 @@ pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use glib_sys::gpointer;
+    use glib_sys::{gboolean, gpointer};
     use gst::glib::object::ObjectExt;
     use gst_video::VideoInfo;
     use irondash_texture::TextureDescriptor;
+    use log::trace;
     use std::{
         cell::RefCell,
         sync::{Arc, Mutex},
@@ -323,7 +324,7 @@ mod windows {
         Win32::{
             Foundation::{HANDLE, HMODULE, HWND},
             Graphics::{
-                Direct3D::D3D_DRIVER_TYPE_HARDWARE,
+                Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN},
                 Direct3D11::*,
                 Dxgi::{
                     Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
@@ -350,14 +351,14 @@ mod windows {
         height: u32,
     ) -> anyhow::Result<D3D11Texture> {
         let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
-        let _ = engine_ctxs.get_dxgi_adapter(engine_handle)?;
+        let _ = engine_ctxs.get_flutter_view(engine_handle)?;
         let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
                 None, // TODO: adapter needed?
                 D3D_DRIVER_TYPE_HARDWARE,
                 HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT ,
                 None,
                 D3D11_SDK_VERSION,
                 Some(&mut d3d_device),
@@ -367,8 +368,9 @@ mod windows {
         };
         let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
         let mt_device: ID3D11Multithread = d3d_device.cast()?;
+        
         unsafe { mt_device.SetMultithreadProtected(true) };
-
+        trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
             Width: width,
             Height: height,
@@ -380,23 +382,32 @@ mod windows {
                 Quality: 0,
             },
             Usage: D3D11_USAGE_DEFAULT,
+            // will be used to draw on  + will be used in flutter shader
             BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
             CPUAccessFlags: 0,
-            MiscFlags: 0,
+            // enable use with other devices
+            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,  
         };
+        trace!("creating texture");
+
         let mut texture = None;
         unsafe {
             d3d_device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
         };
         let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
+        trace!("texture created {:?}", texture);
         let texture_as_resource: IDXGIResource = texture.cast()?;
         let handle = unsafe { texture_as_resource.GetSharedHandle()? };
+        if handle.is_invalid(){
+            return Err(anyhow::anyhow!("Invalid handle"));
+        }
+        trace!("Created texture with handle: {:?}", handle);
         Ok(D3D11Texture { texture, handle })
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
-        fn new(engine_handle: i64, width: u32, height: u32) -> Self;
-        fn on_begin_draw(&self, _sink: &gst::Element, udata: glib::Pointer);
+        fn new(engine_handle: i64, width: u32, height: u32) -> anyhow::Result<Arc<Self>>;
+        fn on_begin_draw(&self, _sink: &gst::Element) -> anyhow::Result<()>;
     }
 
     pub struct TextureProviderCtx {
@@ -413,57 +424,61 @@ mod windows {
         >
     {
         // Implement the methods here
-        fn new(engine_handle: i64, width: u32, height: u32) -> Self {
-            Self {
+        fn new(engine_handle: i64, width: u32, height: u32) -> anyhow::Result<Arc<Self>> {
+            trace!("Creating new D3D11 texture provider");
+            let texture_wrapper = create_d3d11_texture(
+                engine_handle,
+                width,
+                height,
+            )?;
+
+            let handle = texture_wrapper.handle;
+
+            let out = Arc::new(Self {
                 current_texture: Arc::new(Mutex::new(None)),
                 context: TextureProviderCtx {
-                    texture: Mutex::new(None),
+                    texture: Mutex::new(Some(texture_wrapper)),
                     engine_handle,
                     width,
                     height,
                 },
-            }
+            });
+            
+
+            out.set_current_texture(TextureDescriptor::new(
+                irondash_texture::ID3D11Texture2D(handle.0 as *mut _),
+                width as _,
+                height as _,
+                width as _,
+                height as _,
+                irondash_texture::PixelFormat::BGRA,
+            ));
+            Ok(out)
+
         }
 
-        fn on_begin_draw(&self, sink: &gst::Element, _udata: glib::Pointer) {
+        fn on_begin_draw(&self, sink: &gst::Element) -> anyhow::Result<()> {
             let handle;
             {
-                let mut texture = self.context.texture.lock().unwrap();
-                handle = match texture.as_ref() {
-                    Some(texture) => Ok(texture.handle),
-                    None => create_d3d11_texture(
-                        self.context.engine_handle,
-                        self.context.width,
-                        self.context.height,
-                    )
-                    .map(|texture_wrapper| {
-                        let handle = texture_wrapper.handle;
-
-                        self.set_current_texture(TextureDescriptor::new(
-                            irondash_texture::ID3D11Texture2D(handle.0 as *mut _),
-                            self.context.width as _,
-                            self.context.height as _,
-                            self.context.width as _,
-                            self.context.height as _,
-                            irondash_texture::PixelFormat::BGRA,
-                        ));
-                        *texture = Some(texture_wrapper);
-                        handle
-                    }),
-                }
-                .log_err();
+                let texture_wrapper = self.context.texture.lock().unwrap();
+                handle = texture_wrapper.as_ref().map(|t| t.handle);
             }
+            trace!("handle is {:?}", handle);
             if let Some(handle) = handle {
-                let _ = sink.emit_by_name::<()>(
+                trace!("emitting draw signal");
+                let res = sink.emit_by_name::<bool>(
                     "draw",
                     &[
-                        &handle.0,
-                        &D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS.0,
-                        &0i64,
-                        &0i64,
+                        &(handle.0 as gpointer),
+                        &(D3D11_RESOURCE_MISC_SHARED.0 as u32),
+                        &0u64,
+                        &0u64,
                     ],
                 );
+                trace!("draw returned {:?}", res);
+                return Ok(());
             }
+            return Err(anyhow::anyhow!("No HANDLE available"));
         }
     }
 

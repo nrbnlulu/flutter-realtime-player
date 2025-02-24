@@ -11,6 +11,7 @@ Future<void> main() async {
   await RustLib.init();
   rlib.flutterGstreamerInit(ffiPtr: NativeApi.initializeApiDLData.address);
   runApp(const MyApp());
+
 }
 
 class MyApp extends StatelessWidget {
@@ -73,7 +74,8 @@ class NewWidget extends StatelessWidget {
         }(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {
-            return Texture(textureId: snapshot.data as int);
+            debugPrint("snapshot.data: ${snapshot.data}");
+            return Texture(textureId: snapshot.data!);
           } else {
             return const CircularProgressIndicator();
           }

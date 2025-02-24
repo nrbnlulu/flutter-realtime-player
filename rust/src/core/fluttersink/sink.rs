@@ -1,5 +1,6 @@
 use crate::core::{fluttersink::utils::LogErr, platform::{ NativeRegisteredTexture, NativeTextureProvider, NativeTextureType}};
 use gst::{glib, prelude::*};
+use log::trace;
 use std::sync::{atomic::AtomicBool, Arc};
 
 pub struct FlutterTextureSink {
@@ -44,7 +45,6 @@ impl FlutterTextureSink {
                 core::*,
                 Win32::Graphics::{Direct3D11::*, Dxgi::*},
             };
-            let device_factory = 
 
             // see https://gstreamer.freedesktop.org/documentation/d3d11/d3d11videosink.html?gi-language=c#d3d11videosink:draw-on-shared-texture
             glsink = gst::ElementFactory::make("d3d11videosink")
@@ -59,10 +59,19 @@ impl FlutterTextureSink {
             glsink.connect_closure(
                 "begin-draw",
                 false,
-                glib::closure!(move |sink: &gst::Element,
-                                     udata: glib::Pointer| {
-                    provider_clone.on_begin_draw(sink, udata);
-                    registered_texture_clone.mark_frame_available().log_err();
+                glib::closure!(move |sink: &gst::Element| {
+                    trace!("in begin-draw callback");
+                    if initialized_sig_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                        return;
+                    }
+                    provider_clone.on_begin_draw(sink).inspect(
+                        |_|{
+                            
+                            registered_texture_clone.mark_frame_available().log_err();
+                            trace!("frame marked as available");
+
+                        }
+                    ).log_err();
                     initialized_sig_clone.store(true, std::sync::atomic::Ordering::Relaxed);
                 }),
             );

@@ -125,10 +125,9 @@ packages:
   irondash_engine_context:
     dependency: "direct main"
     description:
-      name: irondash_engine_context
-      sha256: cd7b769db11a2b5243b037c8a9b1ecaef02e1ae27a2d909ffa78c1dad747bb10
-      url: "https://pub.dev"
-    source: hosted
+      path: "../OS/irondash/engine_context/dart"
+      relative: true
+    source: path
     version: "0.5.4"
   leak_tracker:
     dependency: transitive

@@ -25,25 +25,28 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     trace!("Initializing flutter sink");
     let initialized_sig = Arc::new(AtomicBool::new(false));
     let initialized_sig_clone = initialized_sig.clone();
-    let texture_provider;
-    let registered_texture;
     let texture_id;
+    let registered_texture;
+    let texture_provider;
     #[cfg(target_os = "windows")]
     {
         use crate::core::platform::TextureDescriptionProvider2Ext;
 
-        texture_provider = Arc::new(NativeTextureProvider::new(engine_handle, 540, 960));
-        let texture_provider_clone = texture_provider.clone();
-        registered_texture = utils::invoke_on_platform_main_thread(
-            move || -> anyhow::Result<Arc<NativeRegisteredTexture>> {
-                irondash_texture::alternative_api::RegisteredTexture::new(
-                    texture_provider_clone,
-                    engine_handle,
-                ).map_err(|e| anyhow::anyhow!("Failed to registered texture: {:?}", e))
-            })?;
-        texture_id = registered_texture.get_texture_id();
+        (registered_texture, texture_provider) = utils::invoke_on_platform_main_thread(
+            move || -> anyhow::Result<(Arc<NativeRegisteredTexture>, Arc<NativeTextureProvider>)> {
+                let texture_provider = NativeTextureProvider::new(engine_handle, 540, 960)?;
 
-            
+                let tex_provider_clone = texture_provider.clone();
+                let reg_texture = irondash_texture::alternative_api::RegisteredTexture::new(
+                    texture_provider,
+                    engine_handle,
+                )
+                .map_err(|e| anyhow::anyhow!("Failed to registered texture: {:?}", e))?;
+
+                Ok((reg_texture, tex_provider_clone))
+            },
+        )?;
+        texture_id = registered_texture.get_texture_id();
     }
     let flutter_sink = Arc::new(FlutterTextureSink::new(
         initialized_sig_clone,

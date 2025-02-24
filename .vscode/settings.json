@@ -1,5 +1,15 @@
 {
   "cmake.sourceDirectory": "/home/dev/Desktop/tmp/my_app/linux",
   "discord.enabled": false,
-  "vscord.enabled": true
+  "vscord.enabled": true,
+  "files.associations": {
+    "xtree": "cpp",
+    "algorithm": "cpp",
+    "functional": "cpp",
+    "type_traits": "cpp",
+    "xtr1common": "cpp",
+    "xutility": "cpp",
+    "sstream": "cpp",
+    "stdexcept": "cpp"
+  }
 }
