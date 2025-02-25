@@ -61,9 +61,6 @@ impl FlutterTextureSink {
                 false,
                 glib::closure!(move |sink: &gst::Element| {
                     trace!("in begin-draw callback");
-                    if initialized_sig_clone.load(std::sync::atomic::Ordering::Relaxed) {
-                        return;
-                    }
                     provider_clone.on_begin_draw(sink).inspect(
                         |_|{
                             

@@ -336,7 +336,7 @@ mod windows {
 
     use crate::core::fluttersink::utils::LogErr;
 
-    pub type NativeTextureType = irondash_texture::ID3D11Texture2D;
+    pub type NativeTextureType = irondash_texture::DxgiSharedHandle;
     pub type D3DTextureProvider = irondash_texture::alternative_api::TextureDescriptionProvider2<
         NativeTextureType,
         TextureProviderCtx,
@@ -446,7 +446,7 @@ mod windows {
             
 
             out.set_current_texture(TextureDescriptor::new(
-                irondash_texture::ID3D11Texture2D(handle.0 as *mut _),
+                irondash_texture::DxgiSharedHandle(handle.0 as *mut _),
                 width as _,
                 height as _,
                 width as _,
