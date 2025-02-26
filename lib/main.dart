@@ -29,16 +29,55 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
         home: Scaffold(
             appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
-            body: Wrap(
-              children: [
-                for (final url in urls)
-                  SizedBox(
-                    height: 250,
-                    width: 400,
-                    child: NewWidget(url: url),
-                  ),
-              ],
+            body: FutureBuilder(
+              future: () async {
+                final handle = await EngineContext.instance.getEngineHandle();
+                // play demo video
+                try {
+                  final texture = await rlib.createNewPlayable(
+                      engineHandle: handle,
+                      videInfo: const VideoInfo(
+                          uri: "rtsp://admin:camteam524@31.154.52.236:10500",
+                          dimensions: VideoDimensions(width: 640, height: 360),
+                          mute: true));
+
+                  return texture;
+                } catch (e) {
+                  print(e);
+                }
+              }(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done) {
+                  debugPrint("snapshot.data: ${snapshot.data}");
+                  return Texture(textureId: snapshot.data!);
+                } else {
+                  return const CircularProgressIndicator();
+                }
+              },
             )));
+  }
+}
+
+class MultiPlayer extends StatelessWidget {
+  const MultiPlayer({
+    super.key,
+    required this.urls,
+  });
+
+  final List<String> urls;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      children: [
+        for (final url in urls)
+          SizedBox(
+            height: 250,
+            width: 400,
+            child: NewWidget(url: url),
+          ),
+      ],
+    );
   }
 }
 

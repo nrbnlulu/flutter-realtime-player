@@ -4,14 +4,15 @@ use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
 };
+use gst::{glib, prelude::*};
 
-use glib::types::StaticType;
 use gst::{
     glib::object::{Cast, ObjectExt},
     prelude::{ElementExt, GstObjectExt},
 };
 use log::{error, info, trace};
 use sink::FlutterTextureSink;
+use utils::LogErr;
 
 use crate::core::platform::NativeTextureProvider;
 
@@ -64,6 +65,14 @@ pub fn create_new_playable(
         .build()?
         .downcast::<gst::Pipeline>()
         .unwrap();
+    let playbin = &pipeline;
+    playbin.connect_closure("element-setup", false, 
+    glib::closure!(move |_playbin: &gst::Element, element: &gst::Element | {
+        if element.name() == "rtspsrc" {
+            info!("Setting latency to 0 for rtspsrc");
+            element.set_property("latency", &0u32);
+        }
+    }));
 
     pipeline.set_property("video-sink", &flutter_sink.video_sink());
 
@@ -75,6 +84,15 @@ pub fn create_new_playable(
         for msg in bus.iter() {
             trace!("Message: {:?}", msg.view());
             match msg.view() {
+                gst::MessageView::Buffering(buffering) => {
+                    let percent = buffering.percent();
+                    info!("Buffering {}%", percent);
+                    if percent < 100 {
+                        pipeline.set_state(gst::State::Paused).log_err();
+                    } else {
+                        pipeline.set_state(gst::State::Playing).log_err();
+                    }
+                }
                 gst::MessageView::Eos(..) => {
                     info!("End of stream");
                     break;
