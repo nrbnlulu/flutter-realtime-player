@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'package:flutter/material.dart';
 import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'package:my_app/src/rust/api/simple.dart' as rlib;
+import 'package:my_app/src/rust/core/types.dart';
 import 'package:my_app/src/rust/frb_generated.dart';
 
 Future<void> main() async {
@@ -11,7 +12,6 @@ Future<void> main() async {
   await RustLib.init();
   rlib.flutterGstreamerInit(ffiPtr: NativeApi.initializeApiDLData.address);
   runApp(const MyApp());
-
 }
 
 class MyApp extends StatelessWidget {
@@ -28,25 +28,29 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
         home: Scaffold(
-      appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
-      body: Wrap(
-        children: [
-          for (final url in urls)
-        SizedBox(
-          height: 250,
-          width: 400,
-          child: NewWidget(url: url),
-        ),
-        ],
-      )
-    ));
+            appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
+            body: Wrap(
+              children: [
+                for (final url in urls)
+                  SizedBox(
+                    height: 250,
+                    width: 400,
+                    child: NewWidget(url: url),
+                  ),
+              ],
+            )));
   }
 }
 
 class NewWidget extends StatelessWidget {
   final String url;
+  final int width;
+  final int height;
+
   const NewWidget({
     required this.url,
+    this.width = 400,
+    this.height = 250,
     super.key,
   });
 
@@ -59,18 +63,19 @@ class NewWidget extends StatelessWidget {
         future: () async {
           final handle = await EngineContext.instance.getEngineHandle();
           // play demo video
-          try{
-  final texture = await rlib.getTexture(
+          try {
+            final texture = await rlib.createNewPlayable(
                 engineHandle: handle,
-                uri:
-                    "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4");
+                videInfo: const VideoInfo(
+                    uri:
+                        "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4",
+                    dimensions: VideoDimensions(width: 640, height: 360),
+                    mute: true));
 
-          return texture;
+            return texture;
           } catch (e) {
             print(e);
-
           }
-          
         }(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.done) {

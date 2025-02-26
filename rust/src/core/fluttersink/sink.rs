@@ -60,13 +60,10 @@ impl FlutterTextureSink {
                 "begin-draw",
                 false,
                 glib::closure!(move |sink: &gst::Element| {
-                    trace!("in begin-draw callback");
                     provider_clone.on_begin_draw(sink).inspect(
                         |_|{
-                            
+                            trace!("begin-draw, mark_frame_available");
                             registered_texture_clone.mark_frame_available().log_err();
-                            trace!("frame marked as available");
-
                         }
                     ).log_err();
                     initialized_sig_clone.store(true, std::sync::atomic::Ordering::Relaxed);

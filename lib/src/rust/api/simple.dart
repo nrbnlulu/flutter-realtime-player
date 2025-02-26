@@ -3,6 +3,7 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../core/types.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
@@ -12,7 +13,7 @@ String greet({required String name}) =>
 Future<void> flutterGstreamerInit({required PlatformInt64 ffiPtr}) =>
     RustLib.instance.api.crateApiSimpleFlutterGstreamerInit(ffiPtr: ffiPtr);
 
-Future<PlatformInt64> getTexture(
-        {required PlatformInt64 engineHandle, required String uri}) =>
-    RustLib.instance.api
-        .crateApiSimpleGetTexture(engineHandle: engineHandle, uri: uri);
+Future<PlatformInt64> createNewPlayable(
+        {required PlatformInt64 engineHandle, required VideoInfo videInfo}) =>
+    RustLib.instance.api.crateApiSimpleCreateNewPlayable(
+        engineHandle: engineHandle, videInfo: videInfo);

@@ -4,10 +4,10 @@ use irondash_run_loop::RunLoop;
 use log::{debug, trace};
 use simple_logger::SimpleLogger;
 
-use crate::core::fluttersink::{
-    self, testit,
+use crate::core::{fluttersink::{
+    self,
     utils::{self, LogErr},
-};
+}, types::VideoInfo};
 
 #[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
 pub fn greet(name: String) -> String {
@@ -30,7 +30,7 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
     debug!("Done initializing flutter gstreamer");
 }
 
-pub fn get_texture(engine_handle: i64, uri: String) -> i64 {
+pub fn create_new_playable(engine_handle: i64,vide_info: VideoInfo) -> i64 {
     trace!("get_texture was called");
-   testit(engine_handle, uri).unwrap()
+    crate::core::fluttersink::create_new_playable(engine_handle, vide_info).unwrap()
 }

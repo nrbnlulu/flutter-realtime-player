@@ -15,26 +15,30 @@ use sink::FlutterTextureSink;
 
 use crate::core::platform::NativeTextureProvider;
 
-use super::platform::NativeRegisteredTexture;
+use super::{platform::NativeRegisteredTexture, types};
 
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
 }
 
-pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
+pub fn create_new_playable(
+    engine_handle: i64,
+    video_info: types::VideoInfo,
+) -> anyhow::Result<i64> {
     trace!("Initializing flutter sink");
     let initialized_sig = Arc::new(AtomicBool::new(false));
     let initialized_sig_clone = initialized_sig.clone();
     let texture_id;
     let registered_texture;
     let texture_provider;
+    let dimensions = video_info.dimensions;
     #[cfg(target_os = "windows")]
     {
         use crate::core::platform::TextureDescriptionProvider2Ext;
 
         (registered_texture, texture_provider) = utils::invoke_on_platform_main_thread(
             move || -> anyhow::Result<(Arc<NativeRegisteredTexture>, Arc<NativeTextureProvider>)> {
-                let texture_provider = NativeTextureProvider::new(engine_handle, 540, 960)?;
+                let texture_provider = NativeTextureProvider::new(engine_handle, dimensions)?;
 
                 let tex_provider_clone = texture_provider.clone();
                 let reg_texture = irondash_texture::alternative_api::RegisteredTexture::new(
@@ -55,10 +59,8 @@ pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
     ));
 
     let pipeline = gst::ElementFactory::make("playbin")
-        .property(
-            "uri",
-            "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm",
-        )
+        .property("uri", &video_info.uri)
+        .property("mute", &video_info.mute)
         .build()?
         .downcast::<gst::Pipeline>()
         .unwrap();

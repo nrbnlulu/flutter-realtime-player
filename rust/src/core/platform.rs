@@ -334,7 +334,7 @@ mod windows {
         },
     };
 
-    use crate::core::fluttersink::utils::LogErr;
+    use crate::core::{fluttersink::utils::LogErr, types::VideoDimensions};
 
     pub type NativeTextureType = irondash_texture::DxgiSharedHandle;
     pub type D3DTextureProvider = irondash_texture::alternative_api::TextureDescriptionProvider2<
@@ -347,8 +347,7 @@ mod windows {
     }
     pub fn create_d3d11_texture(
         engine_handle: i64,
-        width: u32,
-        height: u32,
+        dimensions: &VideoDimensions,
     ) -> anyhow::Result<D3D11Texture> {
         let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
         let _ = engine_ctxs.get_flutter_view(engine_handle)?;
@@ -372,8 +371,8 @@ mod windows {
         unsafe { mt_device.SetMultithreadProtected(true) };
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
-            Width: width,
-            Height: height,
+            Width: dimensions.width,
+            Height: dimensions.height,
             MipLevels: 1,
             ArraySize: 1,
             Format: DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -406,15 +405,14 @@ mod windows {
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
-        fn new(engine_handle: i64, width: u32, height: u32) -> anyhow::Result<Arc<Self>>;
+        fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>>;
         fn on_begin_draw(&self, _sink: &gst::Element) -> anyhow::Result<()>;
     }
 
     pub struct TextureProviderCtx {
         texture: Mutex<Option<D3D11Texture>>,
         engine_handle: i64,
-        width: u32,
-        height: u32,
+        dimensions: VideoDimensions
     }
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
@@ -424,23 +422,24 @@ mod windows {
         >
     {
         // Implement the methods here
-        fn new(engine_handle: i64, width: u32, height: u32) -> anyhow::Result<Arc<Self>> {
+        fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
             trace!("Creating new D3D11 texture provider");
             let texture_wrapper = create_d3d11_texture(
                 engine_handle,
-                width,
-                height,
+                &dimensions
             )?;
 
             let handle = texture_wrapper.handle;
+            let handle = texture_wrapper.handle;
+            let width = dimensions.width;
+            let height = dimensions.height;
 
             let out = Arc::new(Self {
                 current_texture: Arc::new(Mutex::new(None)),
                 context: TextureProviderCtx {
                     texture: Mutex::new(Some(texture_wrapper)),
                     engine_handle,
-                    width,
-                    height,
+                    dimensions
                 },
             });
             
@@ -463,10 +462,8 @@ mod windows {
                 let texture_wrapper = self.context.texture.lock().unwrap();
                 handle = texture_wrapper.as_ref().map(|t| t.handle);
             }
-            trace!("handle is {:?}", handle);
             if let Some(handle) = handle {
-                trace!("emitting draw signal");
-                let res = sink.emit_by_name::<bool>(
+                if sink.emit_by_name::<bool>(
                     "draw",
                     &[
                         &(handle.0 as gpointer),
@@ -474,9 +471,11 @@ mod windows {
                         &0u64,
                         &0u64,
                     ],
-                );
-                trace!("draw returned {:?}", res);
-                return Ok(());
+                ){
+                    return Ok(());
+
+                }
+                return Err(anyhow::anyhow!("Failed to emit draw signal"));
             }
             return Err(anyhow::anyhow!("No HANDLE available"));
         }
