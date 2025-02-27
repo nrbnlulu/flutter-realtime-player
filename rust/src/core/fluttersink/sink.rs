@@ -62,7 +62,6 @@ impl FlutterTextureSink {
                 glib::closure!(move |sink: &gst::Element| {
                     provider_clone.on_begin_draw(sink).inspect(
                         |_|{
-                            trace!("begin-draw, mark_frame_available");
                             registered_texture_clone.mark_frame_available().log_err();
                         }
                     ).log_err();

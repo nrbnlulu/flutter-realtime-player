@@ -317,7 +317,7 @@ mod windows {
     use log::trace;
     use std::{
         cell::RefCell,
-        sync::{Arc, Mutex},
+        sync::{Arc, Mutex, RwLock},
     };
     use windows::{
         core::*,
@@ -349,15 +349,15 @@ mod windows {
         engine_handle: i64,
         dimensions: &VideoDimensions,
     ) -> anyhow::Result<D3D11Texture> {
-        let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
-        let _ = engine_ctxs.get_flutter_view(engine_handle)?;
+        // let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
+        // let _ = engine_ctxs.get_flutter_view(engine_handle)?;
         let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
                 None, // TODO: adapter needed?
                 D3D_DRIVER_TYPE_HARDWARE,
                 HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT ,
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                 None,
                 D3D11_SDK_VERSION,
                 Some(&mut d3d_device),
@@ -367,7 +367,7 @@ mod windows {
         };
         let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
         let mt_device: ID3D11Multithread = d3d_device.cast()?;
-        
+
         unsafe { mt_device.SetMultithreadProtected(true) };
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
@@ -385,7 +385,7 @@ mod windows {
             BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
             CPUAccessFlags: 0,
             // enable use with other devices
-            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,  
+            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,
         };
         trace!("creating texture");
 
@@ -397,7 +397,7 @@ mod windows {
         trace!("texture created {:?}", texture);
         let texture_as_resource: IDXGIResource = texture.cast()?;
         let handle = unsafe { texture_as_resource.GetSharedHandle()? };
-        if handle.is_invalid(){
+        if handle.is_invalid() {
             return Err(anyhow::anyhow!("Invalid handle"));
         }
         trace!("Created texture with handle: {:?}", handle);
@@ -410,9 +410,9 @@ mod windows {
     }
 
     pub struct TextureProviderCtx {
-        texture: Mutex<Option<D3D11Texture>>,
+        texture: RwLock<Option<D3D11Texture>>,
         engine_handle: i64,
-        dimensions: VideoDimensions
+        dimensions: VideoDimensions,
     }
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
@@ -424,10 +424,7 @@ mod windows {
         // Implement the methods here
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
             trace!("Creating new D3D11 texture provider");
-            let texture_wrapper = create_d3d11_texture(
-                engine_handle,
-                &dimensions
-            )?;
+            let texture_wrapper = create_d3d11_texture(engine_handle, &dimensions)?;
 
             let handle = texture_wrapper.handle;
             let handle = texture_wrapper.handle;
@@ -435,14 +432,13 @@ mod windows {
             let height = dimensions.height;
 
             let out = Arc::new(Self {
-                current_texture: Arc::new(Mutex::new(None)),
+                current_texture: RefCell::new(None),
                 context: TextureProviderCtx {
-                    texture: Mutex::new(Some(texture_wrapper)),
+                    texture: RwLock::new(Some(texture_wrapper)),
                     engine_handle,
-                    dimensions
+                    dimensions,
                 },
             });
-            
 
             out.set_current_texture(TextureDescriptor::new(
                 irondash_texture::DxgiSharedHandle(handle.0 as *mut _),
@@ -451,16 +447,19 @@ mod windows {
                 width as _,
                 height as _,
                 irondash_texture::PixelFormat::BGRA,
-            ));
-            Ok(out)
+            ))?;
 
+            Ok(out)
         }
 
         fn on_begin_draw(&self, sink: &gst::Element) -> anyhow::Result<()> {
-            let handle;
-            {
-                let texture_wrapper = self.context.texture.lock().unwrap();
-                handle = texture_wrapper.as_ref().map(|t| t.handle);
+            let mut handle = None;
+           { 
+            self.context
+                .texture
+                .try_read()
+                .map(|t| handle = t.as_ref().map(|t| t.handle))
+                .map_err(|e| anyhow::anyhow!("Failed to read texture: {:?}", e))?;
             }
             if let Some(handle) = handle {
                 if sink.emit_by_name::<bool>(
@@ -471,9 +470,8 @@ mod windows {
                         &0u64,
                         &0u64,
                     ],
-                ){
+                ) {
                     return Ok(());
-
                 }
                 return Err(anyhow::anyhow!("Failed to emit draw signal"));
             }

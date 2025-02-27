@@ -36,6 +36,7 @@ pub fn create_new_playable(
     #[cfg(target_os = "windows")]
     {
         use crate::core::platform::TextureDescriptionProvider2Ext;
+        trace!("thread id: {:?}", std::thread::current().id());
 
         (registered_texture, texture_provider) = utils::invoke_on_platform_main_thread(
             move || -> anyhow::Result<(Arc<NativeRegisteredTexture>, Arc<NativeTextureProvider>)> {

@@ -11,14 +11,14 @@ crate-type = ["cdylib", "staticlib"]
 flutter_rust_bridge = "=2.8.0"
 
 # irondash
-# irondash_texture = { path = "../../OS/irondash/texture"}
-# irondash_run_loop = { path = "../../OS/irondash/run_loop" }
-# irondash_engine_context ={ path = "../../OS/irondash/engine_context/rust" }
-# irondash_dart_ffi = { path = "../../OS/irondash/dart_ffi" }
-irondash_texture = { git = "https://github.com/nrbnlulu/irondash", branch = "windows-for-gstreamer"}
-irondash_run_loop = { git = "https://github.com/nrbnlulu/irondash", branch = "windows-for-gstreamer" }
-irondash_engine_context = { git = "https://github.com/nrbnlulu/irondash", branch = "windows-for-gstreamer" }
-irondash_dart_ffi = { git = "https://github.com/nrbnlulu/irondash", branch = "windows-for-gstreamer" }
+irondash_texture = { path = "../../OS/irondash/texture"}
+irondash_run_loop = { path = "../../OS/irondash/run_loop" }
+irondash_engine_context ={ path = "../../OS/irondash/engine_context/rust" }
+irondash_dart_ffi = { path = "../../OS/irondash/dart_ffi" }
+# irondash_texture = { git = "https://github.com/nrbnlulu/irondash", branch = "windows-for-gstreamer"}
+# irondash_run_loop = { git = "https://github.com/nrbnlulu/irondash", branch = "windows-for-gstreamer" }
+# irondash_engine_context = { git = "https://github.com/nrbnlulu/irondash", branch = "windows-for-gstreamer" }
+# irondash_dart_ffi = { git = "https://github.com/nrbnlulu/irondash", branch = "windows-for-gstreamer" }
 
 
 simple_logger = "2.1"

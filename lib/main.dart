@@ -37,7 +37,7 @@ class MyApp extends StatelessWidget {
                   final texture = await rlib.createNewPlayable(
                       engineHandle: handle,
                       videInfo: const VideoInfo(
-                          uri: "rtsp://admin:camteam524@31.154.52.236:10500",
+                          uri: "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4",
                           dimensions: VideoDimensions(width: 640, height: 360),
                           mute: true));
 
