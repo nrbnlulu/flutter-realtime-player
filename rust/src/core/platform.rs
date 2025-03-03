@@ -345,12 +345,8 @@ mod windows {
         texture: ID3D11Texture2D,
         handle: HANDLE,
     }
-    pub fn create_d3d11_texture(
-        engine_handle: i64,
-        dimensions: &VideoDimensions,
-    ) -> anyhow::Result<D3D11Texture> {
-        // let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
-        // let _ = engine_ctxs.get_flutter_view(engine_handle)?;
+
+    pub fn create_d3d11_device() -> anyhow::Result<ID3D11Device> {
         let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
@@ -369,6 +365,17 @@ mod windows {
         let mt_device: ID3D11Multithread = d3d_device.cast()?;
 
         unsafe { mt_device.SetMultithreadProtected(true) };
+        Ok(d3d_device)
+    }
+
+    pub fn create_d3d11_texture(
+        engine_handle: i64,
+        dimensions: &VideoDimensions,
+        device: &ID3D11Device,
+    ) -> anyhow::Result<D3D11Texture> {
+        // let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
+        // let _ = engine_ctxs.get_flutter_view(engine_handle)?;
+
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
             Width: dimensions.width,
@@ -391,7 +398,7 @@ mod windows {
 
         let mut texture = None;
         unsafe {
-            d3d_device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
+            device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
         };
         let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
         trace!("texture created {:?}", texture);
@@ -411,6 +418,7 @@ mod windows {
 
     pub struct TextureProviderCtx {
         texture: RwLock<Option<D3D11Texture>>,
+        device: ID3D11Device,
         engine_handle: i64,
         dimensions: VideoDimensions,
     }
@@ -424,17 +432,18 @@ mod windows {
         // Implement the methods here
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
             trace!("Creating new D3D11 texture provider");
-            let texture_wrapper = create_d3d11_texture(engine_handle, &dimensions)?;
+            let d3d_device = create_d3d11_device()?;
+            let texture_wrapper = create_d3d11_texture(engine_handle, &dimensions, &d3d_device)?;
 
-            let handle = texture_wrapper.handle;
             let handle = texture_wrapper.handle;
             let width = dimensions.width;
             let height = dimensions.height;
 
             let out = Arc::new(Self {
-                current_texture: RefCell::new(None),
+                current_texture: Mutex::new(None),
                 context: TextureProviderCtx {
                     texture: RwLock::new(Some(texture_wrapper)),
+                    device: d3d_device,
                     engine_handle,
                     dimensions,
                 },
@@ -471,6 +480,7 @@ mod windows {
                         &0u64,
                     ],
                 ) {
+                    self.context.device.   
                     return Ok(());
                 }
                 return Err(anyhow::anyhow!("Failed to emit draw signal"));
