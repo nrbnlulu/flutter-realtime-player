@@ -311,7 +311,7 @@ pub use linux::*;
 #[cfg(target_os = "windows")]
 mod windows {
     use glib_sys::{gboolean, gpointer};
-    use gst::glib::object::ObjectExt;
+    use gst::{ffi::gst_caps_from_string, glib::object::ObjectExt};
     use gst_video::VideoInfo;
     use irondash_texture::TextureDescriptor;
     use log::trace;
@@ -343,9 +343,32 @@ mod windows {
     >;
     pub struct D3D11Texture {
         texture: ID3D11Texture2D,
+        keyed_mutex: IDXGIKeyedMutex,
         handle: HANDLE,
     }
+    pub fn create_d3d_device() -> anyhow::Result<Arc<Mutex<ID3D11Device>>> {
+        let mut d3d_device = None;
+        unsafe {
+            D3D11CreateDevice(
+                None, // TODO: adapter needed?
+                D3D_DRIVER_TYPE_HARDWARE,
+                HMODULE::default(),
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                None,
+                D3D11_SDK_VERSION,
+                Some(&mut d3d_device),
+                None,
+                None,
+            )?;
+        };
+        let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
+        let mt_device: ID3D11Multithread = d3d_device.cast()?;
+        unsafe { mt_device.SetMultithreadProtected(true) };
+        Ok(Arc::new(Mutex::new(d3d_device)))
+    }
+
     pub fn create_d3d11_texture(
+        device: Arc<Mutex<ID3D11Device>>,
         engine_handle: i64,
         dimensions: &VideoDimensions,
     ) -> anyhow::Result<D3D11Texture> {
@@ -385,7 +408,7 @@ mod windows {
             BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
             CPUAccessFlags: 0,
             // enable use with other devices
-            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,
+            MiscFlags: D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0 as u32 | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX.0 as u32,
         };
         trace!("creating texture");
 
@@ -396,12 +419,14 @@ mod windows {
         let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
         trace!("texture created {:?}", texture);
         let texture_as_resource: IDXGIResource = texture.cast()?;
+        let dxgi_keyed_mutex: IDXGIKeyedMutex = texture_as_resource.cast()?;
+
         let handle = unsafe { texture_as_resource.GetSharedHandle()? };
         if handle.is_invalid() {
             return Err(anyhow::anyhow!("Invalid handle"));
         }
         trace!("Created texture with handle: {:?}", handle);
-        Ok(D3D11Texture { texture, handle })
+        Ok(D3D11Texture { texture,keyed_mutex: dxgi_keyed_mutex, handle })
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
@@ -424,15 +449,15 @@ mod windows {
         // Implement the methods here
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
             trace!("Creating new D3D11 texture provider");
-            let texture_wrapper = create_d3d11_texture(engine_handle, &dimensions)?;
+            let device = create_d3d_device()?;
+            let texture_wrapper = create_d3d11_texture(device, engine_handle, &dimensions)?;
 
-            let handle = texture_wrapper.handle;
             let handle = texture_wrapper.handle;
             let width = dimensions.width;
             let height = dimensions.height;
 
             let out = Arc::new(Self {
-                current_texture: RefCell::new(None),
+                current_texture: Mutex::new(None),
                 context: TextureProviderCtx {
                     texture: RwLock::new(Some(texture_wrapper)),
                     engine_handle,
@@ -454,13 +479,16 @@ mod windows {
 
         fn on_begin_draw(&self, sink: &gst::Element) -> anyhow::Result<()> {
             let mut handle = None;
-           { 
+            // don't let anyone else access the texture while we drawing
+
+            self.current_texture.lock().log_err();
+            trace!("on_begin_draw in thread {:?}", std::thread::current().id());
+            
             self.context
                 .texture
                 .try_read()
                 .map(|t| handle = t.as_ref().map(|t| t.handle))
-                .map_err(|e| anyhow::anyhow!("Failed to read texture: {:?}", e))?;
-            }
+                .map_err(|e| anyhow::anyhow!("Failed to read texture: {:?} on thread {:?}", e, std::thread::current().id()))?;
             if let Some(handle) = handle {
                 if sink.emit_by_name::<bool>(
                     "draw",
@@ -478,6 +506,8 @@ mod windows {
             return Err(anyhow::anyhow!("No HANDLE available"));
         }
     }
+
+
 
     pub type NativeRegisteredTexture =
         irondash_texture::alternative_api::RegisteredTexture<NativeTextureType, TextureProviderCtx>;

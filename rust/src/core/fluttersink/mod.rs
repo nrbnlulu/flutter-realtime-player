@@ -54,11 +54,7 @@ pub fn create_new_playable(
         )?;
         texture_id = registered_texture.get_texture_id();
     }
-    let flutter_sink = Arc::new(FlutterTextureSink::new(
-        initialized_sig_clone,
-        texture_provider,
-        registered_texture,
-    ));
+
 
     let pipeline = gst::ElementFactory::make("playbin")
         .property("uri", &video_info.uri)
@@ -66,6 +62,12 @@ pub fn create_new_playable(
         .build()?
         .downcast::<gst::Pipeline>()
         .unwrap();
+    let flutter_sink = Arc::new(FlutterTextureSink::new(
+        initialized_sig_clone,
+        &pipeline,
+        texture_provider,
+        registered_texture,
+    )?);
     let playbin = &pipeline;
     playbin.connect_closure("element-setup", false, 
     glib::closure!(move |_playbin: &gst::Element, element: &gst::Element | {
