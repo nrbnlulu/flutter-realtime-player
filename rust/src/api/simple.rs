@@ -16,6 +16,10 @@ pub fn greet(name: String) -> String {
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
+    let is_initialized = IS_INITIALIZED.lock().unwrap();
+    if *is_initialized {
+        return;
+    }
     SimpleLogger::new().init().unwrap();
 
     // Default utilities - feel free to custom
@@ -23,11 +27,20 @@ pub fn init_app() {
     debug!("Done initializing app");
 }
 
+lazy_static::lazy_static! {
+    static ref IS_INITIALIZED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+}
+
 pub fn flutter_gstreamer_init(ffi_ptr: i64) {
+    let mut is_initialized = IS_INITIALIZED.lock().unwrap();
+    if *is_initialized {
+        return;
+    }
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
 
     fluttersink::init().log_err();
     debug!("Done initializing flutter gstreamer");
+    *is_initialized = true;
 }
 
 pub fn create_new_playable(engine_handle: i64,vide_info: VideoInfo) -> i64 {
