@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +32,7 @@ Future<void> main(List<String> args) async {
   }
 }
 
+
 class _ExampleMainWindow extends StatefulWidget {
   const _ExampleMainWindow({Key? key}) : super(key: key);
 
@@ -41,6 +43,7 @@ class _ExampleMainWindow extends StatefulWidget {
 class _ExampleMainWindowState extends State<_ExampleMainWindow> {
   @override
   Widget build(BuildContext context) {
+    
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(

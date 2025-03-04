@@ -10,6 +10,7 @@
     "xtr1common": "cpp",
     "xutility": "cpp",
     "sstream": "cpp",
-    "stdexcept": "cpp"
+    "stdexcept": "cpp",
+    "readme": "cpp"
   }
 }
