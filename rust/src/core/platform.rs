@@ -311,13 +311,12 @@ pub use linux::*;
 #[cfg(target_os = "windows")]
 mod windows {
     use glib_sys::{gboolean, gpointer};
-    use gst::{ffi::gst_caps_from_string, glib::object::ObjectExt};
+    use gst::{ffi::gst_caps_from_string, format::Default, glib::object::ObjectExt};
     use gst_video::VideoInfo;
     use irondash_texture::TextureDescriptor;
     use log::trace;
     use std::{
-        cell::RefCell,
-        sync::{Arc, Mutex, RwLock},
+        cell::RefCell, mem, sync::{Arc, Mutex, RwLock}
     };
     use windows::{
         core::*,
@@ -327,7 +326,7 @@ mod windows {
                 Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN},
                 Direct3D11::*,
                 Dxgi::{
-                    Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
+                    Common::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
                     *,
                 },
             },
@@ -346,59 +345,21 @@ mod windows {
         keyed_mutex: IDXGIKeyedMutex,
         handle: HANDLE,
     }
-    pub fn create_d3d_device() -> anyhow::Result<Arc<Mutex<ID3D11Device>>> {
-        let mut d3d_device = None;
-        unsafe {
-            D3D11CreateDevice(
-                None, // TODO: adapter needed?
-                D3D_DRIVER_TYPE_HARDWARE,
-                HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                None,
-                D3D11_SDK_VERSION,
-                Some(&mut d3d_device),
-                None,
-                None,
-            )?;
-        };
-        let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
-        let mt_device: ID3D11Multithread = d3d_device.cast()?;
-        unsafe { mt_device.SetMultithreadProtected(true) };
-        Ok(Arc::new(Mutex::new(d3d_device)))
-    }
+
+    const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
     pub fn create_d3d11_texture(
-        device: Arc<Mutex<ID3D11Device>>,
+        device: &ID3D11Device,
         engine_handle: i64,
         dimensions: &VideoDimensions,
     ) -> anyhow::Result<D3D11Texture> {
-        // let engine_ctxs = irondash_engine_context::EngineContext::get().unwrap();
-        // let _ = engine_ctxs.get_flutter_view(engine_handle)?;
-        let mut d3d_device = None;
-        unsafe {
-            D3D11CreateDevice(
-                None, // TODO: adapter needed?
-                D3D_DRIVER_TYPE_HARDWARE,
-                HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                None,
-                D3D11_SDK_VERSION,
-                Some(&mut d3d_device),
-                None,
-                None,
-            )?;
-        };
-        let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
-        let mt_device: ID3D11Multithread = d3d_device.cast()?;
-
-        unsafe { mt_device.SetMultithreadProtected(true) };
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
             Width: dimensions.width,
             Height: dimensions.height,
             MipLevels: 1,
             ArraySize: 1,
-            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+            Format: TEXTURE_FORMAT,
             SampleDesc: DXGI_SAMPLE_DESC {
                 Count: 1,
                 Quality: 0,
@@ -408,13 +369,14 @@ mod windows {
             BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
             CPUAccessFlags: 0,
             // enable use with other devices
-            MiscFlags: D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0 as u32 | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX.0 as u32,
+            MiscFlags: D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0 as u32
+                | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX.0 as u32,
         };
         trace!("creating texture");
 
         let mut texture = None;
         unsafe {
-            d3d_device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
+            device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
         };
         let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
         trace!("texture created {:?}", texture);
@@ -425,8 +387,13 @@ mod windows {
         if handle.is_invalid() {
             return Err(anyhow::anyhow!("Invalid handle"));
         }
+
         trace!("Created texture with handle: {:?}", handle);
-        Ok(D3D11Texture { texture,keyed_mutex: dxgi_keyed_mutex, handle })
+        Ok(D3D11Texture {
+            texture,
+            keyed_mutex: dxgi_keyed_mutex,
+            handle,
+        })
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
@@ -440,6 +407,34 @@ mod windows {
         dimensions: VideoDimensions,
     }
 
+    fn create_d3d_device_and_ctx(
+        flags: D3D11_CREATE_DEVICE_FLAG,
+        multithread: bool,
+    ) -> anyhow::Result<(ID3D11Device, ID3D11DeviceContext)> {
+        let mut d3d_device = None;
+        unsafe {
+            D3D11CreateDevice(
+                None, // TODO: adapter needed?
+                D3D_DRIVER_TYPE_HARDWARE,
+                HMODULE::default(),
+                flags,
+                None,
+                D3D11_SDK_VERSION,
+                Some(&mut d3d_device),
+                None,
+                Default::default(),
+            )?;
+        };
+        let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
+        let immediate_ctx = unsafe { d3d_device.GetImmediateContext() }?;
+        if multithread {
+            let mt_device: ID3D11Multithread = d3d_device.cast()?;
+            unsafe { mt_device.SetMultithreadProtected(true) };
+        }
+
+        Ok((d3d_device, immediate_ctx))
+    }
+
     impl TextureDescriptionProvider2Ext<NativeTextureType>
         for irondash_texture::alternative_api::TextureDescriptionProvider2<
             NativeTextureType,
@@ -449,8 +444,33 @@ mod windows {
         // Implement the methods here
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
             trace!("Creating new D3D11 texture provider");
-            let device = create_d3d_device()?;
-            let texture_wrapper = create_d3d11_texture(device, engine_handle, &dimensions)?;
+            let (device, ctx) = create_d3d_device_and_ctx(D3D11_CREATE_DEVICE_BGRA_SUPPORT, true)?;
+            let (gst_device, gst_d3d_ctx) =
+                create_d3d_device_and_ctx(D3D11_CREATE_DEVICE_VIDEO_SUPPORT, false)?;
+            let gst_device = gst_device.cast::<ID3D11Device1>()?;
+            let texture_wrapper = create_d3d11_texture(&device, engine_handle, &dimensions)?;
+
+            let gst_texture: ID3D11Texture2D =
+                unsafe { gst_device.OpenSharedResource1(texture_wrapper.handle)? };
+            let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
+                Format: TEXTURE_FORMAT,
+                ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
+                ..unsafe { mem::zeroed() }
+
+            };
+            let texture_render_target = None;
+
+             unsafe {
+                gst_device.CreateRenderTargetView(
+                    &gst_texture,
+                    Some(&render_target_view_desc),
+                    texture_render_target,
+                )
+            }?;
+            let texture_render_target = unsafe { texture_render_target.ok_or(anyhow::anyhow!("Failed to create render target"))?.as_ref().clone().unwrap() }.clone();
+            // https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11devicecontext-omsetrendertargets
+            // should automatically bind the textures 
+            unsafe { gst_d3d_ctx.OMSetRenderTargets(Some(&[texture_render_target]), None) };
 
             let handle = texture_wrapper.handle;
             let width = dimensions.width;
@@ -483,12 +503,18 @@ mod windows {
 
             self.current_texture.lock().log_err();
             trace!("on_begin_draw in thread {:?}", std::thread::current().id());
-            
+
             self.context
                 .texture
                 .try_read()
                 .map(|t| handle = t.as_ref().map(|t| t.handle))
-                .map_err(|e| anyhow::anyhow!("Failed to read texture: {:?} on thread {:?}", e, std::thread::current().id()))?;
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to read texture: {:?} on thread {:?}",
+                        e,
+                        std::thread::current().id()
+                    )
+                })?;
             if let Some(handle) = handle {
                 if sink.emit_by_name::<bool>(
                     "draw",
@@ -506,8 +532,6 @@ mod windows {
             return Err(anyhow::anyhow!("No HANDLE available"));
         }
     }
-
-
 
     pub type NativeRegisteredTexture =
         irondash_texture::alternative_api::RegisteredTexture<NativeTextureType, TextureProviderCtx>;
