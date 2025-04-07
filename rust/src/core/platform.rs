@@ -1,4 +1,3 @@
-use super::types::Orientation;
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -304,26 +303,26 @@ mod linux {
         pub static GL_MANAGER: RefCell<GlManager> = RefCell::new(GlManager::new());
     }
 }
-use gst_video::VideoInfo;
 #[cfg(target_os = "linux")]
 pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use glib_sys::{gboolean, gpointer};
-    use gst::{ffi::gst_caps_from_string, format::Default, glib::object::ObjectExt};
-    use gst_video::VideoInfo;
+    use glib_sys::gpointer;
+    use gst::glib::object::ObjectExt;
+    
     use irondash_texture::TextureDescriptor;
     use log::trace;
     use std::{
-        cell::RefCell, mem, sync::{Arc, Mutex, RwLock}
+        mem,
+        sync::{Arc, Mutex, RwLock},
     };
     use windows::{
         core::*,
         Win32::{
-            Foundation::{HANDLE, HMODULE, HWND},
+            Foundation::{HANDLE, HMODULE},
             Graphics::{
-                Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN},
+                Direct3D::D3D_DRIVER_TYPE_HARDWARE,
                 Direct3D11::*,
                 Dxgi::{
                     Common::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
@@ -334,6 +333,14 @@ mod windows {
     };
 
     use crate::core::{fluttersink::utils::LogErr, types::VideoDimensions};
+    pub mod sys {
+        type GstD3dDevice = *mut glib_sys::gpointer;
+        type GstD3dContext = *mut glib_sys::gpointer;
+        extern "C" {
+            pub fn gst_d3d11_device_new_wrapped() -> GstD3dDevice;
+            pub fn gst_d3d11_context_new(device: GstD3dDevice) -> GstD3dContext;
+        }
+    }
 
     pub type NativeTextureType = irondash_texture::DxgiSharedHandle;
     pub type D3DTextureProvider = irondash_texture::alternative_api::TextureDescriptionProvider2<
@@ -414,7 +421,7 @@ mod windows {
         let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
-                None, // TODO: adapter needed?
+                None, // TODO: take the adapter(GPU) from flutter.
                 D3D_DRIVER_TYPE_HARDWARE,
                 HMODULE::default(),
                 flags,
@@ -422,7 +429,7 @@ mod windows {
                 D3D11_SDK_VERSION,
                 Some(&mut d3d_device),
                 None,
-                Default::default(),
+                None,
             )?;
         };
         let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
@@ -456,28 +463,22 @@ mod windows {
                 Format: TEXTURE_FORMAT,
                 ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
                 ..unsafe { mem::zeroed() }
-
             };
             let texture_render_target = None;
-
-             unsafe {
+            unsafe {
                 gst_device.CreateRenderTargetView(
                     &gst_texture,
                     Some(&render_target_view_desc),
                     texture_render_target,
                 )
             }?;
-            let texture_render_target = unsafe { texture_render_target.ok_or(anyhow::anyhow!("Failed to create render target"))?.as_ref().clone().unwrap() }.clone();
-            // https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11devicecontext-omsetrendertargets
-            // should automatically bind the textures 
-            unsafe { gst_d3d_ctx.OMSetRenderTargets(Some(&[texture_render_target]), None) };
 
             let handle = texture_wrapper.handle;
             let width = dimensions.width;
             let height = dimensions.height;
 
             let out = Arc::new(Self {
-                current_texture: Mutex::new(None),
+                current_texture: Arc::new(Mutex::new(None)),
                 context: TextureProviderCtx {
                     texture: RwLock::new(Some(texture_wrapper)),
                     engine_handle,
@@ -539,6 +540,6 @@ mod windows {
 
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{
-    D3DTextureProvider as NativeTextureProvider, NativeRegisteredTexture, NativeTextureType,
+    D3DTextureProvider as NativeTextureProvider, NativeRegisteredTexture,
     TextureDescriptionProvider2Ext,
 };

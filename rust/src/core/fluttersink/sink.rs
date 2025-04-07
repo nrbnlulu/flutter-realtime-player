@@ -1,8 +1,5 @@
-use crate::core::{
-    fluttersink::utils::LogErr,
-    platform::{NativeRegisteredTexture, NativeTextureProvider, NativeTextureType},
-};
-use gst::{glib, prelude::*};
+use crate::core::platform::{NativeRegisteredTexture, NativeTextureProvider};
+use gst::prelude::*;
 use log::trace;
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -48,10 +45,7 @@ impl FlutterTextureSink {
         #[cfg(target_os = "windows")]
         {
             use crate::core::platform::TextureDescriptionProvider2Ext;
-            use windows::{
-                core::*,
-                Win32::Graphics::{Direct3D11::*, Dxgi::*},
-            };
+            
 
             let app_sink = gst_app::AppSink::builder()
                 .caps(
@@ -68,7 +62,6 @@ impl FlutterTextureSink {
 
             // see https://gstreamer.freedesktop.org/documentation/d3d11/d3d11videosink.html?gi-language=c#d3d11videosink:draw-on-shared-texture
             glsink = gst::ElementFactory::make("d3d11videosink")
-                .property("draw-on-shared-texture", true)
                 .property_from_str("display-format", "DXGI_FORMAT_B8G8R8A8_UNORM")
                 .build()
                 .unwrap();
@@ -80,7 +73,7 @@ impl FlutterTextureSink {
                 gst_app::AppSinkCallbacks::builder()
                     .new_sample(move |sink| {
                         let sample = sink.pull_sample().map_err(|e| gst::FlowError::Flushing)?;
-                        let mut buffer = sample.buffer_owned().unwrap();
+                        let buffer = sample.buffer_owned().unwrap();
                     {
                         trace!("buffer is {:?}", buffer);
                     }
@@ -122,6 +115,7 @@ impl FlutterTextureSink {
     pub fn video_sink(&self) -> gst::Element {
         self.sinkbin.clone().into()
     }
+    
     pub fn texture_provider(&self) -> Arc<NativeTextureProvider> {
         self.provider.clone()
     }

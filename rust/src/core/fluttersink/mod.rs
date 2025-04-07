@@ -1,10 +1,10 @@
 pub(super) mod sink;
 pub mod utils;
 use std::{
-    sync::{atomic::AtomicBool, Arc, Mutex},
+    sync::{atomic::AtomicBool, Arc},
     thread,
 };
-use gst::{glib, prelude::*};
+use gst::glib;
 
 use gst::{
     glib::object::{Cast, ObjectExt},
@@ -21,6 +21,7 @@ use super::{platform::NativeRegisteredTexture, types};
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
 }
+static   GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE: &'static str =  "gst.d3d11.device.handle";
 
 pub fn create_new_playable(
     engine_handle: i64,
@@ -108,6 +109,12 @@ pub fn create_new_playable(
                         err.debug()
                     );
                     break;
+                },
+                gst::MessageView::NeedContext(msg) => {
+                    info!("Need context: {:?}", msg.context_type());
+                    #[cfg(target_os = "windows")]
+                    if *msg.context_type() == *GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
+                    }
                 }
                 _ => (),
             }
