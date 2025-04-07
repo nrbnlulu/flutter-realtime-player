@@ -39,7 +39,7 @@ dependencies:
     path: rust_builder
   flutter_rust_bridge: 2.8.0
   irondash_engine_context:
-    path: ../OS/irondash/engine_context/dart
+    path: ../irondash/engine_context/dart
   desktop_multi_window: ^0.2.1
 
 dev_dependencies:

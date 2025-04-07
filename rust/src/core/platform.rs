@@ -334,10 +334,14 @@ mod windows {
 
     use crate::core::{fluttersink::utils::LogErr, types::VideoDimensions};
     pub mod sys {
-        type GstD3dDevice = *mut glib_sys::gpointer;
-        type GstD3dContext = *mut glib_sys::gpointer;
+        use std::{ffi::c_void, os::windows::raw::HANDLE};
+
+        type GstD3dDevice = glib_sys::gpointer;
+        type GstD3dContext = glib_sys::gpointer;
+
+        #[link(name = "gstd3d11-1.0")]
         extern "C" {
-            pub fn gst_d3d11_device_new_wrapped() -> GstD3dDevice;
+            pub fn gst_d3d11_device_new_wrapped(device: HANDLE) -> GstD3dDevice;
             pub fn gst_d3d11_context_new(device: GstD3dDevice) -> GstD3dContext;
         }
     }
@@ -436,7 +440,10 @@ mod windows {
         let immediate_ctx = unsafe { d3d_device.GetImmediateContext() }?;
         if multithread {
             let mt_device: ID3D11Multithread = d3d_device.cast()?;
-            unsafe { mt_device.SetMultithreadProtected(true) };
+            let res = unsafe { mt_device.SetMultithreadProtected(true) };
+            if !res.as_bool() {
+                return Err(anyhow::anyhow!("Failed to set multithread protected"));
+            }
         }
 
         Ok((d3d_device, immediate_ctx))
@@ -476,6 +483,13 @@ mod windows {
             let handle = texture_wrapper.handle;
             let width = dimensions.width;
             let height = dimensions.height;
+            let gst_d3d_device_wrapper = unsafe { sys::gst_d3d11_device_new_wrapped(device.as_raw() as _) };
+            let gst_d3d_ctx_raw = unsafe { sys::gst_d3d11_context_new(gst_d3d_device_wrapper) };
+            let gst_d3d_ctx = unsafe { gst_d3d_ctx_raw.cast::<ID3D11DeviceContext>().as_ref().ok_or(
+                anyhow::anyhow!("Failed to cast gst_d3d_ctx_raw to ID3D11DeviceContext")
+           )? };
+
+
 
             let out = Arc::new(Self {
                 current_texture: Arc::new(Mutex::new(None)),
