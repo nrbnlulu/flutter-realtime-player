@@ -412,7 +412,7 @@ mod windows {
             return Err(anyhow::anyhow!("Invalid handle"));
         }
         trace!("Created texture with handle: {:?}", handle);
-        Ok((d3d_device, D3D11Texture { texture, handle }))
+        Ok(D3D11Texture { texture, handle })
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
