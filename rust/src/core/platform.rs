@@ -358,17 +358,35 @@ mod windows {
     const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
     pub fn create_d3d11_texture(
-        device: &ID3D11Device,
+        _: &ID3D11Device,
         engine_handle: i64,
         dimensions: &VideoDimensions,
     ) -> anyhow::Result<D3D11Texture> {
+     let mut d3d_device = None;
+        unsafe {
+            D3D11CreateDevice(
+                None, // TODO: adapter needed?
+                D3D_DRIVER_TYPE_HARDWARE,
+                HMODULE::default(),
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT ,
+                None,
+                D3D11_SDK_VERSION,
+                Some(&mut d3d_device),
+                None,
+                None,
+            )?;
+        };
+        let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
+        let mt_device: ID3D11Multithread = d3d_device.cast()?;
+        
+        unsafe { mt_device.SetMultithreadProtected(true) };
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
-            Width: dimensions.width,
-            Height: dimensions.height,
+            Width: 500,
+            Height: 500,
             MipLevels: 1,
             ArraySize: 1,
-            Format: TEXTURE_FORMAT,
+            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
             SampleDesc: DXGI_SAMPLE_DESC {
                 Count: 1,
                 Quality: 0,
@@ -378,20 +396,19 @@ mod windows {
             BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
             CPUAccessFlags: 0,
             // enable use with other devices
-            MiscFlags: D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0 as u32 | D3D11_RESOURCE_MISC_SHARED.0 as u32,
+            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,  
         };
         trace!("creating texture");
 
         let mut texture = None;
         unsafe {
-            device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
+            d3d_device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
         };
         let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
         trace!("texture created {:?}", texture);
-        let texture_as_resource: IDXGIResource1 = texture.cast()?;
-
+        let texture_as_resource: IDXGIResource = texture.cast()?;
         let handle = unsafe { texture_as_resource.GetSharedHandle()? };
-        if handle.is_invalid() {
+        if handle.is_invalid(){
             return Err(anyhow::anyhow!("Invalid handle"));
         }
         trace!("Created texture with handle: {:?}", handle);
@@ -419,7 +436,7 @@ mod windows {
                 None, // TODO: take the adapter(GPU) from flutter.
                 D3D_DRIVER_TYPE_HARDWARE,
                 HMODULE::default(),
-                flags,
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                 None,
                 D3D11_SDK_VERSION,
                 Some(&mut d3d_device),
