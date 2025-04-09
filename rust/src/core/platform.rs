@@ -378,7 +378,7 @@ mod windows {
             BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
             CPUAccessFlags: 0,
             // enable use with other devices
-            MiscFlags: (D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0 | D3D11_RESOURCE_MISC_SHARED.0) as u32,
+            MiscFlags: D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0 as u32 | D3D11_RESOURCE_MISC_SHARED.0 as u32,
         };
         trace!("creating texture");
 
@@ -388,13 +388,12 @@ mod windows {
         };
         let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
         trace!("texture created {:?}", texture);
-        let texture_as_resource: IDXGIResource = texture.cast()?;
-        trace!("texture as resource {:?}", texture_as_resource);
+        let texture_as_resource: IDXGIResource1 = texture.cast()?;
+
         let handle = unsafe { texture_as_resource.GetSharedHandle()? };
         if handle.is_invalid() {
             return Err(anyhow::anyhow!("Invalid handle"));
         }
-
         trace!("Created texture with handle: {:?}", handle);
         Ok(D3D11Texture { texture, handle })
     }
@@ -413,7 +412,7 @@ mod windows {
     fn create_d3d_device_and_ctx(
         flags: D3D11_CREATE_DEVICE_FLAG,
         multithread: bool,
-    ) -> anyhow::Result<(ID3D11Device, ID3D11DeviceContext)> {
+    ) -> anyhow::Result<ID3D11Device> {
         let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
@@ -429,7 +428,6 @@ mod windows {
             )?;
         };
         let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
-        let immediate_ctx = unsafe { d3d_device.GetImmediateContext() }?;
 
         if multithread {
             let mt_device: ID3D11Multithread = d3d_device.cast()?;
@@ -437,7 +435,7 @@ mod windows {
             let _ = unsafe { mt_device.SetMultithreadProtected(true) };
         }
 
-        Ok((d3d_device, immediate_ctx))
+        Ok(d3d_device)
     }
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
@@ -449,7 +447,7 @@ mod windows {
         // Implement the methods here
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
             trace!("Creating new D3D11 texture provider");
-            let (device, ctx) = create_d3d_device_and_ctx(
+            let device  = create_d3d_device_and_ctx(
                 D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
                 true,
             )?;
