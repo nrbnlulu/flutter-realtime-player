@@ -358,10 +358,9 @@ mod windows {
     const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
     pub fn create_d3d11_texture(
-        _: &ID3D11Device,
         engine_handle: i64,
         dimensions: &VideoDimensions,
-    ) -> anyhow::Result<D3D11Texture> {
+    ) -> anyhow::Result<(ID3D11Device, D3D11Texture)> {
      let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
@@ -407,12 +406,13 @@ mod windows {
         let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
         trace!("texture created {:?}", texture);
         let texture_as_resource: IDXGIResource = texture.cast()?;
+        trace!("GRRRRRRRRRRRRRRRRRR {:?}", texture_as_resource);
         let handle = unsafe { texture_as_resource.GetSharedHandle()? };
         if handle.is_invalid(){
             return Err(anyhow::anyhow!("Invalid handle"));
         }
         trace!("Created texture with handle: {:?}", handle);
-        Ok(D3D11Texture { texture, handle })
+        Ok((d3d_device, D3D11Texture { texture, handle }))
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
@@ -464,29 +464,30 @@ mod windows {
         // Implement the methods here
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
             trace!("Creating new D3D11 texture provider");
-            let device  = create_d3d_device_and_ctx(
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-                true,
-            )?;
+            // let device  = create_d3d_device_and_ctx(
+            //     D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+            //     true,
+            // )?;
 
-            let gst_device = device.cast::<ID3D11Device1>()?;
-            let texture_wrapper = create_d3d11_texture(&device, engine_handle, &dimensions)?;
+            let (device, texture_wrapper) = create_d3d11_texture( engine_handle, &dimensions)?;
+            let gst_device = device.cast::<ID3D11Device>()?;
 
-            let gst_texture: ID3D11Texture2D =
-                unsafe { gst_device.OpenSharedResource1(texture_wrapper.handle)? };
-            let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
-                Format: TEXTURE_FORMAT,
-                ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
-                ..unsafe { mem::zeroed() }
-            };
-            let texture_render_target = None;
-            unsafe {
-                gst_device.CreateRenderTargetView(
-                    &gst_texture,
-                    Some(&render_target_view_desc),
-                    texture_render_target,
-                )
-            }?;
+            // let mut gst_shared_texture = None;
+            // let gst_texture: ID3D11Texture2D =
+            //     unsafe { gst_device.OpenSharedResource(texture_wrapper.handle, gst_shared_texture)? };
+            // let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
+            //     Format: TEXTURE_FORMAT,
+            //     ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
+            //     ..unsafe { mem::zeroed() }
+            // };
+            // let texture_render_target = None;
+            // unsafe {
+            //     gst_device.CreateRenderTargetView(
+            //         &gst_texture,
+            //         Some(&render_target_view_desc),
+            //         texture_render_target,
+            //     )
+            // }?;
 
             let handle = texture_wrapper.handle;
             let width = dimensions.width;

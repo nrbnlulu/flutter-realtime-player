@@ -19,6 +19,7 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await rlib_gen.RustLib.init();
+
   rlib.flutterGstreamerInit(ffiPtr: ffi.NativeApi.initializeApiDLData.address);
   if (args.firstOrNull == 'multi_window') {
     final windowId = int.parse(args[1]);
@@ -33,6 +34,8 @@ Future<void> main(List<String> args) async {
     runApp(const _ExampleMainWindow());
   }
 }
+
+
 
 
 class _ExampleMainWindow extends StatefulWidget {

@@ -40,8 +40,8 @@ dependencies:
   flutter_rust_bridge: 2.8.0
   irondash_engine_context:
     git:
-      url: https://github.com/nrbnlulu/irondash
-      ref: windows-for-gstreamer
+      url: https://github.com/nrbnlulu/irondash.git
+      ref: f5732bac8ab09e1370cee074fbad671687d659f7
       path: engine_context/dart
   desktop_multi_window: ^0.2.1
 

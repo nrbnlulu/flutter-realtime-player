@@ -134,9 +134,9 @@ packages:
     dependency: "direct main"
     description:
       path: "engine_context/dart"
-      ref: windows-for-gstreamer
-      resolved-ref: a47eedbc15a708c69ff7b55a3a524fadc0a578d1
-      url: "https://github.com/nrbnlulu/irondash"
+      ref: f5732bac8ab09e1370cee074fbad671687d659f7
+      resolved-ref: f5732bac8ab09e1370cee074fbad671687d659f7
+      url: "https://github.com/nrbnlulu/irondash.git"
     source: git
     version: "0.5.4"
   leak_tracker:
