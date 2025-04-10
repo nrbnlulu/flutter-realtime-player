@@ -27,6 +27,7 @@ Future<void> main(List<String> args) async {
         ? const {}
         : jsonDecode(args[2]) as Map<String, dynamic>;
     runApp(_ExampleSubWindow(
+      
       windowController: WindowController.fromWindowId(windowId),
       args: argument,
     ));

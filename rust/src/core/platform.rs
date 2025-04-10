@@ -381,8 +381,8 @@ mod windows {
         unsafe { mt_device.SetMultithreadProtected(true) };
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
-            Width: 500,
-            Height: 500,
+            Width: dimensions.width,
+            Height: dimensions.height,
             MipLevels: 1,
             ArraySize: 1,
             Format: DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -406,13 +406,12 @@ mod windows {
         let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
         trace!("texture created {:?}", texture);
         let texture_as_resource: IDXGIResource = texture.cast()?;
-        trace!("GRRRRRRRRRRRRRRRRRR {:?}", texture_as_resource);
         let handle = unsafe { texture_as_resource.GetSharedHandle()? };
         if handle.is_invalid(){
             return Err(anyhow::anyhow!("Invalid handle"));
         }
         trace!("Created texture with handle: {:?}", handle);
-        Ok(D3D11Texture { texture, handle })
+        Ok((d3d_device,  D3D11Texture { texture, handle }))
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
@@ -470,24 +469,22 @@ mod windows {
             // )?;
 
             let (device, texture_wrapper) = create_d3d11_texture( engine_handle, &dimensions)?;
-            let gst_device = device.cast::<ID3D11Device>()?;
 
-            // let mut gst_shared_texture = None;
-            // let gst_texture: ID3D11Texture2D =
-            //     unsafe { gst_device.OpenSharedResource(texture_wrapper.handle, gst_shared_texture)? };
-            // let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
-            //     Format: TEXTURE_FORMAT,
-            //     ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
-            //     ..unsafe { mem::zeroed() }
-            // };
-            // let texture_render_target = None;
-            // unsafe {
-            //     gst_device.CreateRenderTargetView(
-            //         &gst_texture,
-            //         Some(&render_target_view_desc),
-            //         texture_render_target,
-            //     )
-            // }?;
+            let mut gst_shared_texture: Option<ID3D11Texture2D> = None;
+            unsafe { device.OpenSharedResource(texture_wrapper.handle, &mut gst_shared_texture) }.unwrap();
+            let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
+                Format: TEXTURE_FORMAT,
+                ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
+                ..unsafe { mem::zeroed() }
+            };
+            let texture_render_target = None;
+            unsafe {
+                device.CreateRenderTargetView(
+                    &texture_wrapper.texture,
+                    Some(&render_target_view_desc),
+                    texture_render_target,
+                )
+            }?;
 
             let handle = texture_wrapper.handle;
             let width = dimensions.width;
