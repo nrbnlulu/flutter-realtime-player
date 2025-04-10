@@ -313,8 +313,7 @@ mod windows {
     use irondash_texture::TextureDescriptor;
     use log::trace;
     use std::{
-        mem,
-        sync::{Arc, Mutex, RwLock},
+        collections::HashMap, mem, sync::{Arc, Mutex, RwLock}
     };
     use windows::{
         core::*,
@@ -350,14 +349,14 @@ mod windows {
         NativeTextureType,
         TextureProviderCtx,
     >;
-    pub struct D3D11Texture {
-        texture: ID3D11Texture2D,
-        handle: HANDLE,
-        gst_d3d_device_ptr: sys::GstD3dDevice,
-        gst_d3d_ctx_ptr: sys::GstD3dContext,
+    pub struct D3D11TextureCtx {
+        pub texture: ID3D11Texture2D,
+        pub handle: HANDLE,
+        pub gst_d3d_device_ptr: sys::GstD3dDevice,
+        pub gst_d3d_ctx_ptr: sys::GstD3dContext,
     }
 
-    impl D3D11Texture {
+    impl D3D11TextureCtx {
         pub fn gst_d3d_ctx(&self) -> anyhow::Result<ID3D11DeviceContext> {
             unsafe {
                 self.gst_d3d_ctx_ptr
@@ -375,7 +374,7 @@ mod windows {
     pub fn create_d3d11_texture(
         engine_handle: i64,
         dimensions: &VideoDimensions,
-    ) -> anyhow::Result<(ID3D11Device, D3D11Texture)> {
+    ) -> anyhow::Result<(ID3D11Device, D3D11TextureCtx)> {
         let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
@@ -435,7 +434,7 @@ mod windows {
         trace!("Created texture with handle: {:?}", handle);
         Ok((
             d3d_device,
-            D3D11Texture {
+            D3D11TextureCtx {
                 texture,
                 handle,
                 gst_d3d_device_ptr: gst_d3d_device_wrapper,
@@ -450,7 +449,7 @@ mod windows {
     }
 
     pub struct TextureProviderCtx {
-        texture: RwLock<Option<D3D11Texture>>,
+        pub texture: RwLock<Option<D3D11TextureCtx>>,
         engine_handle: i64,
         dimensions: VideoDimensions,
     }
@@ -484,6 +483,10 @@ mod windows {
         Ok(d3d_device)
     }
 
+    lazy_static::lazy_static! {
+        static ref VIDEO_SESSIONS: Mutex<HashMap<i64, D3D11TextureCtx>> = Mutex::new(HashMap::new());
+    }
+
     impl TextureDescriptionProvider2Ext<NativeTextureType>
         for irondash_texture::alternative_api::TextureDescriptionProvider2<
             NativeTextureType,
@@ -498,10 +501,10 @@ mod windows {
             //     true,
             // )?;
 
-            let (device, texture_wrapper) = create_d3d11_texture(engine_handle, &dimensions)?;
+            let (device, texture_ctx) = create_d3d11_texture(engine_handle, &dimensions)?;
 
             let mut gst_shared_texture: Option<ID3D11Texture2D> = None;
-            unsafe { device.OpenSharedResource(texture_wrapper.handle, &mut gst_shared_texture) }
+            unsafe { device.OpenSharedResource(texture_ctx.handle, &mut gst_shared_texture) }
                 .unwrap();
             let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
                 Format: TEXTURE_FORMAT,
@@ -511,13 +514,13 @@ mod windows {
             let texture_render_target = None;
             unsafe {
                 device.CreateRenderTargetView(
-                    &texture_wrapper.texture,
+                    &texture_ctx.texture,
                     Some(&render_target_view_desc),
                     texture_render_target,
                 )
             }?;
 
-            let handle = texture_wrapper.handle;
+            let handle = texture_ctx.handle;
             let width = dimensions.width;
             let height = dimensions.height;
 
@@ -526,7 +529,7 @@ mod windows {
             let out = Arc::new(Self {
                 current_texture: Arc::new(Mutex::new(None)),
                 context: TextureProviderCtx {
-                    texture: RwLock::new(Some(texture_wrapper)),
+                    texture: RwLock::new(Some(texture_ctx)),
                     engine_handle,
                     dimensions,
                 },

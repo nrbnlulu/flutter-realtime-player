@@ -4,7 +4,7 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
     thread,
 };
-use gst::glib;
+use gst::{ffi::{gst_context_get_structure, gst_element_set_context, gst_structure_to_string}, glib::{self, translate::ToGlibPtr, value::ToValue}};
 
 use gst::{
     glib::object::{Cast, ObjectExt},
@@ -114,7 +114,27 @@ pub fn create_new_playable(
                     info!("Need context: {:?}", msg.context_type());
                     #[cfg(target_os = "windows")]
                     if *msg.context_type() == *GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
-                        texture_provider.tex
+                        let ctx_ = texture_provider.context.texture.read().unwrap();
+                        let ctx = ctx_.unwrap();
+                        unsafe {
+                            use gst::prelude::*;
+
+                           let el_raw= msg.src().unwrap().downcast::<gst::Element>().unwrap().as_ptr();
+
+                            gst_element_set_context(
+                                el_raw,
+                                ctx.gst_d3d_ctx_ptr as *mut _,
+                            );
+                            info!("Set context for element: {:?}", msg.src().unwrap().name());
+                            let ctx = gst_context_get_structure(ctx.gst_d3d_ctx_ptr as *mut _);
+                            let ctx = gst::StructureRef::from_glib_borrow(ctx);
+                            let ctx_str = gst_structure_to_string(ctx.as_ptr());
+                            info!("published context to gstd3d11: {:?}", ctx_str);
+                            glib::ffi::g_free(ctx_str as *mut _);
+                     } 
+
+
+
                     }
                 }
                 _ => (),
