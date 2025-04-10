@@ -114,6 +114,7 @@ pub fn create_new_playable(
                     info!("Need context: {:?}", msg.context_type());
                     #[cfg(target_os = "windows")]
                     if *msg.context_type() == *GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
+                        texture_provider.tex
                     }
                 }
                 _ => (),

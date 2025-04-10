@@ -335,8 +335,8 @@ mod windows {
     pub mod sys {
         use std::{ffi::c_void, os::windows::raw::HANDLE};
 
-        type GstD3dDevice = glib_sys::gpointer;
-        type GstD3dContext = glib_sys::gpointer;
+        pub type GstD3dDevice = glib_sys::gpointer;
+        pub type GstD3dContext = glib_sys::gpointer;
 
         #[link(name = "gstd3d11-1.0")]
         extern "C" {
@@ -353,21 +353,36 @@ mod windows {
     pub struct D3D11Texture {
         texture: ID3D11Texture2D,
         handle: HANDLE,
+        gst_d3d_device_ptr: sys::GstD3dDevice,
+        gst_d3d_ctx_ptr: sys::GstD3dContext,
     }
 
+    impl D3D11Texture {
+        pub fn gst_d3d_ctx(&self) -> anyhow::Result<ID3D11DeviceContext> {
+            unsafe {
+                self.gst_d3d_ctx_ptr
+                    .cast::<ID3D11DeviceContext>()
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!(
+                        "Failed to cast gst_d3d_ctx_raw to ID3D11DeviceContext"
+                    ))
+                    .cloned()
+            }
+        }
+    }
     const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
     pub fn create_d3d11_texture(
         engine_handle: i64,
         dimensions: &VideoDimensions,
     ) -> anyhow::Result<(ID3D11Device, D3D11Texture)> {
-     let mut d3d_device = None;
+        let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
                 None, // TODO: adapter needed?
                 D3D_DRIVER_TYPE_HARDWARE,
                 HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT ,
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                 None,
                 D3D11_SDK_VERSION,
                 Some(&mut d3d_device),
@@ -377,7 +392,7 @@ mod windows {
         };
         let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
         let mt_device: ID3D11Multithread = d3d_device.cast()?;
-        
+
         unsafe { mt_device.SetMultithreadProtected(true) };
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
@@ -395,7 +410,7 @@ mod windows {
             BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
             CPUAccessFlags: 0,
             // enable use with other devices
-            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,  
+            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,
         };
         trace!("creating texture");
 
@@ -407,11 +422,26 @@ mod windows {
         trace!("texture created {:?}", texture);
         let texture_as_resource: IDXGIResource = texture.cast()?;
         let handle = unsafe { texture_as_resource.GetSharedHandle()? };
-        if handle.is_invalid(){
+        if handle.is_invalid() {
             return Err(anyhow::anyhow!("Invalid handle"));
         }
+        trace!("created gst device");
+        let gst_d3d_device_wrapper =
+            unsafe { sys::gst_d3d11_device_new_wrapped(d3d_device.as_raw() as _) };
+        trace!("created gst d3d device wrapper");
+        let gst_d3d_ctx_raw = unsafe { sys::gst_d3d11_context_new(gst_d3d_device_wrapper) };
+
+        trace!("created gst d3d ctx raw");
         trace!("Created texture with handle: {:?}", handle);
-        Ok((d3d_device,  D3D11Texture { texture, handle }))
+        Ok((
+            d3d_device,
+            D3D11Texture {
+                texture,
+                handle,
+                gst_d3d_device_ptr: gst_d3d_device_wrapper,
+                gst_d3d_ctx_ptr: gst_d3d_ctx_raw,
+            },
+        ))
     }
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
@@ -468,10 +498,11 @@ mod windows {
             //     true,
             // )?;
 
-            let (device, texture_wrapper) = create_d3d11_texture( engine_handle, &dimensions)?;
+            let (device, texture_wrapper) = create_d3d11_texture(engine_handle, &dimensions)?;
 
             let mut gst_shared_texture: Option<ID3D11Texture2D> = None;
-            unsafe { device.OpenSharedResource(texture_wrapper.handle, &mut gst_shared_texture) }.unwrap();
+            unsafe { device.OpenSharedResource(texture_wrapper.handle, &mut gst_shared_texture) }
+                .unwrap();
             let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
                 Format: TEXTURE_FORMAT,
                 ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
@@ -489,20 +520,7 @@ mod windows {
             let handle = texture_wrapper.handle;
             let width = dimensions.width;
             let height = dimensions.height;
-            trace!("created gst device");
-            let gst_d3d_device_wrapper =
-                unsafe { sys::gst_d3d11_device_new_wrapped(device.as_raw() as _) };
-            trace!("created gst d3d device wrapper");
-            let gst_d3d_ctx_raw = unsafe { sys::gst_d3d11_context_new(gst_d3d_device_wrapper) };
-            trace!("created gst d3d ctx raw");
-            let gst_d3d_ctx = unsafe {
-                gst_d3d_ctx_raw
-                    .cast::<ID3D11DeviceContext>()
-                    .as_ref()
-                    .ok_or(anyhow::anyhow!(
-                        "Failed to cast gst_d3d_ctx_raw to ID3D11DeviceContext"
-                    ))?
-            };
+
             trace!("casted gst d3d ctx raw to ID3D11DeviceContext");
 
             let out = Arc::new(Self {
