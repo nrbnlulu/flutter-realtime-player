@@ -66,7 +66,7 @@ pub fn create_new_playable(
     let flutter_sink = Arc::new(FlutterTextureSink::new(
         initialized_sig_clone,
         &pipeline,
-        texture_provider,
+        texture_provider.clone(),
         registered_texture,
     )?);
     let playbin = &pipeline;
@@ -115,11 +115,11 @@ pub fn create_new_playable(
                     #[cfg(target_os = "windows")]
                     if *msg.context_type() == *GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
                         let ctx_ = texture_provider.context.texture.read().unwrap();
-                        let ctx = ctx_.unwrap();
+                        let ctx = ctx_.as_ref().unwrap();
                         unsafe {
                             use gst::prelude::*;
 
-                           let el_raw= msg.src().unwrap().downcast::<gst::Element>().unwrap().as_ptr();
+                           let el_raw = msg.src().unwrap().clone().downcast_ref::<gst::Element>().unwrap().as_ptr();
 
                             gst_element_set_context(
                                 el_raw,

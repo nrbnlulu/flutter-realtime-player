@@ -44,8 +44,12 @@ impl FlutterTextureSink {
         // on windows use d3d11upload
         #[cfg(target_os = "windows")]
         {
-            use crate::core::platform::TextureDescriptionProvider2Ext;
-            
+                        // see https://gstreamer.freedesktop.org/documentation/d3d11/d3d11videosink.html?gi-language=c#d3d11videosink:draw-on-shared-texture
+            glsink = gst::ElementFactory::make("d3d11videosink")
+                .property_from_str("display-format", "DXGI_FORMAT_B8G8R8A8_UNORM")
+                .build()
+                .unwrap();
+
 
             let app_sink = gst_app::AppSink::builder()
                 .caps(
@@ -60,15 +64,7 @@ impl FlutterTextureSink {
                 .max_buffers(1u32)
                 .build();
 
-            // see https://gstreamer.freedesktop.org/documentation/d3d11/d3d11videosink.html?gi-language=c#d3d11videosink:draw-on-shared-texture
-            glsink = gst::ElementFactory::make("d3d11videosink")
-                .property_from_str("display-format", "DXGI_FORMAT_B8G8R8A8_UNORM")
-                .build()
-                .unwrap();
 
-            let registered_texture_clone = registered_texture.clone();
-            let provider_clone = provider.clone();
-            
             appsink.set_callbacks(
                 gst_app::AppSinkCallbacks::builder()
                     .new_sample(move |sink| {
@@ -82,19 +78,7 @@ impl FlutterTextureSink {
                     })
                     .build(),
             );
-            // glsink.connect_closure(
-            //     "begin-draw",
-            //     false,
-            //     glib::closure!(move |sink: &gst::Element| {
-            //         provider_clone
-            //             .on_begin_draw(sink)
-            //             .inspect(|_| {
-            //                 registered_texture_clone.mark_frame_available().log_err();
-            //             })
-            //             .log_err();
-            //         initialized_sig_clone.store(true, std::sync::atomic::Ordering::Relaxed);
-            //     }),
-            // );
+
             let bin = gst::Bin::new();
             let appsink_as_element: gst::Element = appsink.clone().upcast();
             bin.add_many(&[&appsink_as_element, &glsink])?;

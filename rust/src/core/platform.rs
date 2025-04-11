@@ -483,9 +483,7 @@ mod windows {
         Ok(d3d_device)
     }
 
-    lazy_static::lazy_static! {
-        static ref VIDEO_SESSIONS: Mutex<HashMap<i64, D3D11TextureCtx>> = Mutex::new(HashMap::new());
-    }
+
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
         for irondash_texture::alternative_api::TextureDescriptionProvider2<
