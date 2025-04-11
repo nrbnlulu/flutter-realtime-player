@@ -4,7 +4,7 @@ use log::trace;
 use std::sync::{atomic::AtomicBool, Arc};
 
 pub struct FlutterTextureSink {
-    sinkbin: gst::Bin,
+    sink: gst::Element,
     provider: Arc<NativeTextureProvider>,
     registered_texture: Arc<NativeRegisteredTexture>,
 }
@@ -16,8 +16,6 @@ impl FlutterTextureSink {
         provider: Arc<NativeTextureProvider>,
         registered_texture: Arc<NativeRegisteredTexture>,
     ) -> anyhow::Result<Self> {
-        let appsink = gst_app::AppSink::builder().build();
-        let glsink;
         let initialized_sig_clone = initialized_signal.clone();
         #[cfg(target_os = "linux")]
         {
@@ -44,14 +42,9 @@ impl FlutterTextureSink {
         // on windows use d3d11upload
         #[cfg(target_os = "windows")]
         {
-                        // see https://gstreamer.freedesktop.org/documentation/d3d11/d3d11videosink.html?gi-language=c#d3d11videosink:draw-on-shared-texture
-            glsink = gst::ElementFactory::make("d3d11videosink")
-                .property_from_str("display-format", "DXGI_FORMAT_B8G8R8A8_UNORM")
-                .build()
-                .unwrap();
 
 
-            let app_sink = gst_app::AppSink::builder()
+            let appsink = gst_app::AppSink::builder()
                 .caps(
                     &gst_video::VideoCapsBuilder::new()
                         .features(["memory:D3D11Memory"])
@@ -79,25 +72,19 @@ impl FlutterTextureSink {
                     .build(),
             );
 
-            let bin = gst::Bin::new();
-            let appsink_as_element: gst::Element = appsink.clone().upcast();
-            bin.add_many(&[&appsink_as_element, &glsink])?;
-            glsink.link(&appsink_as_element)?;
-            // Add ghost pad to bin
-            let sink_pad = glsink.static_pad("sink").expect("Failed to get sink pad");
-            let ghost_pad = gst::GhostPad::builder(gst::PadDirection::Sink)
-            .with_target(&sink_pad)?.build();
 
-            bin.add_pad(&ghost_pad)?;
+             
+            let appsink_as_element: gst::Element = appsink.upcast();
+
             Ok(Self {
-                sinkbin: bin,
+                sink: appsink_as_element,
                 provider,
                 registered_texture,
             })
         }
     }
     pub fn video_sink(&self) -> gst::Element {
-        self.sinkbin.clone().into()
+        self.sink.clone().into()
     }
     
     pub fn texture_provider(&self) -> Arc<NativeTextureProvider> {

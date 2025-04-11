@@ -4,7 +4,7 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
     thread,
 };
-use gst::{ffi::{gst_context_get_structure, gst_element_set_context, gst_structure_to_string}, glib::{self, translate::ToGlibPtr, value::ToValue}};
+use gst::{ffi::{gst_context_get_structure, gst_element_set_context, gst_structure_to_string}, glib::{self, translate::ToGlibPtr, value::ToValue}, prelude::{ElementExtManual, GstBinExtManual, PadExt}};
 
 use gst::{
     glib::object::{Cast, ObjectExt},
@@ -57,28 +57,52 @@ pub fn create_new_playable(
     }
 
 
-    let pipeline = gst::ElementFactory::make("playbin")
+    let pipeline = gst::Pipeline::new();
+    let src = gst::ElementFactory::make("urisourcebin")
         .property("uri", &video_info.uri)
-        .property("mute", &video_info.mute)
-        .build()?
-        .downcast::<gst::Pipeline>()
-        .unwrap();
-    let flutter_sink = Arc::new(FlutterTextureSink::new(
+        .build()?;
+    let demux = gst::ElementFactory::make("qtdemux").build()?;
+    let parse = gst::ElementFactory::make("h264parse").build()?;
+    let decoder = gst::ElementFactory::make("d3d11h264dec").build()?;
+    let convert = gst::ElementFactory::make("d3d11convert").build()?;
+    let sink = Arc::new(FlutterTextureSink::new(
         initialized_sig_clone,
         &pipeline,
         texture_provider.clone(),
         registered_texture,
     )?);
-    let playbin = &pipeline;
-    playbin.connect_closure("element-setup", false, 
-    glib::closure!(move |_playbin: &gst::Element, element: &gst::Element | {
-        if element.name() == "rtspsrc" {
-            info!("Setting latency to 0 for rtspsrc");
-            element.set_property("latency", &0u32);
-        }
-    }));
+    pipeline.add_many(&[&src, &demux, &parse, &decoder, &convert, &sink.video_sink()])?;
+    gst::Element::link_many(&[&parse, &decoder, &convert, &sink.video_sink()])?;
 
-    pipeline.set_property("video-sink", &flutter_sink.video_sink());
+    demux.connect_pad_added(move |demux, src_pad| {
+        let parse_sink_pad = parse.static_pad("sink").unwrap();
+        if parse_sink_pad.is_linked() {
+            return;
+        }
+        demux.link_pads(Some(src_pad.name().as_str()), &parse, Some("sink"))
+            .unwrap();
+    });
+
+    src.connect_pad_added(move |src, src_pad| {
+        let demux_sink_pad = demux.static_pad("sink").unwrap();
+        if !demux_sink_pad.is_linked() {
+            src.link_pads(Some(src_pad.name().as_str()), &demux, Some("sink"))
+                .unwrap_or_else(|err| {
+                    error!("Failed to link src pad to demux: {:?}", err);
+                });
+        }
+    });
+
+    // let playbin = &pipeline;
+    // playbin.connect_closure("element-setup", false, 
+    // glib::closure!(move |_playbin: &gst::Element, element: &gst::Element | {
+    //     if element.name() == "rtspsrc" {
+    //         info!("Setting latency to 0 for rtspsrc");
+    //         element.set_property("latency", &0u32);
+    //     }
+    // }));
+
+    // pipeline.set_property("video-sink", &flutter_sink.video_sink());
 
     thread::spawn(move || {
         pipeline
