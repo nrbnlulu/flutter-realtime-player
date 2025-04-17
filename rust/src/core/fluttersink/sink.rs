@@ -1,5 +1,6 @@
 use crate::core::platform::{NativeRegisteredTexture, NativeTextureProvider};
-use gst::prelude::*;
+use gst::{glib::translate::FromGlibPtrFull, prelude::*};
+use irondash_run_loop::platform;
 use log::trace;
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -62,10 +63,9 @@ impl FlutterTextureSink {
                 gst_app::AppSinkCallbacks::builder()
                     .new_sample(move |sink| {
                         let sample = sink.pull_sample().map_err(|e| gst::FlowError::Flushing)?;
-                        let buffer = sample.buffer_owned().unwrap();
-                    {
-                        trace!("buffer is {:?}", buffer);
-                    }
+                        
+
+
 
                         Ok(gst::FlowSuccess::Ok)
                     })

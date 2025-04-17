@@ -308,24 +308,23 @@ pub use linux::*;
 #[cfg(target_os = "windows")]
 mod windows {
     use glib_sys::gpointer;
-    use gst::glib::object::ObjectExt;
+    use gst::glib::{object::ObjectExt, translate::FromGlibPtrFull};
 
     use irondash_texture::TextureDescriptor;
-    use log::trace;
+    use log::{error, trace};
     use std::{
-        mem, sync::{Arc, Mutex, RwLock}
+        mem,
+        sync::{Arc, Mutex, RwLock},
     };
-    use windows::{
-        core::*,
-        Win32::{
-            Foundation::{HANDLE, HMODULE},
-            Graphics::{
-                Direct3D::D3D_DRIVER_TYPE_HARDWARE,
-                Direct3D11::{*},
-                Dxgi::{
-                    Common::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
-                    *,
-                },
+    use windows::core::Interface;
+    use windows::Win32::{
+        Foundation::{HANDLE, HMODULE},
+        Graphics::{
+            Direct3D::D3D_DRIVER_TYPE_HARDWARE,
+            Direct3D11::*,
+            Dxgi::{
+                Common::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
+                *,
             },
         },
     };
@@ -333,14 +332,17 @@ mod windows {
     use crate::core::{fluttersink::utils::LogErr, types::VideoDimensions};
     pub mod sys {
         use std::os::windows::raw::HANDLE;
-
         pub type GstD3dDevice = glib_sys::gpointer;
         pub type GstD3dContext = glib_sys::gpointer;
+        pub type GstD3dMemory = glib_sys::gpointer;
+        pub type GstMemory = glib_sys::gpointer;
 
         #[link(name = "gstd3d11-1.0")]
         extern "C" {
             pub fn gst_d3d11_device_new_wrapped(device: HANDLE) -> GstD3dDevice;
             pub fn gst_d3d11_context_new(device: GstD3dDevice) -> GstD3dContext;
+            pub fn gst_d3d11_memory_get_subresource_index(mem: *mut GstD3dMemory) -> u32;
+            pub fn gst_is_d3d11_memory(mem: *mut GstMemory) -> glib::ffi::gboolean;
         }
     }
 
@@ -392,7 +394,9 @@ mod windows {
         let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
         let mt_device: ID3D11Multithread = d3d_device.cast()?;
 
-        unsafe { let _ = mt_device.SetMultithreadProtected(true); };
+        unsafe {
+            let _ = mt_device.SetMultithreadProtected(true);
+        };
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
             Width: dimensions.width,
@@ -443,6 +447,45 @@ mod windows {
         ))
     }
 
+    pub fn get_texture_from_sample(
+        sample: gst::Sample,
+    ) -> Result<*mut ID3D11Texture2D, gst::FlowError> {
+        if let Some(buffer) = sample.buffer() {
+            if let Some(caps) = sample.caps_owned() {
+                let video_info = std::ptr::null_mut();
+                unsafe {
+                    gst_video::ffi::gst_video_info_from_caps(video_info, caps.as_mut_ptr());
+                    let video_info = gst_video::VideoInfo::from_glib_full(video_info);
+                    let mem = buffer.peek_memory(0);
+                    let mem_raw = mem.as_mut_ptr();
+                    if sys::gst_is_d3d11_memory(mem_raw as _) != 0 {
+                        // TODO: decoder output texture may be texture array. Application should check
+                        // subresource index
+                        let _subresource_index =
+                            sys::gst_d3d11_memory_get_subresource_index(mem_raw as _);
+                        // Use GST_MAP_D3D11 flag to indicate that direct Direct3D11 resource
+                        // * is required instead of system memory access.
+                        // *
+                        // * CAUTION: Application must not try to write/modify texture rendered by
+                        // * video decoder since it's likely a reference frame. If it's modified by
+                        // * application, then the other decoded frames would be broken.
+                        // * Only read access is allowed in this case
+                        let info = std::ptr::null_mut();
+                        if gst::ffi::gst_memory_map(mem_raw as _, info, MAP_FLAGS) != 0 {
+                            let data = (*info).data;
+                            return Ok(data as *mut ID3D11Texture2D);
+                        }
+                    };
+                }
+            }
+        }
+        error!("Failed to get texture from sample: {:?}", sample);
+        Err(gst::FlowError::Error)
+    }
+    // `gst::ffi::GST_MAP_FLAG_LAST << 1` is because it is defined in a macro so I can't use ffi.
+    const MAP_FLAGS: gst::ffi::GstMapFlags =
+        gst::ffi::GST_MAP_READ | (gst::ffi::GST_MAP_FLAG_LAST << 1);
+
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>>;
         fn on_begin_draw(&self, _sink: &gst::Element) -> anyhow::Result<()>;
@@ -482,8 +525,6 @@ mod windows {
 
         Ok(d3d_device)
     }
-
-
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
         for irondash_texture::alternative_api::TextureDescriptionProvider2<

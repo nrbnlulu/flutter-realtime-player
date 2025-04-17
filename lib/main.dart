@@ -7,10 +7,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'dart:ffi' as ffi;
 
-import 'package:flutter/material.dart';
-import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'package:my_app/src/rust/api/simple.dart' as rlib;
-import 'package:my_app/src/rust/core/types.dart';
 import 'package:my_app/src/rust/frb_generated.dart' as rlib_gen;
 import 'package:my_app/event_widget.dart';
 import 'package:my_app/video_player.dart';
