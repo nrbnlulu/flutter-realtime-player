@@ -6,8 +6,6 @@ use cfg_aliases::cfg_aliases;
 use gl_generator::{Api, Fallbacks, Profile, Registry, StructGenerator};
 
 fn main() {
-    
-   
     #[cfg(target_os = "linux")]
     {
         let dest = PathBuf::from(&env::var("OUT_DIR").unwrap());

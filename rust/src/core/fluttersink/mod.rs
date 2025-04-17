@@ -1,10 +1,15 @@
 pub(super) mod sink;
 pub mod utils;
+use gst::{
+    ffi::{gst_context_get_structure, gst_element_set_context, gst_structure_to_string},
+    glib::{self, translate::ToGlibPtr, value::ToValue},
+    prelude::{ElementExtManual, GstBinExtManual, PadExt},
+};
 use std::{
-    sync::{atomic::AtomicBool, Arc},
+    collections::HashMap,
+    sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
 };
-use gst::{ffi::{gst_context_get_structure, gst_element_set_context, gst_structure_to_string}, glib::{self, translate::ToGlibPtr, value::ToValue}, prelude::{ElementExtManual, GstBinExtManual, PadExt}};
 
 use gst::{
     glib::object::{Cast, ObjectExt},
@@ -21,7 +26,11 @@ use super::{platform::NativeRegisteredTexture, types};
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
 }
-static   GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE: &'static str =  "gst.d3d11.device.handle";
+static GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE: &'static str = "gst.d3d11.device.handle";
+
+lazy_static::lazy_static! {
+static ref SESSION_CACHE: Mutex<HashMap<i64, (Arc<NativeTextureProvider>, gst::Pipeline)>> = Mutex::new(HashMap::new());
+}
 
 pub fn create_new_playable(
     engine_handle: i64,
@@ -56,7 +65,6 @@ pub fn create_new_playable(
         texture_id = registered_texture.get_texture_id();
     }
 
-
     let pipeline = gst::Pipeline::new();
     let src = gst::ElementFactory::make("urisourcebin")
         .property("uri", &video_info.uri)
@@ -76,11 +84,11 @@ pub fn create_new_playable(
 
     demux.connect_pad_added(move |demux, src_pad| {
         let parse_sink_pad = parse.static_pad("sink").unwrap();
-        if parse_sink_pad.is_linked() {
-            return;
+        if !parse_sink_pad.is_linked() {
+            demux
+                .link_pads(Some(src_pad.name().as_str()), &parse, Some("sink"))
+                .unwrap();
         }
-        demux.link_pads(Some(src_pad.name().as_str()), &parse, Some("sink"))
-            .unwrap();
     });
 
     src.connect_pad_added(move |src, src_pad| {
@@ -94,7 +102,7 @@ pub fn create_new_playable(
     });
 
     // let playbin = &pipeline;
-    // playbin.connect_closure("element-setup", false, 
+    // playbin.connect_closure("element-setup", false,
     // glib::closure!(move |_playbin: &gst::Element, element: &gst::Element | {
     //     if element.name() == "rtspsrc" {
     //         info!("Setting latency to 0 for rtspsrc");
@@ -103,7 +111,10 @@ pub fn create_new_playable(
     // }));
 
     // pipeline.set_property("video-sink", &flutter_sink.video_sink());
-
+    SESSION_CACHE
+        .lock()
+        .unwrap()
+        .insert(engine_handle, (texture_provider.clone(), pipeline.clone()));
     thread::spawn(move || {
         pipeline
             .set_state(gst::State::Playing)
@@ -133,32 +144,32 @@ pub fn create_new_playable(
                         err.debug()
                     );
                     break;
-                },
+                }
                 gst::MessageView::NeedContext(msg) => {
                     info!("Need context: {:?}", msg.context_type());
                     #[cfg(target_os = "windows")]
-                    if *msg.context_type() == *GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
+                    if msg.context_type() == GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
                         let ctx_ = texture_provider.context.texture.read().unwrap();
                         let ctx = ctx_.as_ref().unwrap();
                         unsafe {
                             use gst::prelude::*;
 
-                           let el_raw = msg.src().unwrap().clone().downcast_ref::<gst::Element>().unwrap().as_ptr();
+                            let el_raw = msg
+                                .src()
+                                .unwrap()
+                                .clone()
+                                .downcast_ref::<gst::Element>()
+                                .unwrap()
+                                .as_ptr();
 
-                            gst_element_set_context(
-                                el_raw,
-                                ctx.gst_d3d_ctx_ptr as *mut _,
-                            );
+                            gst_element_set_context(el_raw, ctx.gst_d3d_ctx_ptr as *mut _);
                             info!("Set context for element: {:?}", msg.src().unwrap().name());
                             let ctx = gst_context_get_structure(ctx.gst_d3d_ctx_ptr as *mut _);
                             let ctx = gst::StructureRef::from_glib_borrow(ctx);
                             let ctx_str = gst_structure_to_string(ctx.as_ptr());
                             info!("published context to gstd3d11: {:?}", ctx_str);
                             glib::ffi::g_free(ctx_str as *mut _);
-                     } 
-
-
-
+                        }
                     }
                 }
                 _ => (),
@@ -173,3 +184,4 @@ pub fn create_new_playable(
     trace!("Sink initialized; returning texture id: {}", texture_id);
     Ok(texture_id)
 }
+
