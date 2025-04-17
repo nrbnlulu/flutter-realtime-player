@@ -313,7 +313,7 @@ mod windows {
     use irondash_texture::TextureDescriptor;
     use log::trace;
     use std::{
-        collections::HashMap, mem, sync::{Arc, Mutex, RwLock}
+        mem, sync::{Arc, Mutex, RwLock}
     };
     use windows::{
         core::*,
@@ -321,7 +321,7 @@ mod windows {
             Foundation::{HANDLE, HMODULE},
             Graphics::{
                 Direct3D::D3D_DRIVER_TYPE_HARDWARE,
-                Direct3D11::{self, *},
+                Direct3D11::{*},
                 Dxgi::{
                     Common::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
                     *,
@@ -332,7 +332,7 @@ mod windows {
 
     use crate::core::{fluttersink::utils::LogErr, types::VideoDimensions};
     pub mod sys {
-        use std::{ffi::c_void, os::windows::raw::HANDLE};
+        use std::os::windows::raw::HANDLE;
 
         pub type GstD3dDevice = glib_sys::gpointer;
         pub type GstD3dContext = glib_sys::gpointer;
@@ -392,7 +392,7 @@ mod windows {
         let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
         let mt_device: ID3D11Multithread = d3d_device.cast()?;
 
-        unsafe { mt_device.SetMultithreadProtected(true) };
+        unsafe { let _ = mt_device.SetMultithreadProtected(true); };
         trace!("creating texture desc");
         let texture_desc = D3D11_TEXTURE2D_DESC {
             Width: dimensions.width,

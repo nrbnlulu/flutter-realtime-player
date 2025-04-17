@@ -2,7 +2,7 @@ pub(super) mod sink;
 pub mod utils;
 use gst::{
     ffi::{gst_context_get_structure, gst_element_set_context, gst_structure_to_string},
-    glib::{self, translate::ToGlibPtr, value::ToValue},
+    glib::{self},
     prelude::{ElementExtManual, GstBinExtManual, PadExt},
 };
 use std::{
