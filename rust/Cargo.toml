@@ -11,10 +11,10 @@ crate-type = ["cdylib", "staticlib"]
 flutter_rust_bridge = "=2.8.0"
 
 # irondash
-irondash_texture = { git = "https://github.com/nrbnlulu/irondash.git", rev = "f5732bac8ab09e1370cee074fbad671687d659f7" }
-irondash_run_loop = { git = "https://github.com/nrbnlulu/irondash.git", rev = "f5732bac8ab09e1370cee074fbad671687d659f7" }
-irondash_engine_context = { git = "https://github.com/nrbnlulu/irondash.git", rev = "f5732bac8ab09e1370cee074fbad671687d659f7" }
-irondash_dart_ffi = { git = "https://github.com/nrbnlulu/irondash.git", rev = "f5732bac8ab09e1370cee074fbad671687d659f7" }
+irondash_texture = { git = "https://github.com/nrbnlulu/irondash.git", branch = "support-windows-2" }
+irondash_run_loop = { git = "https://github.com/nrbnlulu/irondash.git", branch = "support-windows-2" }
+irondash_engine_context = { git = "https://github.com/nrbnlulu/irondash.git", branch = "support-windows-2" }
+irondash_dart_ffi = { git = "https://github.com/nrbnlulu/irondash.git", branch = "support-windows-2" }
 
 simple_logger = "2.1"
 log = "0.4"
@@ -40,7 +40,7 @@ thread_local = "1.1.8"
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.59.0", features = [
+windows = { version = "0.61.1", features = [
     "Win32_Graphics_Direct3D11",
     "Win32_Foundation",
     "Win32_Graphics_Direct3D",

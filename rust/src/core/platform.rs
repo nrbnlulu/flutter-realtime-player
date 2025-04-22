@@ -307,13 +307,18 @@ pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
+    use glib::translate::Uninitialized;
     use glib_sys::gpointer;
-    use gst::glib::{object::ObjectExt, translate::FromGlibPtrFull};
+    use gst::{ffi::GstMapInfo, glib::{object::ObjectExt, translate::FromGlibPtrFull}};
 
+    use gst_video::ffi::{
+        GstVideoColorRange, GstVideoColorimetry, GstVideoInfo, GstVideoInterlaceMode,
+    };
     use irondash_texture::TextureDescriptor;
     use log::{error, trace};
     use std::{
-        mem,
+        mem::{self, MaybeUninit},
+        ptr::{addr_of, null_mut},
         sync::{Arc, Mutex, RwLock},
     };
     use windows::core::Interface;
@@ -351,32 +356,13 @@ mod windows {
         NativeTextureType,
         TextureProviderCtx,
     >;
-    pub struct D3D11TextureCtx {
-        pub texture: ID3D11Texture2D,
-        pub handle: HANDLE,
-        pub gst_d3d_device_ptr: sys::GstD3dDevice,
-        pub gst_d3d_ctx_ptr: sys::GstD3dContext,
-    }
 
-    impl D3D11TextureCtx {
-        pub fn gst_d3d_ctx(&self) -> anyhow::Result<ID3D11DeviceContext> {
-            unsafe {
-                self.gst_d3d_ctx_ptr
-                    .cast::<ID3D11DeviceContext>()
-                    .as_ref()
-                    .ok_or(anyhow::anyhow!(
-                        "Failed to cast gst_d3d_ctx_raw to ID3D11DeviceContext"
-                    ))
-                    .cloned()
-            }
-        }
-    }
     const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
-    pub fn create_d3d11_texture(
+    pub fn create_d3d11_device(
         engine_handle: i64,
         dimensions: &VideoDimensions,
-    ) -> anyhow::Result<(ID3D11Device, D3D11TextureCtx)> {
+    ) -> anyhow::Result<ID3D11Device> {
         let mut d3d_device = None;
         unsafe {
             D3D11CreateDevice(
@@ -397,72 +383,44 @@ mod windows {
         unsafe {
             let _ = mt_device.SetMultithreadProtected(true);
         };
-        trace!("creating texture desc");
-        let texture_desc = D3D11_TEXTURE2D_DESC {
-            Width: dimensions.width,
-            Height: dimensions.height,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
-            Usage: D3D11_USAGE_DEFAULT,
-            // will be used to draw on  + will be used in flutter shader
-            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
-            CPUAccessFlags: 0,
-            // enable use with other devices
-            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,
-        };
-        trace!("creating texture");
 
-        let mut texture = None;
-        unsafe {
-            d3d_device.CreateTexture2D(&texture_desc, None, Some(&mut texture))?;
-        };
-        let texture = texture.ok_or(anyhow::anyhow!("Failed to create d3d11 texture"))?;
-        trace!("texture created {:?}", texture);
-        let texture_as_resource: IDXGIResource = texture.cast()?;
-        let handle = unsafe { texture_as_resource.GetSharedHandle()? };
-        if handle.is_invalid() {
-            return Err(anyhow::anyhow!("Invalid handle"));
-        }
+        Ok(d3d_device)
+    }
+    pub fn create_gst_d3d_ctx(device: &ID3D11Device) -> sys::GstD3dContext {
         trace!("created gst device");
-        let gst_d3d_device_wrapper =
-            unsafe { sys::gst_d3d11_device_new_wrapped(d3d_device.as_raw() as _) };
-        trace!("created gst d3d device wrapper");
-        let gst_d3d_ctx_raw = unsafe { sys::gst_d3d11_context_new(gst_d3d_device_wrapper) };
+        unsafe {
+            let gst_d3d_device_wrapper = sys::gst_d3d11_device_new_wrapped(device.as_raw() as _);
+            trace!("created gst d3d device wrapper");
+            let gst_d3d_ctx_raw = sys::gst_d3d11_context_new(gst_d3d_device_wrapper);
 
-        trace!("created gst d3d ctx raw");
-        trace!("Created texture with handle: {:?}", handle);
-        Ok((
-            d3d_device,
-            D3D11TextureCtx {
-                texture,
-                handle,
-                gst_d3d_device_ptr: gst_d3d_device_wrapper,
-                gst_d3d_ctx_ptr: gst_d3d_ctx_raw,
-            },
-        ))
+            trace!("created gst d3d ctx raw");
+            gst_d3d_ctx_raw
+        }
     }
 
     pub fn get_texture_from_sample(
-        sample: gst::Sample,
-    ) -> Result<*mut ID3D11Texture2D, gst::FlowError> {
+        sample: gst::Sample, device: &ID3D11Device
+    ) -> Result<(HANDLE, gst_video::VideoInfo), gst::FlowError> {
         if let Some(buffer) = sample.buffer() {
-            if let Some(caps) = sample.caps_owned() {
-                let video_info = std::ptr::null_mut();
+            if let Some(caps) = sample.caps() {
                 unsafe {
-                    gst_video::ffi::gst_video_info_from_caps(video_info, caps.as_mut_ptr());
-                    let video_info = gst_video::VideoInfo::from_glib_full(video_info);
+                    let video_info = gst_video::VideoInfo::from_caps(caps).map_err(|_| {
+                        error!("Failed to get video info from caps: {:?}", caps);
+                        gst::FlowError::Error
+                    })?;
+                    trace!("video_info: {:?}", video_info);
+
                     let mem = buffer.peek_memory(0);
+                    trace!("peek_memory: {:?}", mem);
                     let mem_raw = mem.as_mut_ptr();
+                    trace!("peek_memory raw: {:?}", mem_raw);
+
                     if sys::gst_is_d3d11_memory(mem_raw as _) != 0 {
                         // TODO: decoder output texture may be texture array. Application should check
                         // subresource index
                         let _subresource_index =
                             sys::gst_d3d11_memory_get_subresource_index(mem_raw as _);
+                        trace!("subresource index: {:?}", _subresource_index);
                         // Use GST_MAP_D3D11 flag to indicate that direct Direct3D11 resource
                         // * is required instead of system memory access.
                         // *
@@ -470,10 +428,30 @@ mod windows {
                         // * video decoder since it's likely a reference frame. If it's modified by
                         // * application, then the other decoded frames would be broken.
                         // * Only read access is allowed in this case
-                        let info = std::ptr::null_mut();
-                        if gst::ffi::gst_memory_map(mem_raw as _, info, MAP_FLAGS) != 0 {
-                            let data = (*info).data;
-                            return Ok(data as *mut ID3D11Texture2D);
+                        let mut info: MaybeUninit<GstMapInfo> = mem::MaybeUninit::uninit();
+                        if gst::ffi::gst_memory_map(mem_raw as _, info.as_mut_ptr(), MAP_FLAGS) != 0 {
+                            
+                            let data=  info.assume_init().data;
+                            trace!("texture raw ptr: {:?}", data);
+                            let texture = data as *mut ID3D11Texture2D;
+                            let texture_as_resource = texture.cast::<IDXGIResource>();
+                            trace!("texture as resource: {:?}", texture_as_resource);
+                            let handle =  (*texture_as_resource).GetSharedHandle().unwrap();
+                            trace!("texture handle: {:?}", handle);
+
+                            if handle.is_invalid() {
+                                error!("Invalid handle: {:?}", handle);
+                                return Err(gst::FlowError::Error);
+                            }
+                            device.GetImmediateContext().map(
+                                |ctx|{
+                                    ctx.Flush();
+                                }
+                            ).map_err(|_|{
+                                error!("Failed to flush context");
+                                gst::FlowError::Error
+                            })?;
+                            return Ok((handle, video_info));
                         }
                     };
                 }
@@ -488,42 +466,12 @@ mod windows {
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>>;
-        fn on_begin_draw(&self, _sink: &gst::Element) -> anyhow::Result<()>;
     }
 
     pub struct TextureProviderCtx {
-        pub texture: RwLock<Option<D3D11TextureCtx>>,
+        pub device: ID3D11Device,
         engine_handle: i64,
         dimensions: VideoDimensions,
-    }
-
-    fn create_d3d_device_and_ctx(
-        flags: D3D11_CREATE_DEVICE_FLAG,
-        multithread: bool,
-    ) -> anyhow::Result<ID3D11Device> {
-        let mut d3d_device = None;
-        unsafe {
-            D3D11CreateDevice(
-                None, // TODO: take the adapter(GPU) from flutter.
-                D3D_DRIVER_TYPE_HARDWARE,
-                HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                None,
-                D3D11_SDK_VERSION,
-                Some(&mut d3d_device),
-                None,
-                None,
-            )?;
-        };
-        let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
-
-        if multithread {
-            let mt_device: ID3D11Multithread = d3d_device.cast()?;
-            // return True if multithread protection was already turned on prior to calling this method, false otherwise.
-            let _ = unsafe { mt_device.SetMultithreadProtected(true) };
-        }
-
-        Ok(d3d_device)
     }
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
@@ -535,31 +483,15 @@ mod windows {
         // Implement the methods here
         fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
             trace!("Creating new D3D11 texture provider");
-            // let device  = create_d3d_device_and_ctx(
-            //     D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
-            //     true,
-            // )?;
 
-            let (device, texture_ctx) = create_d3d11_texture(engine_handle, &dimensions)?;
+            let device = create_d3d11_device(engine_handle, &dimensions)?;
 
-            let mut gst_shared_texture: Option<ID3D11Texture2D> = None;
-            unsafe { device.OpenSharedResource(texture_ctx.handle, &mut gst_shared_texture) }
-                .unwrap();
             let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
                 Format: TEXTURE_FORMAT,
                 ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
                 ..unsafe { mem::zeroed() }
             };
-            let texture_render_target = None;
-            unsafe {
-                device.CreateRenderTargetView(
-                    &texture_ctx.texture,
-                    Some(&render_target_view_desc),
-                    texture_render_target,
-                )
-            }?;
 
-            let handle = texture_ctx.handle;
             let width = dimensions.width;
             let height = dimensions.height;
 
@@ -568,57 +500,13 @@ mod windows {
             let out = Arc::new(Self {
                 current_texture: Arc::new(Mutex::new(None)),
                 context: TextureProviderCtx {
-                    texture: RwLock::new(Some(texture_ctx)),
+                    device,
                     engine_handle,
                     dimensions,
                 },
             });
 
-            out.set_current_texture(TextureDescriptor::new(
-                irondash_texture::DxgiSharedHandle(handle.0 as *mut _),
-                width as _,
-                height as _,
-                width as _,
-                height as _,
-                irondash_texture::PixelFormat::BGRA,
-            ))?;
-
             Ok(out)
-        }
-
-        fn on_begin_draw(&self, sink: &gst::Element) -> anyhow::Result<()> {
-            let mut handle = None;
-            // don't let anyone else access the texture while we drawing
-
-            self.current_texture.lock().log_err();
-            trace!("on_begin_draw in thread {:?}", std::thread::current().id());
-
-            self.context
-                .texture
-                .try_read()
-                .map(|t| handle = t.as_ref().map(|t| t.handle))
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to read texture: {:?} on thread {:?}",
-                        e,
-                        std::thread::current().id()
-                    )
-                })?;
-            if let Some(handle) = handle {
-                if sink.emit_by_name::<bool>(
-                    "draw",
-                    &[
-                        &(handle.0 as gpointer),
-                        &(D3D11_RESOURCE_MISC_SHARED.0 as u32),
-                        &0u64,
-                        &0u64,
-                    ],
-                ) {
-                    return Ok(());
-                }
-                return Err(anyhow::anyhow!("Failed to emit draw signal"));
-            }
-            return Err(anyhow::anyhow!("No HANDLE available"));
         }
     }
 
@@ -628,6 +516,6 @@ mod windows {
 
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{
-    D3DTextureProvider as NativeTextureProvider, NativeRegisteredTexture,
-    TextureDescriptionProvider2Ext,
+    create_gst_d3d_ctx, get_texture_from_sample, D3DTextureProvider as NativeTextureProvider,
+    NativeRegisteredTexture, TextureDescriptionProvider2Ext,
 };

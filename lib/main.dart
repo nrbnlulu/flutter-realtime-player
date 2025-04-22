@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-
 import 'dart:ui';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -16,7 +15,6 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await rlib_gen.RustLib.init();
-
   rlib.flutterGstreamerInit(ffiPtr: ffi.NativeApi.initializeApiDLData.address);
   if (args.firstOrNull == 'multi_window') {
     final windowId = int.parse(args[1]);
@@ -24,21 +22,14 @@ Future<void> main(List<String> args) async {
         ? const {}
         : jsonDecode(args[2]) as Map<String, dynamic>;
 
-        
     runApp(_ExampleSubWindow(
-
-      
       windowController: WindowController.fromWindowId(windowId),
       args: argument,
     ));
-
   } else {
     runApp(const _ExampleMainWindow());
   }
 }
-
-
-
 
 class _ExampleMainWindow extends StatefulWidget {
   const _ExampleMainWindow({Key? key}) : super(key: key);
@@ -50,7 +41,6 @@ class _ExampleMainWindow extends StatefulWidget {
 class _ExampleMainWindowState extends State<_ExampleMainWindow> {
   @override
   Widget build(BuildContext context) {
-    
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
@@ -63,7 +53,8 @@ class _ExampleMainWindowState extends State<_ExampleMainWindow> {
                 final window =
                     await DesktopMultiWindow.createWindow(jsonEncode({
                   'args1': 'Sub window',
-                  'url': "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4",
+                  'url':
+                      "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4",
                 }));
                 window
                   ..setFrame(const Offset(0, 0) & const Size(1280, 720))
@@ -128,9 +119,10 @@ class _ExampleSubWindow extends StatelessWidget {
               },
               child: const Text('Close this window'),
             ),
-            Expanded(child: VideoPlayer(url: url,)),
-
-
+            Expanded(
+                child: VideoPlayer(
+              url: url,
+            )),
           ],
         ),
       ),

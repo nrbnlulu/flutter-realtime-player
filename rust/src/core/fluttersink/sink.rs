@@ -1,8 +1,13 @@
-use crate::core::platform::{NativeRegisteredTexture, NativeTextureProvider};
+use crate::core::platform::{
+    get_texture_from_sample, NativeRegisteredTexture, NativeTextureProvider,
+};
 use gst::{glib::translate::FromGlibPtrFull, prelude::*};
 use irondash_run_loop::platform;
+use irondash_texture::TextureDescriptor;
 use log::trace;
 use std::sync::{atomic::AtomicBool, Arc};
+
+use super::utils::LogErr;
 
 pub struct FlutterTextureSink {
     sink: gst::Element,
@@ -43,8 +48,6 @@ impl FlutterTextureSink {
         // on windows use d3d11upload
         #[cfg(target_os = "windows")]
         {
-
-
             let appsink = gst_app::AppSink::builder()
                 .caps(
                     &gst_video::VideoCapsBuilder::new()
@@ -58,22 +61,41 @@ impl FlutterTextureSink {
                 .max_buffers(1u32)
                 .build();
 
-
+            let provider_clone = provider.clone();
             appsink.set_callbacks(
                 gst_app::AppSinkCallbacks::builder()
                     .new_sample(move |sink| {
                         let sample = sink.pull_sample().map_err(|e| gst::FlowError::Flushing)?;
-                        
 
-
+                        if let Ok((handle, video_info)) = get_texture_from_sample(sample, &provider_clone.context.device) {
+                            let (width, height) = (video_info.width(), video_info.height());
+                            assert!(
+                                video_info.format() == gst_video::VideoFormat::Bgra,
+                                "Invalid video format: {:?}",
+                                video_info.format()
+                            );
+                 
+                            provider_clone
+                                .set_current_texture(TextureDescriptor::new(
+                                    irondash_texture::DxgiSharedHandle(handle.0 as _),
+                                    width as _,
+                                    height as _,
+                                    width as _,
+                                    height as _,
+                                    irondash_texture::PixelFormat::BGRA,
+                                ))
+                                .log_err();
+                            if !initialized_sig_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                                initialized_sig_clone
+                                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                            }
+                        }
 
                         Ok(gst::FlowSuccess::Ok)
                     })
                     .build(),
             );
 
-
-             
             let appsink_as_element: gst::Element = appsink.upcast();
 
             Ok(Self {
@@ -86,7 +108,7 @@ impl FlutterTextureSink {
     pub fn video_sink(&self) -> gst::Element {
         self.sink.clone().into()
     }
-    
+
     pub fn texture_provider(&self) -> Arc<NativeTextureProvider> {
         self.provider.clone()
     }
