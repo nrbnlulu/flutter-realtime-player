@@ -307,9 +307,11 @@ pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use gst::ffi::GstMapInfo;
+    use gst::{ffi::GstMapInfo, glib::translate::ToGlibPtr};
+    use gst_video::VideoInfo;
     use log::{error, trace};
     use std::{
+        ffi::{c_char, CString},
         mem::{self, MaybeUninit},
         ptr::null_mut,
         sync::{Arc, Mutex},
@@ -336,6 +338,13 @@ mod windows {
         pub type GstD3D11Device = glib_sys::gpointer;
         pub type GstD3D11Converter = glib_sys::gpointer;
 
+        #[allow(non_camel_case_types)]
+        #[repr(C)]
+        pub enum GstD3D11ConverterBackend {
+            GST_D3D11_CONVERTER_BACKEND_SHADER = 1 << 0,
+            GST_D3D11_CONVERTER_BACKEND_VIDEO_PROCESSOR = 1 << 1,
+        }
+
         #[link(name = "gstd3d11-1.0")]
         extern "C" {
             pub fn gst_d3d11_device_new_wrapped(device: HANDLE) -> GstD3dDevice;
@@ -358,6 +367,15 @@ mod windows {
                 user_data: *mut std::ffi::c_void,
                 notify: GDestroyNotify,
             ) -> *mut GstMemory;
+
+            pub fn gst_d3d11_converter_new(
+                device: *mut GstD3D11Device,
+                in_info: *const gst_video::ffi::GstVideoInfo,
+                out_info: *const gst_video::ffi::GstVideoInfo,
+                config: *mut gst::ffi::GstStructure,
+            ) -> *mut GstD3D11Converter;
+
+            pub fn gst_d3d11_converter_backend_get_type() -> glib::ffi::GType;
         }
     }
 
@@ -369,19 +387,27 @@ mod windows {
 
     const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
+    struct SampleWrapper {
+        pub sample: gst::Sample,
+        pub video_info: gst_video::VideoInfo,
+        pub caps: gst::Caps,
+    }
+
     pub struct GstDecodingEngine {
         pub app_sink: gst_app::AppSink,
         pub video_info: gst_video::VideoInfo,
         pub flutter_texture: ID3D11Texture2D,
         shared_buffer: gst::Buffer,
         gst_d3d_device: sys::GstD3dDevice,
-        gst_d3d_converter: Option<sys::GstD3D11Converter>,
-        last_caps: Option<gst::Caps>,
-        last_sample: Option<gst::Sample>,
+        gst_d3d_converter: Mutex<Option<sys::GstD3D11Converter>>,
+        last_sample: Mutex<Option<SampleWrapper>>,
     }
     unsafe impl Send for GstDecodingEngine {}
     unsafe impl Sync for GstDecodingEngine {}
+    lazy_static::lazy_static! {
+            static ref GST_D3D11_CONVERTER_OPT_BACKEND: CString = CString::new("GstD3D11Converter.backend").unwrap();
 
+    }
     impl GstDecodingEngine {
         pub fn new(
             app_sink: &gst_app::AppSink,
@@ -396,7 +422,6 @@ mod windows {
             .build()
             .unwrap();
             let dxgi_device = flutter_device.cast::<IDXGIDevice>()?;
-
 
             let texture_desc = D3D11_TEXTURE2D_DESC {
                 Width: dimensions.width,
@@ -441,7 +466,7 @@ mod windows {
                 // Open shared texture at GStreamer device side
                 let gst_device = sys::gst_d3d11_device_get_device_handle(decoding_device_gst as _);
 
-                let mut gst_device1: MaybeUninit< ID3D11Device1> = MaybeUninit::uninit();
+                let mut gst_device1: MaybeUninit<ID3D11Device1> = MaybeUninit::uninit();
                 let res = (*gst_device).query(&ID3D11Device1::IID, gst_device1.as_mut_ptr() as _);
                 let gst_device1 = gst_device1.assume_init();
 
@@ -484,42 +509,94 @@ mod windows {
                     flutter_texture: flutter_texture,
                     shared_buffer: shared_buffer_,
                     gst_d3d_device: decoding_device_gst as _,
-                    gst_d3d_converter: None,
-                    last_caps: None,
-                    last_sample: None,
+                    gst_d3d_converter: Mutex::new(None),
+                    last_sample: Mutex::new(None),
                 });
                 let self_clone = ret.clone();
                 app_sink.set_callbacks(
-                gst_app::AppSinkCallbacks::builder()
-                    .new_sample(move |app_sink| {
-                        Self::new_sample_cb(app_sink, &self_clone)
-                    })
-                    .build(),
-            );
-            return Ok(ret);
+                    gst_app::AppSinkCallbacks::builder()
+                        .new_sample(move |app_sink| Self::new_sample_cb(app_sink, &self_clone))
+                        .build(),
+                );
+                return Ok(ret);
             };
         }
 
-        
-    pub fn new_sample_cb(app_sink: &gst_app::AppSink, self_: &GstDecodingEngine) -> Result<gst::FlowSuccess, gst::FlowError> {
-        let sample = app_sink.pull_sample().map_err(|_| gst::FlowError::Flushing)?;
+        pub fn new_sample_cb(
+            app_sink: &gst_app::AppSink,
+            self_: &GstDecodingEngine,
+        ) -> Result<gst::FlowSuccess, gst::FlowError> {
+            let new_sample = app_sink
+                .pull_sample()
+                .map_err(|_| gst::FlowError::Flushing)?;
+            let new_caps = new_sample.caps_owned().ok_or(gst::FlowError::Flushing)?;
+            {
+                let mut last_sample = self_.last_sample.lock().unwrap();
+                let mut converter_ = self_.gst_d3d_converter.lock().unwrap();
+                if let Some(last_sample_ref) = (*last_sample).as_ref() {
+                    if last_sample_ref.caps != new_caps {
+                        // if the caps are different, we need to create a new converter
+                        if let Some(converter) = *converter_ {
+                            unsafe {
+                                gst_sys::gst_clear_object(converter as _);
+                            }
+                        }
+                        let in_info = VideoInfo::from_caps(&new_caps).map_err(|_| {
+                            error!("Failed to get video info from caps: {:?}", new_caps);
+                            gst::FlowError::Error
+                        })?;
+                        trace!("video_info: {:?}", in_info);
+                        unsafe {
+                            let gtype = sys::gst_d3d11_converter_backend_get_type();
+                            let struct_name = CString::new("converter-config").unwrap();
 
+                            let config = gst_sys::gst_structure_new(
+                                struct_name.as_ptr(),
+                                GST_D3D11_CONVERTER_OPT_BACKEND.as_ptr(),
+                                gtype as *const c_char,
+                                sys::GstD3D11ConverterBackend::GST_D3D11_CONVERTER_BACKEND_SHADER,
+                                null_mut() as *const c_char,
+                            );
+                            let converter = sys::gst_d3d11_converter_new(
+                                self_.gst_d3d_device as _,
+                                in_info.to_glib_none().0,
+                                self_.video_info.to_glib_none().0,
+                                config as _,
+                            );
+                            if converter.is_null() {
+                                error!("Failed to create converter");
+                                return Err(gst::FlowError::Error);
+                            }
+                            *converter_ = Some(converter as _);
+                            *last_sample = Some(SampleWrapper {
+                                sample: new_sample,
+                                video_info: in_info,
+                                caps: new_caps,
+                            });
+                        }
+                    } else {
+                        // if the caps are the same, we can reuse the converter
+                        return Ok(gst::FlowSuccess::Ok);
+                    }
+                }
+            }
 
-        Ok(gst::FlowSuccess::Ok)
+            Ok(gst::FlowSuccess::Ok)
+        }
     }
-    }
+
     impl Drop for GstDecodingEngine {
         fn drop(&mut self) {
             unsafe {
-                self.gst_d3d_converter.map(|converter| {
-                    gst_sys::gst_clear_object(converter as _);
+                self.gst_d3d_converter.lock().map(|converter| {
+                    if let Some(converter) = *converter {
+                        gst_sys::gst_clear_object(converter as _);
+                    }
                 });
                 gst_sys::gst_clear_object(self.gst_d3d_device as _);
             }
         }
     }
-
-
 
     pub fn create_d3d11_device(
         engine_handle: i64,
