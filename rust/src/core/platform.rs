@@ -307,9 +307,10 @@ pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use gst::{ffi::GstMapInfo, glib::translate::ToGlibPtr};
+    use flutter_rust_bridge::JoinHandle;
+    use gst::{ffi::GstMapInfo, glib::translate::ToGlibPtr, prelude::ElementExt};
     use gst_video::VideoInfo;
-    use log::{error, trace};
+    use log::{error, info, trace};
     use std::{
         ffi::{c_char, CString},
         mem::{self, MaybeUninit},
@@ -384,6 +385,7 @@ mod windows {
         NativeTextureType,
         TextureProviderCtx,
     >;
+    pub static GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE: &'static str = "gst.d3d11.device.handle";
 
     const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
@@ -394,6 +396,9 @@ mod windows {
     }
 
     pub struct GstDecodingEngine {
+        main_context: glib::MainContext,
+        main_loop: glib::MainLoop,
+        pipeline: gst::Pipeline,
         pub app_sink: gst_app::AppSink,
         pub video_info: gst_video::VideoInfo,
         pub flutter_texture: ID3D11Texture2D,
@@ -410,10 +415,14 @@ mod windows {
     }
     impl GstDecodingEngine {
         pub fn new(
+            pipeline: gst::Pipeline,
             app_sink: &gst_app::AppSink,
             flutter_device: ID3D11Device,
             dimensions: &VideoDimensions,
         ) -> anyhow::Result<Arc<GstDecodingEngine>> {
+            let main_context = glib::MainContext::new();
+            let main_loop = glib::MainLoop::new(Some(&main_context), false);
+
             let video_info = gst_video::VideoInfo::builder(
                 gst_video::VideoFormat::Bgra,
                 dimensions.width,
@@ -504,6 +513,9 @@ mod windows {
                 }
 
                 let ret = Arc::new(GstDecodingEngine {
+                    main_context,
+                    main_loop,
+                    pipeline,
                     app_sink: app_sink.clone(),
                     video_info,
                     flutter_texture: flutter_texture,
@@ -583,16 +595,92 @@ mod windows {
 
             Ok(gst::FlowSuccess::Ok)
         }
+
+        fn bus_sync_handler(&self, bus: &gst::Bus, msg: &gst::Message) {
+            if let gst::MessageView::NeedContext(msg) = msg.view() {
+                if msg.context_type() == GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
+                    unsafe {
+                        use gst::prelude::*;
+
+                        let el_raw = msg
+                            .src()
+                            .unwrap()
+                            .clone()
+                            .downcast_ref::<gst::Element>()
+                            .unwrap()
+                            .as_ptr();
+                        // Pass our device to the message source element.
+                        // Otherwise pipeline will create another device
+                        let gst_d3d_ctx_ptr = sys::gst_d3d11_context_new(self.gst_d3d_device as _);
+                        gst_sys::gst_element_set_context(el_raw, gst_d3d_ctx_ptr as _);
+                        info!("Set context for element: {:?}", msg.src().unwrap().name());
+                        gst_sys::gst_mini_object_unref(gst_d3d_ctx_ptr as _);
+                    }
+                }
+            }
+        }
+
+        fn bus_handler(&self, bus: &gst::Bus, msg: &gst::Message) {
+            match msg.view() {
+                gst::MessageView::Error(err) => {
+                    error!(
+                        "Error from {:?}: {} ({:?})",
+                        err.src().map(|s| s.to_string()),
+                        err.error(),
+                        err.debug()
+                    );
+                    self.main_loop.quit();
+                }
+                gst::MessageView::Eos(..) => {
+                    info!("End of stream");
+                    self.main_loop.quit();
+                }
+                _ => (),
+            }
+        }
+
+        fn loop_fn(self: &Arc<Self>) {
+            self.main_context
+                .with_thread_default(move || {
+                    let self_clone = self.clone();
+                    let self_clone2 = self.clone();
+
+                    let bus = self.pipeline.bus().unwrap();
+                    let bus_clone = bus.clone();
+                    let bus_clone2 = bus.clone();
+                    bus_clone
+                        .add_watch(move |_, msg| {
+                            self_clone.bus_sync_handler(&bus, &msg);
+                            gst::glib::ControlFlow::Continue
+                        })
+                        .log_err();
+
+                    bus_clone2.set_sync_handler(move |b, msg| {
+                        self_clone2.bus_sync_handler(&b, &msg);
+                        gst::BusSyncReply::Pass
+                    });
+                })
+                .log_err();
+        }
+
+        pub fn run_in_thread(self: Arc<Self>) -> JoinHandle<()> {
+            std::thread::spawn(move || {
+                self.loop_fn();
+            })
+        }
     }
 
     impl Drop for GstDecodingEngine {
         fn drop(&mut self) {
             unsafe {
-                self.gst_d3d_converter.lock().map(|converter| {
-                    if let Some(converter) = *converter {
-                        gst_sys::gst_clear_object(converter as _);
-                    }
-                });
+                self.gst_d3d_converter
+                    .lock()
+                    .map(|converter| {
+                        if let Some(converter) = *converter {
+                            gst_sys::gst_clear_object(converter as _);
+                        }
+                    })
+                    .log_err();
                 gst_sys::gst_clear_object(self.gst_d3d_device as _);
             }
         }

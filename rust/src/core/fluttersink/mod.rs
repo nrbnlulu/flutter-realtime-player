@@ -26,7 +26,6 @@ use super::{platform::NativeRegisteredTexture, types};
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
 }
-static GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE: &'static str = "gst.d3d11.device.handle";
 
 lazy_static::lazy_static! {
 static ref SESSION_CACHE: Mutex<HashMap<i64, (Arc<NativeTextureProvider>, gst::Pipeline, Arc<NativeRegisteredTexture>)>> = Mutex::new(HashMap::new());
@@ -145,34 +144,7 @@ pub fn create_new_playable(
                     );
                     break;
                 }
-                gst::MessageView::NeedContext(msg) => {
-                    info!("Need context: {:?}", msg.context_type());
-                    #[cfg(target_os = "windows")]
-                    if msg.context_type() == GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
-           
-                        let gst_d3d_ctx_ptr = create_gst_d3d_ctx(&texture_provider.context.device);
 
-                        unsafe {
-                            use gst::prelude::*;
-
-                            let el_raw = msg
-                                .src()
-                                .unwrap()
-                                .clone()
-                                .downcast_ref::<gst::Element>()
-                                .unwrap()
-                                .as_ptr();
-
-                            gst_element_set_context(el_raw, gst_d3d_ctx_ptr as _);
-                            info!("Set context for element: {:?}", msg.src().unwrap().name());
-                            let ctx = gst_context_get_structure(gst_d3d_ctx_ptr as _);
-                            let ctx = gst::StructureRef::from_glib_borrow(ctx);
-                            let ctx_str = gst_structure_to_string(ctx.as_ptr());
-                            info!("published context to gstd3d11: {:?}", ctx_str);
-                            glib::ffi::g_free(ctx_str as *mut _);
-                        }
-                    }
-                }
                 _ => (),
             }
         }
