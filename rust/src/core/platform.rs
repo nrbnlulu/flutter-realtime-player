@@ -307,44 +307,34 @@ pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use glib::translate::Uninitialized;
-    use glib_sys::gpointer;
-    use gst::{
-        ffi::GstMapInfo,
-        glib::{object::ObjectExt, translate::FromGlibPtrFull},
-    };
-
-    use gst_app::AppSink;
-    use gst_video::ffi::{
-        GstVideoColorRange, GstVideoColorimetry, GstVideoInfo, GstVideoInterlaceMode,
-    };
-    use irondash_texture::TextureDescriptor;
+    use gst::ffi::GstMapInfo;
     use log::{error, trace};
     use std::{
         mem::{self, MaybeUninit},
-        ptr::{addr_of, null_mut},
-        sync::{Arc, Mutex, RwLock},
+        ptr::null_mut,
+        sync::{Arc, Mutex},
     };
-    use windows::{core::Interface, Win32::Graphics::Dxgi};
+    use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*, Dxgi::*};
+    use windows::{core::Interface, Win32::Foundation::CloseHandle};
+
     use windows::Win32::{
         Foundation::{HANDLE, HMODULE},
-        Graphics::{
-            Direct3D::D3D_DRIVER_TYPE_HARDWARE,
-            Direct3D11::*,
-            Dxgi::{
-                Common::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
-                *,
-            },
-        },
+        Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE,
     };
 
     use crate::core::{fluttersink::utils::LogErr, types::VideoDimensions};
     pub mod sys {
         use std::os::windows::raw::HANDLE;
+
+        use gst::glib::ffi::GDestroyNotify;
+        use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11Texture2D};
         pub type GstD3dDevice = glib_sys::gpointer;
         pub type GstD3dContext = glib_sys::gpointer;
         pub type GstD3dMemory = glib_sys::gpointer;
         pub type GstMemory = glib_sys::gpointer;
+        pub type GstD3D11Allocator = glib_sys::gpointer;
+        pub type GstD3D11Device = glib_sys::gpointer;
+        pub type GstD3D11Converter = glib_sys::gpointer;
 
         #[link(name = "gstd3d11-1.0")]
         extern "C" {
@@ -356,6 +346,18 @@ mod windows {
                 adapter_luid: u64,
                 flags: u32,
             ) -> *mut GstD3dDevice;
+            pub fn gst_d3d11_device_get_device_handle(
+                device: *mut GstD3dDevice,
+            ) -> *mut ID3D11Device;
+
+            pub fn gst_d3d11_allocator_alloc_wrapped(
+                allocator: *mut GstD3D11Allocator,
+                device: *mut GstD3D11Device,
+                texture: *mut ID3D11Texture2D,
+                size: usize,
+                user_data: *mut std::ffi::c_void,
+                notify: GDestroyNotify,
+            ) -> *mut GstMemory;
         }
     }
 
@@ -367,121 +369,157 @@ mod windows {
 
     const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
-    pub fn initialize_pipeline(
-        app_sink: &gst_app::AppSink,
-        flutter_device: ID3D11Device,
-        dimensions: &VideoDimensions,
-    ) -> anyhow::Result<()> {
-        let video_info = gst_video::VideoInfo::builder(
-            gst_video::VideoFormat::Bgra,
-            dimensions.width,
-            dimensions.height,
-        )
-        .build()
-        .unwrap();
-        let dxgi_device = flutter_device.cast::<IDXGIDevice>()?;
+    pub struct GstDecodingEngine {
+        pub app_sink: gst_app::AppSink,
+        pub video_info: gst_video::VideoInfo,
+        pub flutter_texture: ID3D11Texture2D,
+        shared_buffer: gst::Buffer,
+        gst_d3d_device: sys::GstD3dDevice,
+        gst_d3d_converter: Option<sys::GstD3D11Converter>,
+        last_caps: Option<gst::Caps>,
+        last_sample: Option<gst::Sample>,
+    }
+    unsafe impl Send for GstDecodingEngine {}
+    unsafe impl Sync for GstDecodingEngine {}
 
-        app_sink.set_callbacks(
-            gst_app::AppSinkCallbacks::builder()
-                .new_sample(new_sample_cb)
-                .build(),
-        );
-        unsafe {
-            let decoding_device_gst = sys::gst_d3d11_device_new_for_adapter_luid(0, 0);
-            fn create_texture_for_flutter(
-                flutter_device: &ID3D11Device,
-                dimensions: &VideoDimensions,
-            ) -> anyhow::Result<ID3D11Texture2D> {
-                let texture_desc = D3D11_TEXTURE2D_DESC {
-                    Width: dimensions.width,
-                    Height: dimensions.height,
-                    MipLevels: 1,
-                    ArraySize: 1,
-                    Format: TEXTURE_FORMAT,
-                    SampleDesc: DXGI_SAMPLE_DESC {
-                        Count: 1,
-                        Quality: 0,
-                    },
-                    Usage: D3D11_USAGE_DEFAULT,
-                    BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
-                    CPUAccessFlags: 0,
-                    MiscFlags: (D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX.0
-                        | D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0)
-                        as u32,
-                };
-                let mut texture: Option<ID3D11Texture2D> = None;
-                unsafe { flutter_device.CreateTexture2D(&texture_desc, None, Some(&mut texture)) }
+    impl GstDecodingEngine {
+        pub fn new(
+            app_sink: &gst_app::AppSink,
+            flutter_device: ID3D11Device,
+            dimensions: &VideoDimensions,
+        ) -> anyhow::Result<Arc<GstDecodingEngine>> {
+            let video_info = gst_video::VideoInfo::builder(
+                gst_video::VideoFormat::Bgra,
+                dimensions.width,
+                dimensions.height,
+            )
+            .build()
+            .unwrap();
+            let dxgi_device = flutter_device.cast::<IDXGIDevice>()?;
+
+
+            let texture_desc = D3D11_TEXTURE2D_DESC {
+                Width: dimensions.width,
+                Height: dimensions.height,
+                MipLevels: 1,
+                ArraySize: 1,
+                Format: TEXTURE_FORMAT,
+                SampleDesc: DXGI_SAMPLE_DESC {
+                    Count: 1,
+                    Quality: 0,
+                },
+                Usage: D3D11_USAGE_DEFAULT,
+                BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+                CPUAccessFlags: 0,
+                MiscFlags: (D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX.0
+                    | D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0) as u32,
+            };
+            let mut flutter_texture: Option<ID3D11Texture2D> = None;
+            unsafe {
+                flutter_device
+                    .CreateTexture2D(&texture_desc, None, Some(&mut flutter_texture))
                     .unwrap();
-                let texture = texture.ok_or_else(|| anyhow::anyhow!("Failed to create texture"))?;
+                let flutter_texture =
+                    flutter_texture.ok_or_else(|| anyhow::anyhow!("Failed to create texture"))?;
                 // Gets keyed mutex interface and acquire sync at render device side.
                 // This keyed mutex will be temporarily released
                 // when rendering to shared texture by GStreamer D3D11 device,
                 // then re-acquired for render engine device
-                let keyed_mutex = texture.cast::<IDXGIKeyedMutex>()?;  
+                let keyed_mutex = flutter_texture.cast::<IDXGIKeyedMutex>()?;
                 const INFINITE: u32 = 0xffffffff;
-;
-                unsafe { keyed_mutex.AcquireSync(0, INFINITE) }?;
-                let dxgi_resource: IDXGIResource1 = texture.cast()?;
-                let mut shared_handle = None;
+                keyed_mutex.AcquireSync(0, INFINITE)?;
+                let dxgi_resource: IDXGIResource1 = flutter_texture.cast()?;
 
                 // Create shared NT handle so that GStreamer device can access
-                unsafe {
-                    dxgi_resource.CreateSharedHandle(
-                        None,
-                        DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
-                        None,
-                        &mut shared_handle,
-                    )?;
-                }
-
-                let shared_handle = shared_handle.ok_or(anyhow::anyhow!("Failed to create shared handle"))?;
+                let texture_dxgi_shared_handle = dxgi_resource.CreateSharedHandle(
+                    None,
+                    DXGI_SHARED_RESOURCE_READ.0 | DXGI_SHARED_RESOURCE_WRITE.0,
+                    None,
+                )?;
+                let decoding_device_gst = sys::gst_d3d11_device_new_for_adapter_luid(0, 0);
 
                 // Open shared texture at GStreamer device side
-                let gst_device = sys::gst_d3d11_device_new_wrapped(flutter_device.as_raw() as _);
-                let gst_device: ID3D11Device1 = gst_device.cast()?;
+                let gst_device = sys::gst_d3d11_device_get_device_handle(decoding_device_gst as _);
 
+                let mut gst_device1: MaybeUninit< ID3D11Device1> = MaybeUninit::uninit();
+                let res = (*gst_device).query(&ID3D11Device1::IID, gst_device1.as_mut_ptr() as _);
+                let gst_device1 = gst_device1.assume_init();
+
+                if res.is_err() {
+                    error!("Failed to query ID3D11Device1 interface: {:?}", res);
+                    return Err(anyhow::anyhow!("Failed to query ID3D11Device1 interface"));
+                }
+                // Open shared texture at GStreamer device side
                 let mut gst_texture: Option<ID3D11Texture2D> = None;
-                unsafe {
-                    gst_device.OpenSharedResource1(shared_handle, &mut gst_texture)?;
+                gst_device1
+                    .OpenSharedResource(texture_dxgi_shared_handle, &mut gst_texture as _)?;
+                let gst_texture = gst_texture.ok_or_else(|| {
+                    anyhow::anyhow!("Failed to open shared texture at GStreamer device side")
+                })?;
+                // Can close NT handle now
+                // Close the shared NT handle as it is no longer needed
+                CloseHandle(texture_dxgi_shared_handle)?;
+                // Wrap the shared texture with GstD3D11Memory to enable texture conversion
+                // using the GStreamer converter API
+                let mem = sys::gst_d3d11_allocator_alloc_wrapped(
+                    null_mut(),
+                    gst_device as _,
+                    flutter_texture.as_raw() as _,
+                    0,
+                    null_mut(),
+                    None,
+                );
+                assert!(!mem.is_null(), "Failed to allocate memory for texture");
+                let mem = gst::Memory::from_glib_full(mem as _);
+                let mut shared_buffer_ = gst::Buffer::new();
+                if let Some(shared_buffer_mut) = shared_buffer_.get_mut() {
+                    shared_buffer_mut.append_memory(mem);
+                } else {
+                    return Err(anyhow::anyhow!("Failed to get mutable reference to buffer"));
                 }
 
-                // Close NT handle as it's no longer needed
-                unsafe {
-                    CloseHandle(shared_handle);
-                }
-
-                let gst_texture = gst_texture.ok_or(anyhow::anyhow!("Failed to open shared texture"))?;
-
-                // Wrap shared texture with GstD3D11Memory
-                let mem = unsafe {
-                    sys::gst_d3d11_allocator_alloc_wrapped(
-                        std::ptr::null_mut(),
-                        gst_device.as_raw() as _,
-                        gst_texture.as_raw() as _,
-                        0, // CPU accessible memory size is unknown, pass zero
-                        std::ptr::null_mut(),
-                        std::ptr::null_mut(),
-                    )
-                };
-
-                if mem.is_null() {
-                    return Err(anyhow::anyhow!("Failed to wrap shared texture with GstD3D11Memory"));
-                }
-
-                // Create a new GstBuffer and append the memory
-                let shared_buffer = unsafe { gst::Buffer::from_glib_full(gst::ffi::gst_buffer_new()) };
-                unsafe {
-                    gst::ffi::gst_buffer_append_memory(shared_buffer.as_mut_ptr(), mem);
-                }
+                let ret = Arc::new(GstDecodingEngine {
+                    app_sink: app_sink.clone(),
+                    video_info,
+                    flutter_texture: flutter_texture,
+                    shared_buffer: shared_buffer_,
+                    gst_d3d_device: decoding_device_gst as _,
+                    gst_d3d_converter: None,
+                    last_caps: None,
+                    last_sample: None,
+                });
+                let self_clone = ret.clone();
+                app_sink.set_callbacks(
+                gst_app::AppSinkCallbacks::builder()
+                    .new_sample(move |app_sink| {
+                        Self::new_sample_cb(app_sink, &self_clone)
+                    })
+                    .build(),
+            );
+            return Ok(ret);
             };
         }
 
-        Ok(())
+        
+    pub fn new_sample_cb(app_sink: &gst_app::AppSink, self_: &GstDecodingEngine) -> Result<gst::FlowSuccess, gst::FlowError> {
+        let sample = app_sink.pull_sample().map_err(|_| gst::FlowError::Flushing)?;
+
+
+        Ok(gst::FlowSuccess::Ok)
+    }
+    }
+    impl Drop for GstDecodingEngine {
+        fn drop(&mut self) {
+            unsafe {
+                self.gst_d3d_converter.map(|converter| {
+                    gst_sys::gst_clear_object(converter as _);
+                });
+                gst_sys::gst_clear_object(self.gst_d3d_device as _);
+            }
+        }
     }
 
-    pub fn new_sample_cb(app_sink: &gst_app::AppSink) -> Result<gst::FlowSuccess, gst::FlowError> {
-        todo!()
-    }
+
 
     pub fn create_d3d11_device(
         engine_handle: i64,
@@ -612,15 +650,6 @@ mod windows {
             trace!("Creating new D3D11 texture provider");
 
             let device = create_d3d11_device(engine_handle, &dimensions)?;
-
-            let render_target_view_desc = D3D11_RENDER_TARGET_VIEW_DESC {
-                Format: TEXTURE_FORMAT,
-                ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
-                ..unsafe { mem::zeroed() }
-            };
-
-            let width = dimensions.width;
-            let height = dimensions.height;
 
             trace!("casted gst d3d ctx raw to ID3D11DeviceContext");
 

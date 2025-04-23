@@ -2087,6 +2087,7 @@ dependencies = [
  "gstreamer-gl",
  "gstreamer-gl-egl",
  "gstreamer-gl-x11",
+ "gstreamer-sys",
  "gstreamer-video",
  "gtk-sys",
  "irondash_dart_ffi",
