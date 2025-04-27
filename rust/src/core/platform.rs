@@ -377,6 +377,12 @@ mod windows {
             ) -> *mut GstD3D11Converter;
 
             pub fn gst_d3d11_converter_backend_get_type() -> glib::ffi::GType;
+
+            pub fn gst_d3d11_converter_convert_buffer(
+                converter: *mut GstD3D11Converter,
+                in_buf: *mut gst::ffi::GstBuffer,
+                out_buf: *mut gst::ffi::GstBuffer,
+            ) -> glib::ffi::gboolean;
         }
     }
 
@@ -405,14 +411,16 @@ mod windows {
         shared_buffer: gst::Buffer,
         gst_d3d_device: sys::GstD3dDevice,
         gst_d3d_converter: Mutex<Option<sys::GstD3D11Converter>>,
+        keyed_mutex: IDXGIKeyedMutex,
         last_sample: Mutex<Option<SampleWrapper>>,
     }
     unsafe impl Send for GstDecodingEngine {}
     unsafe impl Sync for GstDecodingEngine {}
+
     lazy_static::lazy_static! {
             static ref GST_D3D11_CONVERTER_OPT_BACKEND: CString = CString::new("GstD3D11Converter.backend").unwrap();
-
     }
+
     impl GstDecodingEngine {
         pub fn new(
             pipeline: gst::Pipeline,
@@ -516,6 +524,7 @@ mod windows {
                     main_context,
                     main_loop,
                     pipeline,
+                    keyed_mutex,
                     app_sink: app_sink.clone(),
                     video_info,
                     flutter_texture: flutter_texture,
@@ -663,11 +672,59 @@ mod windows {
                 .log_err();
         }
 
-        pub fn run_in_thread(self: Arc<Self>) -> JoinHandle<()> {
+        pub fn update_texture(&self) {
+            let last_sample = self.last_sample.lock().unwrap();
+            if let Some(last_sample_ref) = (*last_sample).as_ref() {
+                let sample = last_sample_ref.sample.clone();
+                // Release sync from render engine device,
+                // so that GStreamer device can acquire sync
+                if let Some(buffer) = sample.buffer_owned() {
+                    unsafe {
+                        self.keyed_mutex.ReleaseSync(0).log_err();
+                        // Converter will take gst_d3d11_device_lock() and acquire sync
+                        let converter = self.gst_d3d_converter.lock().unwrap();
+                        if let Some(converter) = *converter {
+                            // Convert the buffer to the shared texture
+                            // using the GStreamer D3D11 converter API
+                            let shared_buf: gst::glib::translate::Stash<
+                                '_,
+                                *mut gst_sys::GstBuffer,
+                                gst::Buffer,
+                            > = self.shared_buffer.to_glib_none();
+                            let buf: gst::glib::translate::Stash<
+                                '_,
+                                *mut gst_sys::GstBuffer,
+                                gst::Buffer,
+                            > = buffer.to_glib_none();
+
+                            let _ = sys::gst_d3d11_converter_convert_buffer(
+                                converter as _,
+                                buf.0 as _,
+                                shared_buf.0 as _,
+                            );
+
+                            //  After the above function returned, GStreamer will release sync.
+                            //  * Acquire sync again for render engine device */
+                            self.keyed_mutex
+                                .AcquireSync(0, windows::Win32::System::Threading::INFINITE)
+                                .log_err();
+                        } else {
+                            error!("Failed to get converter");
+                        }
+                    }
+                }
+            }
+
+            ()
+        }
+
+        pub fn run_in_thread(self: Arc<Self>) -> std::thread::JoinHandle<()> {
+            let self_clone = self.clone();
             std::thread::spawn(move || {
-                self.loop_fn();
+                self_clone.loop_fn();
             })
         }
+
     }
 
     impl Drop for GstDecodingEngine {
@@ -790,6 +847,7 @@ mod windows {
         error!("Failed to get texture from sample: {:?}", sample);
         Err(gst::FlowError::Error)
     }
+
     // `gst::ffi::GST_MAP_FLAG_LAST << 1` is because it is defined in a macro so I can't use ffi.
     const MAP_FLAGS: gst::ffi::GstMapFlags =
         gst::ffi::GST_MAP_READ | (gst::ffi::GST_MAP_FLAG_LAST << 1);
