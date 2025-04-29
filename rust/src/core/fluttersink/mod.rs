@@ -5,10 +5,10 @@ use gst::{
     glib::{self},
     prelude::{ElementExtManual, GstBinExtManual, PadExt},
 };
+use irondash_engine_context::EngineContext;
+use windows::core::Interface;
 use std::{
-    collections::HashMap,
-    sync::{atomic::AtomicBool, Arc, Mutex},
-    thread,
+    collections::HashMap, rc::Weak, sync::{atomic::AtomicBool, Arc, Mutex}, thread
 };
 
 use gst::{
@@ -42,13 +42,54 @@ pub fn create_new_playable(
     let registered_texture;
     let texture_provider;
     let dimensions = video_info.dimensions;
+    let pipeline = gst::Pipeline::new();
+    let pipeline_clone = pipeline.clone();
+
+    let appsink = gst_app::AppSink::builder()
+    .caps(
+        &gst_video::VideoCapsBuilder::new()
+            .features(["memory:D3D11Memory"])
+            .format(gst_video::VideoFormat::Bgra)
+            .field("texture-target", "2D")
+            .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
+            .build(),
+    )
+    .enable_last_sample(false)
+    .max_buffers(1u32)
+    .build();
+
+    let src = gst::ElementFactory::make("urisourcebin")
+        .property("uri", &video_info.uri)
+        .build()?;
+    let demux = gst::ElementFactory::make("qtdemux").build()?;
+    let parse = gst::ElementFactory::make("h264parse").build()?;
+    let decoder = gst::ElementFactory::make("d3d11h264dec").build()?;
+    let convert = gst::ElementFactory::make("d3d11convert").build()?;
+  
+
     #[cfg(target_os = "windows")]
     {
-        use crate::core::platform::TextureDescriptionProvider2Ext;
+        let dimensions_clone = dimensions.clone();
+        use crate::core::platform::{TextureDescriptionProvider2Ext, GstDecodingEngine};
+        use windows::Win32::Graphics::Direct3D11::ID3D11Device;
         trace!("thread id: {:?}", std::thread::current().id());
-
+        let app_sink_clone = appsink.clone();
         (registered_texture, texture_provider) = utils::invoke_on_platform_main_thread(
             move || -> anyhow::Result<(Arc<NativeRegisteredTexture>, Arc<NativeTextureProvider>)> {
+                let engine_ctx = EngineContext::get()?;
+
+                let d3d11_device_raw = EngineContext::get_d3d11_device(engine_ctx, engine_handle)?;
+                let d3d11_device =    unsafe { ID3D11Device::from_raw_borrowed(&(d3d11_device_raw as *mut _)).unwrap() }.clone();
+                let decoding_engine = GstDecodingEngine::new(
+                    pipeline,
+                    &app_sink_clone,
+                    d3d11_device,
+                    &dimensions_clone,
+                );
+
+                
+                
+
                 let texture_provider = NativeTextureProvider::new(engine_handle, dimensions)?;
 
                 let tex_provider_clone = texture_provider.clone();
@@ -63,24 +104,15 @@ pub fn create_new_playable(
         )?;
         texture_id = registered_texture.get_texture_id();
     }
-
-    let pipeline = gst::Pipeline::new();
-    let src = gst::ElementFactory::make("urisourcebin")
-        .property("uri", &video_info.uri)
-        .build()?;
-    let demux = gst::ElementFactory::make("qtdemux").build()?;
-    let parse = gst::ElementFactory::make("h264parse").build()?;
-    let decoder = gst::ElementFactory::make("d3d11h264dec").build()?;
-    let convert = gst::ElementFactory::make("d3d11convert").build()?;
     let sink = Arc::new(FlutterTextureSink::new(
         initialized_sig_clone,
-        &pipeline,
+        appsink,
         texture_provider.clone(),
         registered_texture.clone(),
     )?);
-    pipeline.add_many(&[&src, &demux, &parse, &decoder, &convert, &sink.video_sink()])?;
     gst::Element::link_many(&[&parse, &decoder, &convert, &sink.video_sink()])?;
-
+  pipeline_clone.add_many(&[&src, &demux, &parse, &decoder, &convert, &sink.video_sink()])?;
+    
     demux.connect_pad_added(move |demux, src_pad| {
         let parse_sink_pad = parse.static_pad("sink").unwrap();
         if !parse_sink_pad.is_linked() {
@@ -110,15 +142,19 @@ pub fn create_new_playable(
     // }));
 
     // pipeline.set_property("video-sink", &flutter_sink.video_sink());
-    SESSION_CACHE
-        .lock()
-        .unwrap()
-        .insert(engine_handle, (texture_provider.clone(), pipeline.clone(), registered_texture.clone()));
+    SESSION_CACHE.lock().unwrap().insert(
+        engine_handle,
+        (
+            texture_provider.clone(),
+            pipeline_clone.clone(),
+            registered_texture.clone(),
+        ),
+    );
     thread::spawn(move || {
-        pipeline
+        pipeline_clone
             .set_state(gst::State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state");
-        let bus = pipeline.bus().unwrap();
+        let bus = pipeline_clone.bus().unwrap();
         for msg in bus.iter() {
             trace!("Message: {:?}", msg.view());
             match msg.view() {
@@ -126,9 +162,9 @@ pub fn create_new_playable(
                     let percent = buffering.percent();
                     info!("Buffering {}%", percent);
                     if percent < 100 {
-                        pipeline.set_state(gst::State::Paused).log_err();
+                        pipeline_clone.set_state(gst::State::Paused).log_err();
                     } else {
-                        pipeline.set_state(gst::State::Playing).log_err();
+                        pipeline_clone.set_state(gst::State::Playing).log_err();
                     }
                 }
                 gst::MessageView::Eos(..) => {

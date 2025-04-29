@@ -18,7 +18,7 @@ pub struct FlutterTextureSink {
 impl FlutterTextureSink {
     pub fn new(
         initialized_signal: Arc<AtomicBool>,
-        pipeline: &gst::Pipeline,
+        appsink: gst_app::AppSink,
         provider: Arc<NativeTextureProvider>,
         registered_texture: Arc<NativeRegisteredTexture>,
     ) -> anyhow::Result<Self> {
@@ -48,18 +48,7 @@ impl FlutterTextureSink {
         // on windows use d3d11upload
         #[cfg(target_os = "windows")]
         {
-            let appsink = gst_app::AppSink::builder()
-                .caps(
-                    &gst_video::VideoCapsBuilder::new()
-                        .features(["memory:D3D11Memory"])
-                        .format(gst_video::VideoFormat::Bgra)
-                        .field("texture-target", "2D")
-                        .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
-                        .build(),
-                )
-                .enable_last_sample(false)
-                .max_buffers(1u32)
-                .build();
+
 
             let provider_clone = provider.clone();
             appsink.set_callbacks(

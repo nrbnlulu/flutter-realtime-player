@@ -307,7 +307,6 @@ pub use linux::*;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use flutter_rust_bridge::JoinHandle;
     use gst::{ffi::GstMapInfo, glib::translate::ToGlibPtr, prelude::ElementExt};
     use gst_video::VideoInfo;
     use log::{error, info, trace};
@@ -315,7 +314,7 @@ mod windows {
         ffi::{c_char, CString},
         mem::{self, MaybeUninit},
         ptr::null_mut,
-        sync::{Arc, Mutex},
+        sync::{Arc, Mutex, MutexGuard},
     };
     use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*, Dxgi::*};
     use windows::{core::Interface, Win32::Foundation::CloseHandle};
@@ -438,7 +437,7 @@ mod windows {
             )
             .build()
             .unwrap();
-            let dxgi_device = flutter_device.cast::<IDXGIDevice>()?;
+            let dxgi_device = (&flutter_device).cast::<IDXGIDevice>()?;
 
             let texture_desc = D3D11_TEXTURE2D_DESC {
                 Width: dimensions.width,
@@ -725,6 +724,9 @@ mod windows {
             })
         }
 
+        pub fn get_texture<'a>(&'a self) -> &'a ID3D11Texture2D {
+            &self.flutter_texture
+        }
     }
 
     impl Drop for GstDecodingEngine {
@@ -896,5 +898,5 @@ mod windows {
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{
     create_gst_d3d_ctx, get_texture_from_sample, D3DTextureProvider as NativeTextureProvider,
-    NativeRegisteredTexture, TextureDescriptionProvider2Ext,
+    NativeRegisteredTexture, TextureDescriptionProvider2Ext, GstDecodingEngine
 };
