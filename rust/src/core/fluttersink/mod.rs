@@ -76,6 +76,7 @@ pub fn create_new_playable(
         let app_sink_clone = appsink.clone();
         (registered_texture, texture_provider) = utils::invoke_on_platform_main_thread(
             move || -> anyhow::Result<(Arc<NativeRegisteredTexture>, Arc<NativeTextureProvider>)> {
+                
                 let engine_ctx = EngineContext::get()?;
 
                 let d3d11_device_raw = EngineContext::get_d3d11_device(engine_ctx, engine_handle)?;
@@ -85,11 +86,13 @@ pub fn create_new_playable(
                     &app_sink_clone,
                     d3d11_device,
                     &dimensions_clone,
-                );
-
+                )?;
+                let jh = decoding_engine.run_in_thread();
                 
                 
-
+                
+                
+                
                 let texture_provider = NativeTextureProvider::new(engine_handle, dimensions)?;
 
                 let tex_provider_clone = texture_provider.clone();

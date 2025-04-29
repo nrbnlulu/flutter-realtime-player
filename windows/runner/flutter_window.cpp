@@ -3,7 +3,8 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
-
+#include <stdio.h>
+#include <iostream>
 #include <desktop_multi_window/desktop_multi_window_plugin.h>
 #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
 
@@ -27,6 +28,7 @@ bool FlutterWindow::OnCreate() {
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
     return false;
   }
+  std::cout << "FlutterWindow::OnCreate" << std::endl;
   RegisterPlugins(flutter_controller_->engine());
   
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
