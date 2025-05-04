@@ -133,11 +133,9 @@ packages:
   irondash_engine_context:
     dependency: "direct main"
     description:
-      path: "engine_context/dart"
-      ref: support-windows-2
-      resolved-ref: f2627955d96755a79de083e355f9ca105cdec331
-      url: "https://github.com/nrbnlulu/irondash.git"
-    source: git
+      path: "E:/OS/irondash/engine_context/dart"
+      relative: false
+    source: path
     version: "0.5.4"
   leak_tracker:
     dependency: transitive

@@ -41,7 +41,7 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
         .unwrap();
         let a = windows::Win32::System::LibraryLoader::GetProcAddress(
             module,
-            windows::core::PCSTR(b"IrondashEngineContextGetFlutterView\0".as_ptr()),
+            windows::core::PCSTR(b"IrondashEngineContextGetDevice\0".as_ptr()),
         );
         info!("a: {:?}", a);
 

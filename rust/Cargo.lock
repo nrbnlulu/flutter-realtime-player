@@ -273,9 +273,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.20"
+version = "1.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04da6a0d40b948dfc4fa8f5bbf402b0fc1a64a28dbf7d12ffd683550f2c1b63a"
+checksum = "8691782945451c1c383942c4874dbe63814f61cb57ef773cda2972682b7bb3c0"
 dependencies = [
  "shlex",
 ]
@@ -320,9 +320,9 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
-version = "0.4.40"
+version = "0.4.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a7964611d71df112cb1730f2ee67324fcf4d0fc6606acbbe9bfe06df124637c"
+checksum = "c469d952047f47f91b68d1cba3f10d63c11d73e4636f24f08daf0278abf01c4d"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
@@ -1240,9 +1240,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.15.2"
+version = "0.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
+checksum = "84b26c544d002229e640969970a2e74021aadf6e2f96372b9c58eff97de08eb3"
 
 [[package]]
 name = "heck"
@@ -1341,7 +1341,6 @@ dependencies = [
 [[package]]
 name = "irondash_dart_ffi"
 version = "0.2.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=support-windows-2#f2627955d96755a79de083e355f9ca105cdec331"
 dependencies = [
  "once_cell",
 ]
@@ -1364,13 +1363,26 @@ dependencies = [
 [[package]]
 name = "irondash_engine_context"
 version = "0.6.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=support-windows-2#f2627955d96755a79de083e355f9ca105cdec331"
 dependencies = [
  "android_logger 0.11.3",
  "core-foundation",
  "jni",
  "log",
  "objc2",
+ "objc2-foundation",
+ "once_cell",
+]
+
+[[package]]
+name = "irondash_run_loop"
+version = "0.6.0"
+dependencies = [
+ "core-foundation",
+ "futures",
+ "irondash_engine_context 0.5.0",
+ "log",
+ "objc2",
+ "objc2-app-kit",
  "objc2-foundation",
  "once_cell",
 ]
@@ -1392,24 +1404,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "irondash_run_loop"
-version = "0.6.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=support-windows-2#f2627955d96755a79de083e355f9ca105cdec331"
-dependencies = [
- "core-foundation",
- "futures",
- "irondash_engine_context 0.5.0",
- "log",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "once_cell",
-]
-
-[[package]]
 name = "irondash_texture"
 version = "0.5.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=support-windows-2#f2627955d96755a79de083e355f9ca105cdec331"
 dependencies = [
  "core-foundation",
  "cstr",
@@ -2026,9 +2022,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.5.11"
+version = "0.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f103c6d277498fbceb16e84d317e2a400f160f46904d5f5410848c829511a3"
+checksum = "928fca9cf2aa042393a8325b9ead81d2f0df4cb12e1e24cef072922ccd99c5af"
 dependencies = [
  "bitflags 2.9.0",
 ]
@@ -2093,7 +2089,7 @@ dependencies = [
  "gtk-sys",
  "irondash_dart_ffi",
  "irondash_engine_context 0.6.0",
- "irondash_run_loop 0.6.0 (git+https://github.com/nrbnlulu/irondash.git?branch=support-windows-2)",
+ "irondash_run_loop 0.6.0",
  "irondash_texture",
  "lazy_static",
  "log",
@@ -2232,7 +2228,7 @@ dependencies = [
  "log4rs",
  "once_cell",
  "serde",
- "winnow 0.7.7",
+ "winnow 0.7.9",
 ]
 
 [[package]]
@@ -2509,7 +2505,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.7.7",
+ "winnow 0.7.9",
 ]
 
 [[package]]
@@ -3045,9 +3041,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.7.7"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cb8234a863ea0e8cd7284fcdd4f145233eb00fee02bbdd9861aec44e6477bc5"
+checksum = "d9fb597c990f03753e08d3c29efbfcf2019a003b4bf4ba19225c158e1549f0f3"
 dependencies = [
  "memchr",
 ]
