@@ -82,7 +82,6 @@ pub fn create_new_playable(
                 let d3d11_device_raw = EngineContext::get_d3d11_device(engine_ctx, engine_handle)?;
                 trace!("d3d11_device_raw: {:?}", d3d11_device_raw);
                 let d3d11_device =    unsafe { ID3D11Device::from_raw_borrowed(&(d3d11_device_raw as *mut _)).unwrap() }.clone();
-                let feature_level = unsafe { d3d11_device.GetFeatureLevel() };
                 let decoding_engine = GstDecodingEngine::new(
                     pipeline,
                     &app_sink_clone,
