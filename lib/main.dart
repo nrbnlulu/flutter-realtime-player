@@ -45,6 +45,7 @@ class _ExampleMainWindowState extends State<_ExampleMainWindow> {
 
 
 
+
   
   @override
   Widget build(BuildContext context) {
@@ -53,56 +54,72 @@ class _ExampleMainWindowState extends State<_ExampleMainWindow> {
           appBar: AppBar(
             title: const Text('Plugin example app'),
           ),
-          body: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                  child: VideoPlayer(
-                url:
-                    "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4",
-              )),
-              const SizedBox(width: 20),
-              Column(
-                children: [
-                  TextButton(
-                    onPressed: () async {
-                      final window =
-                          await DesktopMultiWindow.createWindow(jsonEncode({
-                        'args1': 'Sub window',
-                        'url':
-                            "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4",
-                      }));
-                      window
-                        ..setFrame(const Offset(0, 0) & const Size(1280, 720))
-                        ..center()
-                        ..setTitle('Another window')
-                        ..show();
-                    },
-                    child: const Text('Create a new World!'),
-                  ),
-                  TextButton(
-                    child: const Text('Send event to all sub windows'),
-                    onPressed: () async {
-                      final subWindowIds =
-                          await DesktopMultiWindow.getAllSubWindowIds();
-                      for (final windowId in subWindowIds) {
-                        DesktopMultiWindow.invokeMethod(
-                          windowId,
-                          'broadcast',
-                          'Broadcast from main window',
-                        );
-                      }
-                    },
-                  ),
-                  Expanded(
-                    child: EventWidget(
-                        controller: WindowController.fromWindowId(0)),
-                  )
-                ],
-              ),
-            ],
+          body:  SizedBox(
+            height: 720,
+            width: 1280,
+            child: VideoPlayer(
+            
+              url: "C:/Users/temp/Downloads/big_buck_bunny_720p_30mb.mp4",
+            ),
           )),
+    );
+  }
+}
+
+class WindowOpener extends StatelessWidget {
+  const WindowOpener({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(width: 20),
+        
+    
+        Column(
+          children: [
+    
+            TextButton(
+              onPressed: () async {
+                final window =
+                    await DesktopMultiWindow.createWindow(jsonEncode({
+                  'args1': 'Sub window',
+                  'url':
+                      "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4",
+                }));
+                window
+                  ..setFrame(const Offset(0, 0) & const Size(1280, 720))
+                  ..center()
+                  ..setTitle('Another window')
+                  ..show();
+              },
+              child: const Text('Create a new World!'),
+            ),
+            TextButton(
+              child: const Text('Send event to all sub windows'),
+              onPressed: () async {
+                final subWindowIds =
+                    await DesktopMultiWindow.getAllSubWindowIds();
+                for (final windowId in subWindowIds) {
+                  DesktopMultiWindow.invokeMethod(
+                    windowId,
+                    'broadcast',
+                    'Broadcast from main window',
+                  );
+                }
+              },
+            ),
+            Expanded(
+              child: EventWidget(
+                  controller: WindowController.fromWindowId(0)),
+            )
+          ],
+        ),
+      ],
     );
   }
 }

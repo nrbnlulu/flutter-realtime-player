@@ -356,9 +356,7 @@ mod windows {
                 adapter_luid: u64,
                 flags: u32,
             ) -> *mut GstD3dDevice;
-            pub fn gst_d3d11_device_get_device_handle(
-                device: GstD3dDevice,
-            ) -> D3D11DeviceRaw;
+            pub fn gst_d3d11_device_get_device_handle(device: GstD3dDevice) -> D3D11DeviceRaw;
 
             pub fn gst_d3d11_allocator_alloc_wrapped(
                 allocator: *mut GstD3D11Allocator,
@@ -395,7 +393,7 @@ mod windows {
 
     const TEXTURE_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 
-    struct SampleWrapper {
+    pub struct SampleWrapper {
         pub sample: gst::Sample,
         pub video_info: gst_video::VideoInfo,
         pub caps: gst::Caps,
@@ -408,6 +406,7 @@ mod windows {
         pub app_sink: gst_app::AppSink,
         pub video_info: gst_video::VideoInfo,
         pub flutter_texture: ID3D11Texture2D,
+        
         shared_buffer: gst::Buffer,
         gst_d3d_device: sys::GstD3dDevice,
         gst_d3d_converter: Mutex<Option<sys::GstD3D11Converter>>,
@@ -482,26 +481,33 @@ mod windows {
                     wrapped_gst_device as *const sys::GstD3dDevice
                 );
                 // Open shared texture at GStreamer device side
-                let gst_device_raw = sys::gst_d3d11_device_get_device_handle(wrapped_gst_device as _);
+                let gst_device_raw =
+                    sys::gst_d3d11_device_get_device_handle(wrapped_gst_device as _);
                 let gst_device = ID3D11Device::from_raw_borrowed(&gst_device_raw).unwrap();
                 trace!("creation flags {:?}", gst_device.GetCreationFlags());
-                let gst_device1  = gst_device.cast::<ID3D11Device1>()?;                
+                let gst_device1 = gst_device.cast::<ID3D11Device1>()?;
                 trace!("gst_device1: {:?}", gst_device1);
                 let dxgi_resource: IDXGIResource1 = flutter_texture.cast()?;
 
                 // Create shared NT handle so that GStreamer device can access
                 let texture_dxgi_shared_handle = dxgi_resource.CreateSharedHandle(
                     None,
-                    (DXGI_SHARED_RESOURCE_READ| DXGI_SHARED_RESOURCE_WRITE).0,
+                    (DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE).0,
                     None,
                 )?;
-                trace!("texture_dxgi_shared_handle: {:?}", texture_dxgi_shared_handle);
-                trace!("creation flags gst_device1 {:?}", gst_device1.GetCreationFlags());
+                trace!(
+                    "texture_dxgi_shared_handle: {:?}",
+                    texture_dxgi_shared_handle
+                );
+                trace!(
+                    "creation flags gst_device1 {:?}",
+                    gst_device1.GetCreationFlags()
+                );
 
                 // Open shared texture at GStreamer device side
-                let gst_texture: ID3D11Texture2D  = gst_device1
-                    .OpenSharedResource1(texture_dxgi_shared_handle)?;
-    
+                let gst_texture: ID3D11Texture2D =
+                    gst_device1.OpenSharedResource1(texture_dxgi_shared_handle)?;
+
                 trace!("gst_texture: {:?}", gst_texture);
 
                 // Can close NT handle now
@@ -541,24 +547,37 @@ mod windows {
                     gst_d3d_converter: Mutex::new(None),
                     last_sample: Mutex::new(None),
                 });
-                let self_clone = ret.clone();
-                app_sink.set_callbacks(
-                    gst_app::AppSinkCallbacks::builder()
-                        .new_sample(move |app_sink| Self::new_sample_cb(app_sink, &self_clone))
-                        .build(),
-                );
+
                 return Ok(ret);
             };
         }
 
-        pub fn new_sample_cb(
+        pub fn set_callbacks<T>(self: Arc<Self>, on_new_sample: T)
+        where
+            T: Fn() + Send + 'static,
+        {
+            let app_sink = self.app_sink.clone();
+
+            app_sink.set_callbacks(
+                gst_app::AppSinkCallbacks::builder()
+                    .new_sample(move |app_sink| {
+                        Self::new_sample_cb(app_sink, &self, &on_new_sample)
+                    })
+                    .build(),
+            );
+        }
+
+        pub fn new_sample_cb<T>(
             app_sink: &gst_app::AppSink,
             self_: &GstDecodingEngine,
-        ) -> Result<gst::FlowSuccess, gst::FlowError> {
+            on_new_sample: &T,
+        ) -> Result<gst::FlowSuccess, gst::FlowError>
+        where
+            T:  Fn() + Send + 'static,
+        {
             let new_sample = app_sink
                 .pull_sample()
                 .map_err(|_| gst::FlowError::Flushing)?;
-            trace!("new sample: {:?}", new_sample);
             let new_caps = new_sample.caps_owned().ok_or(gst::FlowError::Flushing)?;
             {
                 let mut last_sample = self_.last_sample.lock().unwrap();
@@ -608,9 +627,10 @@ mod windows {
                         // if the caps are the same, we can reuse the converter
                         return Ok(gst::FlowSuccess::Ok);
                     }
+                    self_.update_texture();
                 }
             }
-
+            on_new_sample();
             Ok(gst::FlowSuccess::Ok)
         }
 
@@ -619,7 +639,6 @@ mod windows {
                 if msg.context_type() == GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
                     unsafe {
                         use gst::prelude::*;
-
                         let el_raw = msg
                             .src()
                             .unwrap()
@@ -658,6 +677,7 @@ mod windows {
         }
 
         fn loop_fn(self: &Arc<Self>) {
+            self.pipeline.set_state(gst::State::Playing).log_err();
             self.main_context
                 .with_thread_default(move || {
                     let self_clone = self.clone();
@@ -711,7 +731,6 @@ mod windows {
                                 buf.0 as _,
                                 shared_buf.0 as _,
                             );
-
                             //  After the above function returned, GStreamer will release sync.
                             //  * Acquire sync again for render engine device */
                             self.keyed_mutex
@@ -723,7 +742,6 @@ mod windows {
                     }
                 }
             }
-
             ()
         }
 
@@ -736,6 +754,31 @@ mod windows {
 
         pub fn get_texture<'a>(&'a self) -> &'a ID3D11Texture2D {
             &self.flutter_texture
+        }
+
+        pub fn create_texture_descriptor(
+            &self,
+        ) -> irondash_texture::TextureDescriptor<NativeTextureType> {
+            let dxgi_resource: IDXGIResource1 = self.flutter_texture.cast().unwrap();
+            // TODO: make sure we close the resource?
+            let handle = irondash_texture::DxgiSharedHandle(unsafe {
+                dxgi_resource.CreateSharedHandle(
+                    None,
+                    (DXGI_SHARED_RESOURCE_READ ).0,
+                    None,
+                ).unwrap().0
+            } as _);
+            trace!("handle: {:?}", handle);
+            let width = self.video_info.width() as _;
+            let height = self.video_info.height() as _;
+            irondash_texture::TextureDescriptor {
+                handle,
+                width,
+                height,
+                visible_width: width,
+                visible_height: height,
+                pixel_format: irondash_texture::PixelFormat::BGRA,
+            }
         }
     }
 
@@ -755,123 +798,16 @@ mod windows {
         }
     }
 
-    pub fn create_d3d11_device(
-        engine_handle: i64,
-        dimensions: &VideoDimensions,
-    ) -> anyhow::Result<ID3D11Device> {
-        let mut d3d_device = None;
-        unsafe {
-            D3D11CreateDevice(
-                None, // TODO: adapter needed?
-                D3D_DRIVER_TYPE_HARDWARE,
-                HMODULE::default(),
-                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-                None,
-                D3D11_SDK_VERSION,
-                Some(&mut d3d_device),
-                None,
-                None,
-            )?;
-        };
-        let d3d_device = d3d_device.ok_or(anyhow::anyhow!("Failed to create d3d11 device"))?;
-        let mt_device: ID3D11Multithread = d3d_device.cast()?;
-
-        unsafe {
-            let _ = mt_device.SetMultithreadProtected(true);
-        };
-
-        Ok(d3d_device)
-    }
-
-    pub fn create_gst_d3d_ctx(device: &ID3D11Device) -> sys::GstD3dContext {
-        trace!("created gst device");
-        unsafe {
-            let gst_d3d_device_wrapper = sys::gst_d3d11_device_new_wrapped(device.as_raw() as _);
-            trace!("created gst d3d device wrapper");
-            let gst_d3d_ctx_raw = sys::gst_d3d11_context_new(gst_d3d_device_wrapper);
-
-            trace!("created gst d3d ctx raw");
-            gst_d3d_ctx_raw
-        }
-    }
-
-    pub fn get_texture_from_sample(
-        sample: gst::Sample,
-        device: &ID3D11Device,
-    ) -> Result<(HANDLE, gst_video::VideoInfo), gst::FlowError> {
-        if let Some(buffer) = sample.buffer() {
-            if let Some(caps) = sample.caps() {
-                unsafe {
-                    let video_info = gst_video::VideoInfo::from_caps(caps).map_err(|_| {
-                        error!("Failed to get video info from caps: {:?}", caps);
-                        gst::FlowError::Error
-                    })?;
-                    trace!("video_info: {:?}", video_info);
-
-                    let mem = buffer.peek_memory(0);
-                    trace!("peek_memory: {:?}", mem);
-                    let mem_raw = mem.as_mut_ptr();
-                    trace!("peek_memory raw: {:?}", mem_raw);
-
-                    if sys::gst_is_d3d11_memory(mem_raw as _) != 0 {
-                        // TODO: decoder output texture may be texture array. Application should check
-                        // subresource index
-                        let _subresource_index =
-                            sys::gst_d3d11_memory_get_subresource_index(mem_raw as _);
-                        trace!("subresource index: {:?}", _subresource_index);
-                        // Use GST_MAP_D3D11 flag to indicate that direct Direct3D11 resource
-                        // * is required instead of system memory access.
-                        // *
-                        // * CAUTION: Application must not try to write/modify texture rendered by
-                        // * video decoder since it's likely a reference frame. If it's modified by
-                        // * application, then the other decoded frames would be broken.
-                        // * Only read access is allowed in this case
-                        let mut info: MaybeUninit<GstMapInfo> = mem::MaybeUninit::uninit();
-                        if gst::ffi::gst_memory_map(mem_raw as _, info.as_mut_ptr(), MAP_FLAGS) != 0
-                        {
-                            let data = info.assume_init().data;
-                            trace!("texture raw ptr: {:?}", data);
-                            let texture = data as *mut ID3D11Texture2D;
-                            let texture_as_resource = texture.cast::<IDXGIResource>();
-                            trace!("texture as resource: {:?}", texture_as_resource);
-                            let handle = (*texture_as_resource).GetSharedHandle().unwrap();
-                            trace!("texture handle: {:?}", handle);
-
-                            if handle.is_invalid() {
-                                error!("Invalid handle: {:?}", handle);
-                                return Err(gst::FlowError::Error);
-                            }
-                            device
-                                .GetImmediateContext()
-                                .map(|ctx| {
-                                    ctx.Flush();
-                                })
-                                .map_err(|_| {
-                                    error!("Failed to flush context");
-                                    gst::FlowError::Error
-                                })?;
-                            return Ok((handle, video_info));
-                        }
-                    };
-                }
-            }
-        }
-        error!("Failed to get texture from sample: {:?}", sample);
-        Err(gst::FlowError::Error)
-    }
-
     // `gst::ffi::GST_MAP_FLAG_LAST << 1` is because it is defined in a macro so I can't use ffi.
     const MAP_FLAGS: gst::ffi::GstMapFlags =
         gst::ffi::GST_MAP_READ | (gst::ffi::GST_MAP_FLAG_LAST << 1);
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
-        fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>>;
+        fn new(decoding_engine: Arc<GstDecodingEngine>) -> anyhow::Result<Arc<Self>>;
     }
 
     pub struct TextureProviderCtx {
-        pub device: ID3D11Device,
-        engine_handle: i64,
-        dimensions: VideoDimensions,
+        pub decoding_engine: Arc<GstDecodingEngine>,
     }
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
@@ -881,20 +817,10 @@ mod windows {
         >
     {
         // Implement the methods here
-        fn new(engine_handle: i64, dimensions: VideoDimensions) -> anyhow::Result<Arc<Self>> {
-            trace!("Creating new D3D11 texture provider");
-
-            let device = create_d3d11_device(engine_handle, &dimensions)?;
-
-            trace!("casted gst d3d ctx raw to ID3D11DeviceContext");
-
+        fn new(decoding_engine: Arc<GstDecodingEngine>) -> anyhow::Result<Arc<Self>> {
             let out = Arc::new(Self {
                 current_texture: Arc::new(Mutex::new(None)),
-                context: TextureProviderCtx {
-                    device,
-                    engine_handle,
-                    dimensions,
-                },
+                context: TextureProviderCtx { decoding_engine },
             });
 
             Ok(out)
@@ -907,6 +833,6 @@ mod windows {
 
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{
-    create_gst_d3d_ctx, get_texture_from_sample, D3DTextureProvider as NativeTextureProvider,
-    GstDecodingEngine, NativeRegisteredTexture, TextureDescriptionProvider2Ext,
+    D3DTextureProvider as NativeTextureProvider, GstDecodingEngine, NativeRegisteredTexture,
+    TextureDescriptionProvider2Ext,
 };

@@ -28,6 +28,7 @@ class VideoPlayer extends StatelessWidget {
           return texture;
         } catch (e) {
           print(e);
+          throw e;
         }
       }(),
       builder: (context, snapshot) {
