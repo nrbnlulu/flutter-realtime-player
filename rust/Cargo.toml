@@ -8,13 +8,13 @@ crate-type = ["cdylib", "staticlib"]
 
 
 [dependencies]
-flutter_rust_bridge = "=2.8.0"
+flutter_rust_bridge = "=2.9.0"
 
 # irondash
-irondash_texture = { git = "https://github.com/nrbnlulu/irondash.git", branch = "support-windows-2" }
-irondash_run_loop = { git = "https://github.com/nrbnlulu/irondash.git", branch = "support-windows-2" }
-irondash_engine_context = { git = "https://github.com/nrbnlulu/irondash.git", branch = "support-windows-2" }
-irondash_dart_ffi = { git = "https://github.com/nrbnlulu/irondash.git", branch = "support-windows-2" }
+irondash_texture = { path = "E:/OS/irondash/texture" }
+irondash_run_loop = { path = "E:/OS/irondash/run_loop" }
+irondash_engine_context = { path = "E:/OS/irondash/engine_context/rust" }
+irondash_dart_ffi = { path = "E:/OS/irondash/dart_ffi" }
 
 simple_logger = "2.1"
 log = "0.4"
@@ -31,29 +31,36 @@ glib-sys = "0.17.4"
 gobject-sys = "0.17.4"
 
 # GStreamer dependencies
-gst = { package = "gstreamer", version = "0.23.4" }
-gst-base = { package = "gstreamer-base", version = "0.23.4" }
-gst-video = { package = "gstreamer-video", version = "0.23.4" }
-gst-app = { package = "gstreamer-app", version = "0.23.4" }
+gst = { package = "gstreamer", version = "0.23.5" }
+gst-sys = { package = "gstreamer-sys", version = "0.23.5", features = ["v1_16"] }
+gst-base = { package = "gstreamer-base", version = "0.23.5" }
+gst-video = { package = "gstreamer-video", version = "0.23.5" }
+gst-app = { package = "gstreamer-app", version = "0.23.5" }
 
 thread_local = "1.1.8"
 
 
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.61.1", features = [
-    "Win32_Graphics_Direct3D11",
-    "Win32_Foundation",
-    "Win32_Graphics_Direct3D",
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common",
-    "Win32_Graphics_Direct2D",
-    "Win32_Graphics_Gdi",
-    "Win32_Graphics_Direct2D_Common",
-    "Win32_Graphics_DirectWrite",
-    "Win32_Graphics_Imaging",
+[target.'cfg(target_os = "windows")'.dependencies.windows]
+version = "0.61.0"
+features = [
     "Win32_System_Com",
-    "Foundation_Numerics",
-] }
+    "Win32_System_Console",
+    "Win32_System_SystemServices",
+    "Win32_UI_Shell",
+    "Win32_Foundation",
+    "Wdk_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Dxgi",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_WindowsProgramming",
+    "Win32_System_Threading",
+    "Win32_System_Registry",
+]
 
 
 [target.'cfg(target_os = "linux")'.dependencies]

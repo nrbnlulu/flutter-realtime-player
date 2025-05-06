@@ -38,16 +38,51 @@ class _ExampleMainWindow extends StatefulWidget {
   State<_ExampleMainWindow> createState() => _ExampleMainWindowState();
 }
 
+
+
 class _ExampleMainWindowState extends State<_ExampleMainWindow> {
+
+
+
+
+
+  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Plugin example app'),
-        ),
-        body: Column(
+          appBar: AppBar(
+            title: const Text('Plugin example app'),
+          ),
+          body:  SizedBox(
+            height: 720,
+            width: 1280,
+            child: VideoPlayer(
+            
+              url: "C:/Users/temp/Downloads/big_buck_bunny_720p_30mb.mp4",
+            ),
+          )),
+    );
+  }
+}
+
+class WindowOpener extends StatelessWidget {
+  const WindowOpener({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(width: 20),
+        
+    
+        Column(
           children: [
+    
             TextButton(
               onPressed: () async {
                 final window =
@@ -79,11 +114,12 @@ class _ExampleMainWindowState extends State<_ExampleMainWindow> {
               },
             ),
             Expanded(
-              child: EventWidget(controller: WindowController.fromWindowId(0)),
+              child: EventWidget(
+                  controller: WindowController.fromWindowId(0)),
             )
           ],
         ),
-      ),
+      ],
     );
   }
 }

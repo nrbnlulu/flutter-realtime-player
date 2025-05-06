@@ -11,6 +11,7 @@
     "xutility": "cpp",
     "sstream": "cpp",
     "stdexcept": "cpp",
-    "readme": "cpp"
+    "readme": "cpp",
+    "iostream": "cpp"
   }
 }

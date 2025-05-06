@@ -1,10 +1,11 @@
 use log::{debug, trace};
+use simple_log::info;
 use simple_logger::SimpleLogger;
 
-use crate::core::{fluttersink::{
-    self,
-    utils::{LogErr},
-}, types::VideoInfo};
+use crate::core::{
+    fluttersink::{self, utils::LogErr},
+    types::VideoInfo,
+};
 
 #[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
 pub fn greet(name: String) -> String {
@@ -33,6 +34,19 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
     if *is_initialized {
         return;
     }
+    unsafe {
+        let module = windows::Win32::System::LibraryLoader::LoadLibraryA(windows::core::PCSTR(
+            b"irondash_engine_context_plugin.dll\0".as_ptr(),
+        ))
+        .unwrap();
+        let a = windows::Win32::System::LibraryLoader::GetProcAddress(
+            module,
+            windows::core::PCSTR(b"IrondashEngineContextGetDevice\0".as_ptr()),
+        );
+        info!("a: {:?}", a);
+
+    };
+
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
 
     fluttersink::init().log_err();
@@ -40,7 +54,7 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
     *is_initialized = true;
 }
 
-pub fn create_new_playable(engine_handle: i64,vide_info: VideoInfo) -> i64 {
+pub fn create_new_playable(engine_handle: i64, vide_info: VideoInfo) -> i64 {
     trace!("get_texture was called");
     crate::core::fluttersink::create_new_playable(engine_handle, vide_info).unwrap()
 }

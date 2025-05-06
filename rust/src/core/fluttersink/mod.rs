@@ -1,32 +1,30 @@
 pub(super) mod sink;
 pub mod utils;
 use gst::{
-    ffi::{gst_context_get_structure, gst_element_set_context, gst_structure_to_string},
-    glib::{self},
-    prelude::{ElementExtManual, GstBinExtManual, PadExt},
+    glib::object::Cast,
+    prelude::{ElementExtManual, GstBinExt, GstBinExtManual, PadExt},
 };
+use irondash_engine_context::EngineContext;
+use irondash_texture::Texture;
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
 };
+use windows::core::Interface;
 
-use gst::{
-    glib::object::{Cast, ObjectExt},
-    prelude::{ElementExt, GstObjectExt},
-};
+use gst::prelude::{ElementExt, GstObjectExt};
 use log::{error, info, trace};
 use sink::FlutterTextureSink;
 use utils::LogErr;
 
-use crate::core::platform::{create_gst_d3d_ctx, NativeTextureProvider};
+use crate::core::platform::NativeTextureProvider;
 
 use super::{platform::NativeRegisteredTexture, types};
 
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
 }
-static GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE: &'static str = "gst.d3d11.device.handle";
 
 lazy_static::lazy_static! {
 static ref SESSION_CACHE: Mutex<HashMap<i64, (Arc<NativeTextureProvider>, gst::Pipeline, Arc<NativeRegisteredTexture>)>> = Mutex::new(HashMap::new());
@@ -43,14 +41,52 @@ pub fn create_new_playable(
     let registered_texture;
     let texture_provider;
     let dimensions = video_info.dimensions;
+    let appsink_name = format!("sink_{}", engine_handle);
+    let pipeline_str = format!(
+        "filesrc location={} ! parsebin ! h264parse ! {} ! d3d11upload ! video/x-raw(memory:D3D11Memory) ! appsink name={}",
+        video_info.uri,
+        "d3d11h264dec",
+        appsink_name
+    );
+
+    let pipeline = gst::parse::launch(&pipeline_str)?
+        .downcast::<gst::Pipeline>()
+        .unwrap();
+
+    let pipeline_clone = pipeline.clone();
+
+    let appsink = pipeline
+        .by_name(&appsink_name)
+        .unwrap()
+        .downcast::<gst_app::AppSink>()
+        .unwrap();
+    let decoding_engine;
+
     #[cfg(target_os = "windows")]
     {
-        use crate::core::platform::TextureDescriptionProvider2Ext;
+        let dimensions_clone = dimensions.clone();
+        use crate::core::platform::{GstDecodingEngine, TextureDescriptionProvider2Ext};
+        use windows::Win32::Graphics::Direct3D11::ID3D11Device;
         trace!("thread id: {:?}", std::thread::current().id());
-
-        (registered_texture, texture_provider) = utils::invoke_on_platform_main_thread(
-            move || -> anyhow::Result<(Arc<NativeRegisteredTexture>, Arc<NativeTextureProvider>)> {
-                let texture_provider = NativeTextureProvider::new(engine_handle, dimensions)?;
+        let app_sink_clone = appsink.clone();
+        (registered_texture, texture_provider, decoding_engine) =
+            utils::invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
+                trace!("invoke_on_platform_main_thread called");
+                let engine_ctx = EngineContext::get()?;
+                trace!("got engine ctx");
+                let d3d11_device_raw = EngineContext::get_d3d11_device(engine_ctx, engine_handle)?;
+                trace!("d3d11_device_raw: {:?}", d3d11_device_raw);
+                let d3d11_device = unsafe {
+                    ID3D11Device::from_raw_borrowed(&(d3d11_device_raw as *mut _)).unwrap()
+                }
+                .clone();
+                let decoding_engine = GstDecodingEngine::new(
+                    pipeline,
+                    &app_sink_clone,
+                    d3d11_device,
+                    &dimensions_clone,
+                )?;
+                let texture_provider = NativeTextureProvider::new(decoding_engine.clone())?;
 
                 let tex_provider_clone = texture_provider.clone();
                 let reg_texture = irondash_texture::alternative_api::RegisteredTexture::new(
@@ -59,48 +95,38 @@ pub fn create_new_playable(
                 )
                 .map_err(|e| anyhow::anyhow!("Failed to registered texture: {:?}", e))?;
 
-                Ok((reg_texture, tex_provider_clone))
-            },
-        )?;
+                Ok((reg_texture, tex_provider_clone, decoding_engine))
+            })?;
         texture_id = registered_texture.get_texture_id();
     }
-
-    let pipeline = gst::Pipeline::new();
-    let src = gst::ElementFactory::make("urisourcebin")
-        .property("uri", &video_info.uri)
-        .build()?;
-    let demux = gst::ElementFactory::make("qtdemux").build()?;
-    let parse = gst::ElementFactory::make("h264parse").build()?;
-    let decoder = gst::ElementFactory::make("d3d11h264dec").build()?;
-    let convert = gst::ElementFactory::make("d3d11convert").build()?;
     let sink = Arc::new(FlutterTextureSink::new(
         initialized_sig_clone,
-        &pipeline,
+        appsink,
         texture_provider.clone(),
         registered_texture.clone(),
     )?);
-    pipeline.add_many(&[&src, &demux, &parse, &decoder, &convert, &sink.video_sink()])?;
-    gst::Element::link_many(&[&parse, &decoder, &convert, &sink.video_sink()])?;
 
-    demux.connect_pad_added(move |demux, src_pad| {
-        let parse_sink_pad = parse.static_pad("sink").unwrap();
-        if !parse_sink_pad.is_linked() {
-            demux
-                .link_pads(Some(src_pad.name().as_str()), &parse, Some("sink"))
-                .unwrap();
+    let registered_texture_clone = registered_texture.clone();
+    let ddecoding_engine_clone = decoding_engine.clone();
+    let initialized_sig_clone = initialized_sig.clone();
+    decoding_engine.clone().set_callbacks(move || {
+        if !initialized_sig_clone.load(std::sync::atomic::Ordering::Relaxed) {
+            registered_texture_clone
+                .set_current_texture(ddecoding_engine_clone.create_texture_descriptor())
+                .log_err();
+
+            initialized_sig_clone.store(true, std::sync::atomic::Ordering::Relaxed);
+            let registered_texture_clone = registered_texture_clone.clone();
+            thread::spawn(move || {
+                thread::sleep(std::time::Duration::from_millis(1000 * 7));
+
+            registered_texture_clone.mark_frame_available().log_err();
+
+            });
         }
     });
-
-    src.connect_pad_added(move |src, src_pad| {
-        let demux_sink_pad = demux.static_pad("sink").unwrap();
-        if !demux_sink_pad.is_linked() {
-            src.link_pads(Some(src_pad.name().as_str()), &demux, Some("sink"))
-                .unwrap_or_else(|err| {
-                    error!("Failed to link src pad to demux: {:?}", err);
-                });
-        }
-    });
-
+    trace!("running {:?} in thread", video_info.uri);
+    let _ = decoding_engine.run_in_thread();
     // let playbin = &pipeline;
     // playbin.connect_closure("element-setup", false,
     // glib::closure!(move |_playbin: &gst::Element, element: &gst::Element | {
@@ -111,72 +137,14 @@ pub fn create_new_playable(
     // }));
 
     // pipeline.set_property("video-sink", &flutter_sink.video_sink());
-    SESSION_CACHE
-        .lock()
-        .unwrap()
-        .insert(engine_handle, (texture_provider.clone(), pipeline.clone(), registered_texture.clone()));
-    thread::spawn(move || {
-        pipeline
-            .set_state(gst::State::Playing)
-            .expect("Unable to set the pipeline to the `Playing` state");
-        let bus = pipeline.bus().unwrap();
-        for msg in bus.iter() {
-            trace!("Message: {:?}", msg.view());
-            match msg.view() {
-                gst::MessageView::Buffering(buffering) => {
-                    let percent = buffering.percent();
-                    info!("Buffering {}%", percent);
-                    if percent < 100 {
-                        pipeline.set_state(gst::State::Paused).log_err();
-                    } else {
-                        pipeline.set_state(gst::State::Playing).log_err();
-                    }
-                }
-                gst::MessageView::Eos(..) => {
-                    info!("End of stream");
-                    break;
-                }
-                gst::MessageView::Error(err) => {
-                    error!(
-                        "Error from {:?}: {} ({:?})",
-                        err.src().map(|s| s.path_string()),
-                        err.error(),
-                        err.debug()
-                    );
-                    break;
-                }
-                gst::MessageView::NeedContext(msg) => {
-                    info!("Need context: {:?}", msg.context_type());
-                    #[cfg(target_os = "windows")]
-                    if msg.context_type() == GST_D3D11_DEVICE_HANDLE_CONTEXT_TYPE {
-           
-                        let gst_d3d_ctx_ptr = create_gst_d3d_ctx(&texture_provider.context.device);
-
-                        unsafe {
-                            use gst::prelude::*;
-
-                            let el_raw = msg
-                                .src()
-                                .unwrap()
-                                .clone()
-                                .downcast_ref::<gst::Element>()
-                                .unwrap()
-                                .as_ptr();
-
-                            gst_element_set_context(el_raw, gst_d3d_ctx_ptr as _);
-                            info!("Set context for element: {:?}", msg.src().unwrap().name());
-                            let ctx = gst_context_get_structure(gst_d3d_ctx_ptr as _);
-                            let ctx = gst::StructureRef::from_glib_borrow(ctx);
-                            let ctx_str = gst_structure_to_string(ctx.as_ptr());
-                            info!("published context to gstd3d11: {:?}", ctx_str);
-                            glib::ffi::g_free(ctx_str as *mut _);
-                        }
-                    }
-                }
-                _ => (),
-            }
-        }
-    });
+    SESSION_CACHE.lock().unwrap().insert(
+        engine_handle,
+        (
+            texture_provider.clone(),
+            pipeline_clone.clone(),
+            registered_texture.clone(),
+        ),
+    );
 
     // wait for the sink to be initialized
     while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {

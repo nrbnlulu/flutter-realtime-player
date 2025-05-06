@@ -20,14 +20,15 @@ class VideoPlayer extends StatelessWidget {
         try {
           final texture = await rlib.createNewPlayable(
               engineHandle: handle,
-              videInfo:  VideoInfo(
-                  uri:url,
+              videInfo: VideoInfo(
+                  uri: url,
                   dimensions: const VideoDimensions(width: 640, height: 360),
                   mute: true));
-    
+
           return texture;
         } catch (e) {
           print(e);
+          throw e;
         }
       }(),
       builder: (context, snapshot) {
