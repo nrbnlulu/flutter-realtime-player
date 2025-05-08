@@ -34,6 +34,7 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
     if *is_initialized {
         return;
     }
+    #[cfg(target_os = "windows")]
     unsafe {
         let module = windows::Win32::System::LibraryLoader::LoadLibraryA(windows::core::PCSTR(
             b"irondash_engine_context_plugin.dll\0".as_ptr(),

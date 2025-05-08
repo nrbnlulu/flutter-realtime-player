@@ -96,34 +96,34 @@ mod windows {
         pub caps: gst::Caps,
     }
 
-    pub struct GstDecodingEngine {
+    pub struct HardwareDecodingEngine {
         main_context: glib::MainContext,
         main_loop: glib::MainLoop,
         pipeline: gst::Pipeline,
         pub app_sink: gst_app::AppSink,
         pub video_info: gst_video::VideoInfo,
         pub flutter_texture: ID3D11Texture2D,
-        
+
         shared_buffer: gst::Buffer,
         gst_d3d_device: sys::GstD3dDevice,
         gst_d3d_converter: Mutex<Option<sys::GstD3D11Converter>>,
         keyed_mutex: IDXGIKeyedMutex,
         last_sample: Mutex<Option<SampleWrapper>>,
     }
-    unsafe impl Send for GstDecodingEngine {}
-    unsafe impl Sync for GstDecodingEngine {}
+    unsafe impl Send for HardwareDecodingEngine {}
+    unsafe impl Sync for HardwareDecodingEngine {}
 
     lazy_static::lazy_static! {
             static ref GST_D3D11_CONVERTER_OPT_BACKEND: CString = CString::new("GstD3D11Converter.backend").unwrap();
     }
 
-    impl GstDecodingEngine {
+    impl HardwareDecodingEngine {
         pub fn new(
             pipeline: gst::Pipeline,
             app_sink: &gst_app::AppSink,
             flutter_device: ID3D11Device,
             dimensions: &VideoDimensions,
-        ) -> anyhow::Result<Arc<GstDecodingEngine>> {
+        ) -> anyhow::Result<Arc<HardwareDecodingEngine>> {
             let main_context = glib::MainContext::new();
             let main_loop = glib::MainLoop::new(Some(&main_context), false);
 
@@ -231,7 +231,7 @@ mod windows {
                     return Err(anyhow::anyhow!("Failed to get mutable reference to buffer"));
                 }
 
-                let ret = Arc::new(GstDecodingEngine {
+                let ret = Arc::new(HardwareDecodingEngine {
                     main_context,
                     main_loop,
                     pipeline,
@@ -266,7 +266,7 @@ mod windows {
 
         pub fn new_sample_cb<T>(
             app_sink: &gst_app::AppSink,
-            self_: &GstDecodingEngine,
+            self_: &HardwareDecodingEngine,
             on_new_sample: &T,
         ) -> Result<gst::FlowSuccess, gst::FlowError>
         where
@@ -479,7 +479,7 @@ mod windows {
         }
     }
 
-    impl Drop for GstDecodingEngine {
+    impl Drop for HardwareDecodingEngine {
         fn drop(&mut self) {
             unsafe {
                 self.gst_d3d_converter
@@ -500,11 +500,11 @@ mod windows {
         gst::ffi::GST_MAP_READ | (gst::ffi::GST_MAP_FLAG_LAST << 1);
 
     pub trait TextureDescriptionProvider2Ext<T: Clone> {
-        fn new(decoding_engine: Arc<GstDecodingEngine>) -> anyhow::Result<Arc<Self>>;
+        fn new(decoding_engine: Arc<HardwareDecodingEngine>) -> anyhow::Result<Arc<Self>>;
     }
 
     pub struct TextureProviderCtx {
-        pub decoding_engine: Arc<GstDecodingEngine>,
+        pub decoding_engine: Arc<HardwareDecodingEngine>,
     }
 
     impl TextureDescriptionProvider2Ext<NativeTextureType>
@@ -514,7 +514,7 @@ mod windows {
         >
     {
         // Implement the methods here
-        fn new(decoding_engine: Arc<GstDecodingEngine>) -> anyhow::Result<Arc<Self>> {
+        fn new(decoding_engine: Arc<HardwareDecodingEngine>) -> anyhow::Result<Arc<Self>> {
             let out = Arc::new(Self {
                 current_texture: Arc::new(Mutex::new(None)),
                 context: TextureProviderCtx { decoding_engine },
@@ -528,8 +528,23 @@ mod windows {
         irondash_texture::alternative_api::RegisteredTexture<NativeTextureType, TextureProviderCtx>;
 }
 
+#[cfg(target_os = "linux")]
+mod linux {
+    pub struct NotImplemented;
+}
+
+// exports
+
 #[cfg(target_os = "windows")]
 pub(crate) use windows::{
-    D3DTextureProvider as NativeTextureProvider, GstDecodingEngine, NativeRegisteredTexture,
+    D3DTextureProvider as NativeTextureProvider, HardwareDecodingEngine, NativeRegisteredTexture,
     TextureDescriptionProvider2Ext,
+};
+
+#[cfg(target_os = "linux")]
+pub(crate) use linux::{
+    NotImplemented as NativeTextureProvider, 
+    NotImplemented as HardwareDecodingEngine, 
+    NotImplemented as NativeRegisteredTexture,
+    NotImplemented as TextureDescriptionProvider2Ext,
 };
