@@ -852,27 +852,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gl_generator"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a95dfc23a2b4a9a2f5ab41d194f8bfda3cabec42af4e39f08c339eb2a0c124d"
-dependencies = [
- "khronos_api",
- "log",
- "xml-rs",
-]
-
-[[package]]
-name = "gl_loader"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e32d96dd5f881490e537041d5532320812ba096097f07fccb4626578da0b99d3"
-dependencies = [
- "cc",
- "libc",
-]
-
-[[package]]
 name = "glib"
 version = "0.17.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -972,16 +951,6 @@ checksum = "a8928869a44cfdd1fccb17d6746e4ff82c8f82e41ce705aa026a52ca8dc3aefb"
 dependencies = [
  "libc",
  "system-deps 7.0.3",
-]
-
-[[package]]
-name = "glutin_egl_sys"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c4680ba6195f424febdc3ba46e7a42a0e58743f2edb115297b86d7f8ecc02d2"
-dependencies = [
- "gl_generator",
- "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1093,86 +1062,6 @@ dependencies = [
  "glib-sys 0.20.9",
  "gobject-sys 0.20.9",
  "gstreamer-sys",
- "libc",
- "system-deps 7.0.3",
-]
-
-[[package]]
-name = "gstreamer-gl"
-version = "0.23.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02818bd81028abc4ee7b0106c21625be9a2f86ba5fd41ccff58359537637db59"
-dependencies = [
- "glib 0.20.9",
- "gstreamer",
- "gstreamer-base",
- "gstreamer-gl-sys",
- "gstreamer-video",
- "libc",
- "once_cell",
-]
-
-[[package]]
-name = "gstreamer-gl-egl"
-version = "0.23.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc5fad98961d18ed5dba4be44787d4735b78a1f53b7db392be004b96f1f2430b"
-dependencies = [
- "glib 0.20.9",
- "gstreamer",
- "gstreamer-gl",
- "gstreamer-gl-egl-sys",
- "libc",
-]
-
-[[package]]
-name = "gstreamer-gl-egl-sys"
-version = "0.23.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7ebdc94dc34e2b135b2610676b47d30ce88b80862f01e2acf7e29b9b42a14e4"
-dependencies = [
- "glib-sys 0.20.9",
- "gstreamer-gl-sys",
- "libc",
- "system-deps 7.0.3",
-]
-
-[[package]]
-name = "gstreamer-gl-sys"
-version = "0.23.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c2984f8c246407fabbecf852c4595dd1487f4cc495386e17ad31acb69db7d39"
-dependencies = [
- "glib-sys 0.20.9",
- "gobject-sys 0.20.9",
- "gstreamer-base-sys",
- "gstreamer-sys",
- "gstreamer-video-sys",
- "libc",
- "system-deps 7.0.3",
-]
-
-[[package]]
-name = "gstreamer-gl-x11"
-version = "0.23.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53fb7df4736fd071e79b47a7c3b3c0aff51cdc9cbfd715c6a9b69903a517a4e6"
-dependencies = [
- "glib 0.20.9",
- "gstreamer",
- "gstreamer-gl",
- "gstreamer-gl-x11-sys",
- "libc",
-]
-
-[[package]]
-name = "gstreamer-gl-x11-sys"
-version = "0.23.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3fcdab0a4ea49002507c015a918f2942798749101c5e0f50bbdffcd5cd5f21e"
-dependencies = [
- "glib-sys 0.20.9",
- "gstreamer-gl-sys",
  "libc",
  "system-deps 7.0.3",
 ]
@@ -1341,6 +1230,7 @@ dependencies = [
 [[package]]
 name = "irondash_dart_ffi"
 version = "0.2.0"
+source = "git+https://github.com/nrbnlulu/irondash.git#b03bf6e8ca8b16702a35a8818d90e75f5f45027e"
 dependencies = [
  "once_cell",
 ]
@@ -1363,26 +1253,13 @@ dependencies = [
 [[package]]
 name = "irondash_engine_context"
 version = "0.6.0"
+source = "git+https://github.com/nrbnlulu/irondash.git#b03bf6e8ca8b16702a35a8818d90e75f5f45027e"
 dependencies = [
  "android_logger 0.11.3",
  "core-foundation",
  "jni",
  "log",
  "objc2",
- "objc2-foundation",
- "once_cell",
-]
-
-[[package]]
-name = "irondash_run_loop"
-version = "0.6.0"
-dependencies = [
- "core-foundation",
- "futures",
- "irondash_engine_context 0.5.0",
- "log",
- "objc2",
- "objc2-app-kit",
  "objc2-foundation",
  "once_cell",
 ]
@@ -1404,8 +1281,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "irondash_run_loop"
+version = "0.6.0"
+source = "git+https://github.com/nrbnlulu/irondash.git#b03bf6e8ca8b16702a35a8818d90e75f5f45027e"
+dependencies = [
+ "core-foundation",
+ "futures",
+ "irondash_engine_context 0.5.0",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "once_cell",
+]
+
+[[package]]
 name = "irondash_texture"
 version = "0.5.0"
+source = "git+https://github.com/nrbnlulu/irondash.git#b03bf6e8ca8b16702a35a8818d90e75f5f45027e"
 dependencies = [
  "core-foundation",
  "cstr",
@@ -1467,12 +1360,6 @@ dependencies = [
  "once_cell",
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "khronos_api"
-version = "3.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "lazy_static"
@@ -2071,25 +1958,19 @@ dependencies = [
  "gdk-sys",
  "gdkwayland",
  "gdkx11",
- "gl_generator",
- "gl_loader",
  "glib 0.17.10",
  "glib-macros 0.17.10",
  "glib-sys 0.17.10",
- "glutin_egl_sys",
  "gobject-sys 0.17.10",
  "gstreamer",
  "gstreamer-app",
  "gstreamer-base",
- "gstreamer-gl",
- "gstreamer-gl-egl",
- "gstreamer-gl-x11",
  "gstreamer-sys",
  "gstreamer-video",
  "gtk-sys",
  "irondash_dart_ffi",
  "irondash_engine_context 0.6.0",
- "irondash_run_loop 0.6.0",
+ "irondash_run_loop 0.6.0 (git+https://github.com/nrbnlulu/irondash.git)",
  "irondash_texture",
  "lazy_static",
  "log",
@@ -3057,12 +2938,6 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
-
-[[package]]
-name = "xml-rs"
-version = "0.8.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a62ce76d9b56901b19a74f19431b0d8b3bc7ca4ad685a746dfd78ca8f4fc6bda"
 
 [[package]]
 name = "zerocopy"

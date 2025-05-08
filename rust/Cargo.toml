@@ -11,10 +11,10 @@ crate-type = ["cdylib", "staticlib"]
 flutter_rust_bridge = "=2.9.0"
 
 # irondash
-irondash_texture = { path = "E:/OS/irondash/texture" }
-irondash_run_loop = { path = "E:/OS/irondash/run_loop" }
-irondash_engine_context = { path = "E:/OS/irondash/engine_context/rust" }
-irondash_dart_ffi = { path = "E:/OS/irondash/dart_ffi" }
+irondash_texture = { git = "https://github.com/nrbnlulu/irondash.git"  }
+irondash_run_loop = { git = "https://github.com/nrbnlulu/irondash.git" }
+irondash_engine_context = { git = "https://github.com/nrbnlulu/irondash.git" }
+irondash_dart_ffi = { git = "https://github.com/nrbnlulu/irondash.git" }
 
 simple_logger = "2.1"
 log = "0.4"
@@ -69,23 +69,12 @@ gdk = "0.17.1"
 gdk-sys = "0.17.0"
 gdkwayland = "0.17.0"
 gdkx11 = "0.17.0"
-
-gst-gl = { package = "gstreamer-gl", version = "0.23.4" }
-gst-gl-egl = { package = "gstreamer-gl-egl", version = "0.23.4" }
-gst-gl-x11 = { package = "gstreamer-gl-x11", version = "0.23.4" }
-
-glutin_egl_sys = "0.7.1"
-
-
-# OpenGL loader
-gl_loader = "0.1.2"
-
 # GTK (GIMP Toolkit) dependencies
 gtk-sys = "0.17.0"
 
 
+
 [build-dependencies]
-gl_generator = "0.14"
 cfg_aliases = "0.2.1"
 
 
