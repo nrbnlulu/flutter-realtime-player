@@ -39,7 +39,7 @@ pub fn create_new_playable(
            .unwrap();
     
     let (decoder, texture_id) = SoftwareDecoder::new(&pipeline, 1, engine_handle)?;
-    
+    pipeline.set_state(gst::State::Playing)?;
 
     // let playbin = &pipeline;
     // playbin.connect_closure("element-setup", false,
@@ -59,10 +59,10 @@ pub fn create_new_playable(
         ),
     );
 
-    // wait for the sink to be initialized
-    while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    // // wait for the sink to be initialized
+    // while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
+    //     std::thread::sleep(std::time::Duration::from_millis(10));
+    // }
     trace!("Sink initialized; returning texture id: {}", texture_id);
     Ok(texture_id)
 }

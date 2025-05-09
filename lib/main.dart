@@ -23,6 +23,7 @@ Future<void> main(List<String> args) async {
         : jsonDecode(args[2]) as Map<String, dynamic>;
 
     runApp(_ExampleSubWindow(
+        
       windowController: WindowController.fromWindowId(windowId),
       args: argument,
     ));

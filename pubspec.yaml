@@ -38,7 +38,9 @@ dependencies:
   rust_lib_my_app:
     path: rust_builder
   irondash_engine_context:
-    path: E:/OS/irondash/engine_context/dart
+    git:
+        url: https://github.com/nrbnlulu/irondash.git
+        path: engine_context/dart
       
   desktop_multi_window: 
   flutter_rust_bridge: 2.9.0

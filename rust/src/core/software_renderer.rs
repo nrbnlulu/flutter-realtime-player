@@ -79,9 +79,15 @@ impl SoftwareDecoder {
         let self_ = Arc::new(Self {
             current_frame: Arc::new(Mutex::new(None)),
         });
-        let tex = irondash_texture::Texture::new_with_provider(engine_handle, self_.clone())?;
-        let texture_id = tex.id();
-        let sendable = tex.into_sendable_texture();
+        let self_clone = self_.clone();
+        let (sendable, texture_id) = 
+            super::fluttersink::utils::invoke_on_platform_main_thread(
+                move || -> anyhow::Result<_> {
+                    let texture = irondash_texture::Texture::new_with_provider(engine_handle, self_clone)?;
+                    let texture_id = texture.id();
+                    Ok((texture.into_sendable_texture(), texture_id))
+                },
+            )?;
 
         let self_weak = self_.downgrade();
         let cb = move || {
@@ -143,7 +149,14 @@ impl PayloadProvider<BoxedPixelData> for SoftwareDecoder {
         if let Some(frame) = curr_frame.take() {
             frame
         } else {
-            panic!("No current frame available");
+            // return empty frame
+            Box::new(
+                VideoFrame {
+                    width: 0,
+                    height: 0,
+                    pixel_buffer: PixelBuffer::new(0),
+                }
+            )
         }
     }
 }
