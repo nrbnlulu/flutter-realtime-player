@@ -1,7 +1,3 @@
-
-
-
-
 #[cfg(target_os = "windows")]
 mod windows {
     use gst::{ffi::GstMapInfo, glib::translate::ToGlibPtr, prelude::ElementExt};
@@ -270,7 +266,7 @@ mod windows {
             on_new_sample: &T,
         ) -> Result<gst::FlowSuccess, gst::FlowError>
         where
-            T:  Fn() + Send + 'static,
+            T: Fn() + Send + 'static,
         {
             let new_sample = app_sink
                 .pull_sample()
@@ -459,11 +455,10 @@ mod windows {
             let dxgi_resource: IDXGIResource1 = self.flutter_texture.cast().unwrap();
             // TODO: make sure we close the resource?
             let handle = irondash_texture::DxgiSharedHandle(unsafe {
-                dxgi_resource.CreateSharedHandle(
-                    None,
-                    (DXGI_SHARED_RESOURCE_READ ).0,
-                    None,
-                ).unwrap().0
+                dxgi_resource
+                    .CreateSharedHandle(None, (DXGI_SHARED_RESOURCE_READ).0, None)
+                    .unwrap()
+                    .0
             } as _);
             trace!("handle: {:?}", handle);
             let width = self.video_info.width() as _;
@@ -543,8 +538,6 @@ pub(crate) use windows::{
 
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{
-    NotImplemented as NativeTextureProvider, 
-    NotImplemented as HardwareDecodingEngine, 
-    NotImplemented as NativeRegisteredTexture,
-    NotImplemented as TextureDescriptionProvider2Ext,
+    NotImplemented as NativeTextureProvider, NotImplemented as HardwareDecodingEngine,
+    NotImplemented as NativeRegisteredTexture, NotImplemented as TextureDescriptionProvider2Ext,
 };

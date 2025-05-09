@@ -42,11 +42,6 @@ class _ExampleMainWindow extends StatefulWidget {
 
 
 class _ExampleMainWindowState extends State<_ExampleMainWindow> {
-
-
-
-
-
   
   @override
   Widget build(BuildContext context) {
@@ -55,15 +50,8 @@ class _ExampleMainWindowState extends State<_ExampleMainWindow> {
           appBar: AppBar(
             title: const Text('Plugin example app'),
           ),
-          body:  SizedBox(
-            height: 720,
-            width: 1280,
-            child: VideoPlayer(
-            
-              url: "C:/Users/temp/Downloads/big_buck_bunny_720p_30mb.mp4",
-            ),
-          )),
-    );
+          body: WindowOpener()
+    ));
   }
 }
 
@@ -75,15 +63,10 @@ class WindowOpener extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const SizedBox(width: 20),
-        
-    
-        Column(
+           Column(
           children: [
-    
             TextButton(
               onPressed: () async {
                 final window =
@@ -100,26 +83,11 @@ class WindowOpener extends StatelessWidget {
               },
               child: const Text('Create a new World!'),
             ),
-            TextButton(
-              child: const Text('Send event to all sub windows'),
-              onPressed: () async {
-                final subWindowIds =
-                    await DesktopMultiWindow.getAllSubWindowIds();
-                for (final windowId in subWindowIds) {
-                  DesktopMultiWindow.invokeMethod(
-                    windowId,
-                    'broadcast',
-                    'Broadcast from main window',
-                  );
-                }
-              },
-            ),
-            Expanded(
-              child: EventWidget(
-                  controller: WindowController.fromWindowId(0)),
-            )
+     
           ],
         ),
+    
+     
       ],
     );
   }

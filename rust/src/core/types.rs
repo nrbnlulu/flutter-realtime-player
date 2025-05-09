@@ -1,4 +1,3 @@
-
 #[derive(Debug, Default, Copy, Clone)]
 pub enum Orientation {
     #[default]
@@ -49,7 +48,6 @@ pub struct VideoDimensions {
     pub height: u32,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoInfo {
     pub uri: String,
@@ -59,7 +57,12 @@ pub struct VideoInfo {
 }
 
 impl VideoInfo {
-    pub fn new(uri: String, dimensions: VideoDimensions, framerate: Option<i32>, mute: Option<bool>) -> Self {
+    pub fn new(
+        uri: String,
+        dimensions: VideoDimensions,
+        framerate: Option<i32>,
+        mute: Option<bool>,
+    ) -> Self {
         Self {
             uri,
             dimensions,

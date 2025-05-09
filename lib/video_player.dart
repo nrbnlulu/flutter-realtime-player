@@ -20,6 +20,7 @@ class VideoPlayer extends StatelessWidget {
         try {
           final texture = await rlib.createNewPlayable(
               engineHandle: handle,
+        
               videInfo: VideoInfo(
                   uri: url,
                   dimensions: const VideoDimensions(width: 640, height: 360),
@@ -32,7 +33,7 @@ class VideoPlayer extends StatelessWidget {
         }
       }(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done) {
+        if (snapshot.data != null) {
           debugPrint("snapshot.data: ${snapshot.data}");
           return Texture(textureId: snapshot.data!);
         } else {

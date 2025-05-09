@@ -45,7 +45,6 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
             windows::core::PCSTR(b"IrondashEngineContextGetDevice\0".as_ptr()),
         );
         info!("a: {:?}", a);
-
     };
 
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
@@ -54,8 +53,13 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
     debug!("Done initializing flutter gstreamer");
     *is_initialized = true;
 }
-
+/// returns a texture id, this id is also used to identify the session
 pub fn create_new_playable(engine_handle: i64, vide_info: VideoInfo) -> i64 {
-    trace!("get_texture was called");
+    debug!("get_texture was called");
     crate::core::fluttersink::create_new_playable(engine_handle, vide_info).unwrap()
+}
+
+pub fn destroy_playable(texture_id: i64) {
+    trace!("destroy_playable was called");
+    crate::core::fluttersink::destroy_playable(texture_id);
 }

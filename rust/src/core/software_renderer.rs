@@ -36,7 +36,10 @@ unsafe impl Sync for VideoFrame {}
 impl Drop for VideoFrame {
     fn drop(&mut self) {
         unsafe {
-            alloc::dealloc(self.pixel_buffer.ptr, Layout::from_size_align(self.pixel_buffer.size, 1).unwrap());
+            alloc::dealloc(
+                self.pixel_buffer.ptr,
+                Layout::from_size_align(self.pixel_buffer.size, 1).unwrap(),
+            );
         }
     }
 }
@@ -80,14 +83,14 @@ impl SoftwareDecoder {
             current_frame: Arc::new(Mutex::new(None)),
         });
         let self_clone = self_.clone();
-        let (sendable, texture_id) = 
-            super::fluttersink::utils::invoke_on_platform_main_thread(
-                move || -> anyhow::Result<_> {
-                    let texture = irondash_texture::Texture::new_with_provider(engine_handle, self_clone)?;
-                    let texture_id = texture.id();
-                    Ok((texture.into_sendable_texture(), texture_id))
-                },
-            )?;
+        let (sendable, texture_id) = super::fluttersink::utils::invoke_on_platform_main_thread(
+            move || -> anyhow::Result<_> {
+                let texture =
+                    irondash_texture::Texture::new_with_provider(engine_handle, self_clone)?;
+                let texture_id = texture.id();
+                Ok((texture.into_sendable_texture(), texture_id))
+            },
+        )?;
 
         let self_weak = self_.downgrade();
         let cb = move || {
@@ -150,13 +153,11 @@ impl PayloadProvider<BoxedPixelData> for SoftwareDecoder {
             frame
         } else {
             // return empty frame
-            Box::new(
-                VideoFrame {
-                    width: 0,
-                    height: 0,
-                    pixel_buffer: PixelBuffer::new(0),
-                }
-            )
+            Box::new(VideoFrame {
+                width: 0,
+                height: 0,
+                pixel_buffer: PixelBuffer::new(0),
+            })
         }
     }
 }
