@@ -59,7 +59,12 @@ pub fn create_new_playable(engine_handle: i64, vide_info: VideoInfo) -> i64 {
     crate::core::fluttersink::create_new_playable(engine_handle, vide_info).unwrap()
 }
 
-pub fn destroy_playable(texture_id: i64) {
+pub fn destroy_engine_streams(engine_id: i64) {
     trace!("destroy_playable was called");
-    crate::core::fluttersink::destroy_playable(texture_id);
+    crate::core::fluttersink::destroy_engine_streams(engine_id);
+}
+
+pub fn destroy_stream_session(texture_id: i64) {
+    trace!("destroy_stream_session was called");
+    crate::core::fluttersink::destroy_stream_session(texture_id);
 }

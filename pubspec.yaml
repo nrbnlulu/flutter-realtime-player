@@ -43,7 +43,8 @@ dependencies:
         path: engine_context/dart
       
   desktop_multi_window: 
-  flutter_rust_bridge: 2.7.0
+  flutter_rust_bridge: 2.9.0
+  window_manager: ^0.4.3
 
 dev_dependencies:
   flutter_test:

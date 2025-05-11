@@ -4,17 +4,31 @@ import 'dart:ui';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'dart:ffi' as ffi;
 
 import 'package:my_app/src/rust/api/simple.dart' as rlib;
 import 'package:my_app/src/rust/frb_generated.dart' as rlib_gen;
 import 'package:my_app/event_widget.dart';
 import 'package:my_app/video_player.dart';
+import 'package:window_manager/window_manager.dart';
+
+
+class CloseStreamsWhenEngineDies with WindowListener {
+  final int engineHandle;
+CloseStreamsWhenEngineDies(this.engineHandle);
+
+  @override
+  void onWindowClose() {
+    rlib.destroyEngineStreams(engineId: engineHandle);
+  }
+}
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  await windowManager.ensureInitialized();
   await rlib_gen.RustLib.init();
+  final handle = await EngineContext.instance.getEngineHandle();
   rlib.flutterGstreamerInit(ffiPtr: ffi.NativeApi.initializeApiDLData.address);
   if (args.firstOrNull == 'multi_window') {
     final windowId = int.parse(args[1]);
@@ -41,7 +55,7 @@ class _ExampleMainWindow extends StatefulWidget {
 
 
 
-class _ExampleMainWindowState extends State<_ExampleMainWindow> {
+class _ExampleMainWindowState extends State<_ExampleMainWindow>  {
   
   @override
   Widget build(BuildContext context) {
@@ -90,7 +104,9 @@ class WindowOpener extends StatelessWidget {
      
       ],
     );
+    
   }
+  
 }
 
 class _ExampleSubWindow extends StatelessWidget {
@@ -133,4 +149,5 @@ class _ExampleSubWindow extends StatelessWidget {
       ),
     );
   }
+  
 }

@@ -8,6 +8,10 @@
 #include <desktop_multi_window/desktop_multi_window_plugin.h>
 #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
 
+#include <screen_retriever_linux/screen_retriever_linux_plugin.h>
+#include <window_manager/window_manager_plugin.h>
+
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -36,15 +40,24 @@ bool FlutterWindow::OnCreate() {
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
   });
-
+flutter_controller_->engine()->
   DesktopMultiWindowSetWindowCreatedCallback([](void *controller) {
     // get view controller and engine of new window
     auto *flutter_view_controller =
         reinterpret_cast<flutter::FlutterViewController *>(controller);
+        
     auto *registry = flutter_view_controller->engine();
     IrondashEngineContextPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("IrondashEngineContextPluginCApi"));
+    g_autoptr(FlPluginRegistrar) screen_retriever_linux_registrar =
+        fl_plugin_registry_get_registrar_for_plugin(registry, "ScreenRetrieverLinuxPlugin");
+    screen_retriever_linux_plugin_register_with_registrar(screen_retriever_linux_registrar);
+    g_autoptr(FlPluginRegistrar) window_manager_registrar =
+        fl_plugin_registry_get_registrar_for_plugin(registry, "WindowManagerPlugin");
+    window_manager_plugin_register_with_registrar(window_manager_registrar);  
   });
+  
+
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the

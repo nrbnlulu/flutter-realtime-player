@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::bail;
-use gst::glib::{clone::Downgrade, object::ObjectExt};
+use gst::{glib::{clone::Downgrade, object::ObjectExt}, prelude::ElementExt};
 use irondash_texture::{BoxedPixelData, PayloadProvider, SimplePixelData};
 use log::error;
 
@@ -57,6 +57,7 @@ impl irondash_texture::PixelDataProvider for VideoFrame {
 
 pub struct SoftwareDecoder {
     current_frame: Arc<Mutex<Option<Box<VideoFrame>>>>,
+    pipeline: gst::Pipeline,
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
@@ -80,7 +81,7 @@ impl SoftwareDecoder {
         pipeline.set_property("video-sink", &*appsink);
 
         let self_ = Arc::new(Self {
-            current_frame: Arc::new(Mutex::new(None)),
+            current_frame: Arc::new(Mutex::new(None)), pipeline: pipeline.clone(),
         });
         let self_clone = self_.clone();
         let (sendable, texture_id) = super::fluttersink::utils::invoke_on_platform_main_thread(
@@ -143,6 +144,19 @@ impl SoftwareDecoder {
         *self.current_frame.lock().unwrap() = Some(Box::new(frame));
         mark_frame_avb();
         Ok(gst::FlowSuccess::Ok)
+    }
+
+    pub fn destroy_stream(&self) {
+        let mut curr_frame = self.current_frame.lock().unwrap();
+
+        self.pipeline
+            .set_state(gst::State::Null)
+            .expect("Failed to set pipeline state to Null");
+
+        if let Some(frame) = curr_frame.take() {
+            // drop the frame
+            drop(frame);
+        }
     }
 }
 

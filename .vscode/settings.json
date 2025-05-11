@@ -1,17 +1,7 @@
 {
-  "cmake.sourceDirectory": "/home/dev/Desktop/tmp/my_app/linux",
-  "discord.enabled": false,
-  "vscord.enabled": true,
-  "files.associations": {
-    "xtree": "cpp",
-    "algorithm": "cpp",
-    "functional": "cpp",
-    "type_traits": "cpp",
-    "xtr1common": "cpp",
-    "xutility": "cpp",
-    "sstream": "cpp",
-    "stdexcept": "cpp",
-    "readme": "cpp",
-    "iostream": "cpp"
-  }
-}
+    "rust-analyzer.check.extraEnv": {
+        "environm": {
+            "PKG_CONFIG_PATH": "C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\lib\\pkgconfig;C:\\Program Files\\gstreamer\\1.0\\msvc_x86_64\\lib\\pkgconfig"
+        }
+    }
+}   
