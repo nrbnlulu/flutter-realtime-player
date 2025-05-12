@@ -8,7 +8,7 @@ crate-type = ["cdylib", "staticlib"]
 
 
 [dependencies]
-flutter_rust_bridge = "=2.9.0"
+flutter_rust_bridge = "=2.7.0"
 
 # irondash
 irondash_texture = { git = "https://github.com/nrbnlulu/irondash.git"  }

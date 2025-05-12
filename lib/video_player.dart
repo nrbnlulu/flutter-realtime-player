@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:irondash_engine_context/irondash_engine_context.dart';
-import 'package:my_app/src/rust/api/simple.dart' as rlib;
-import 'package:my_app/src/rust/core/types.dart';
+// ignore: implementation_imports
+import 'package:flutter_gstreamer/src/rust/api/simple.dart' as rlib;
 
 class VideoPlayer extends StatelessWidget {
   const VideoPlayer({
