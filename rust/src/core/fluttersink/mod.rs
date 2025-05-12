@@ -45,10 +45,10 @@ pub fn create_new_playable(
     );
 
     // pipeline.set_property("video-sink", &flutter_sink.video_sink());
-    SESSION_CACHE
-        .lock()
-        .unwrap()
-        .insert(texture_id, (decoder.clone(), pipeline.clone(), engine_handle));
+    SESSION_CACHE.lock().unwrap().insert(
+        texture_id,
+        (decoder.clone(), pipeline.clone(), engine_handle),
+    );
 
     // // wait for the sink to be initialized
     // while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
@@ -72,7 +72,11 @@ pub fn destroy_engine_streams(engine_handle: i64) {
     for texture_id in &to_remove {
         session_cache.remove(&texture_id);
     }
-    info!("Destroyed {} streams for engine handle: {}", to_remove.len(), engine_handle);
+    info!(
+        "Destroyed {} streams for engine handle: {}",
+        to_remove.len(),
+        engine_handle
+    );
 }
 
 pub fn destroy_stream_session(texture_id: i64) {

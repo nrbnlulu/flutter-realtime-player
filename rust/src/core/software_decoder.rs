@@ -5,7 +5,10 @@ use std::{
 };
 
 use anyhow::bail;
-use gst::{glib::{clone::Downgrade, object::ObjectExt}, prelude::ElementExt};
+use gst::{
+    glib::{clone::Downgrade, object::ObjectExt},
+    prelude::ElementExt,
+};
 use irondash_texture::{BoxedPixelData, PayloadProvider, SimplePixelData};
 use log::error;
 
@@ -81,7 +84,8 @@ impl SoftwareDecoder {
         pipeline.set_property("video-sink", &*appsink);
 
         let self_ = Arc::new(Self {
-            current_frame: Arc::new(Mutex::new(None)), pipeline: pipeline.clone(),
+            current_frame: Arc::new(Mutex::new(None)),
+            pipeline: pipeline.clone(),
         });
         let self_clone = self_.clone();
         let (sendable, texture_id) = super::fluttersink::utils::invoke_on_platform_main_thread(
