@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gstreamer/flutter_gstreamer.dart';
+import 'dart:ffi' as ffi;
+
+import 'package:flutter_gstreamer/src/rust/api/simple.dart' as rlib;
+import 'package:flutter_gstreamer/src/rust/frb_generated.dart' as rlib_gen;
+
 
 Future<void> main() async {
   await RustLib.init();
+    WidgetsFlutterBinding.ensureInitialized();
+  await windowManager.ensureInitialized();
+  await rlib_gen.RustLib.init();
+  final handle = await EngineContext.instance.getEngineHandle();
+  rlib.flutterGstreamerInit(ffiPtr: ffi.NativeApi.initializeApiDLData.address);
   runApp(const MyApp());
 }
 
