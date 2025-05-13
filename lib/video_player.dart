@@ -46,7 +46,7 @@ class VideoPlayer extends StatefulWidget {
   final Widget? child;
   const VideoPlayer._({super.key, required this.controller, this.child});
 
-  factory VideoPlayer.externalController({
+  factory VideoPlayer.fromController({
     GlobalKey? key,
     required VideoController controller,
     Widget? child,
