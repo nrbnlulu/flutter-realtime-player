@@ -1,5 +1,5 @@
 [package]
-name = "rust_lib_my_app"
+name = "flutter_gstreamer"
 version = "0.1.0"
 edition = "2021"
 

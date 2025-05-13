@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
-import 'dart:ffi' as ffi;
+import 'package:flutter_gstreamer/video_player.dart';
 
-import 'package:flutter_gstreamer/src/rust/api/simple.dart' as rlib;
-import 'package:flutter_gstreamer/src/rust/frb_generated.dart' as rlib_gen;
+import 'package:window_manager/window_manager.dart';
+import 'package:flutter_gstreamer/flutter_gstreamer.dart' as fl_gst;
 
 
 Future<void> main() async {
-  await RustLib.init();
     WidgetsFlutterBinding.ensureInitialized();
+    await fl_gst.init();
   await windowManager.ensureInitialized();
-  await rlib_gen.RustLib.init();
-  final handle = await EngineContext.instance.getEngineHandle();
-  rlib.flutterGstreamerInit(ffiPtr: ffi.NativeApi.initializeApiDLData.address);
   runApp(const MyApp());
 }
 
@@ -24,9 +21,7 @@ class MyApp extends StatelessWidget {
       home: Scaffold(
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
         body: Center(
-          child: Text(
-            'Action: Call Rust `greet("Tom")`\nResult: `${greet(name: "Tom")}`',
-          ),
+          child: VideoPlayer(url: "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4")
         ),
       ),
     );

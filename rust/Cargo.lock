@@ -525,6 +525,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "flutter_gstreamer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "cfg_aliases",
+ "flume",
+ "flutter_rust_bridge",
+ "gdk",
+ "gdk-sys",
+ "gdkwayland",
+ "gdkx11",
+ "glib 0.20.9",
+ "glib-macros 0.20.7",
+ "glib-sys 0.20.9",
+ "gobject-sys 0.20.9",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-base",
+ "gstreamer-sys",
+ "gstreamer-video",
+ "gtk-sys",
+ "irondash_dart_ffi",
+ "irondash_engine_context 0.6.0",
+ "irondash_run_loop 0.6.0 (git+https://github.com/nrbnlulu/irondash.git)",
+ "irondash_texture",
+ "lazy_static",
+ "log",
+ "simple-log",
+ "simple_logger",
+ "thread_local",
+ "tokio",
+ "windows",
+]
+
+[[package]]
 name = "flutter_rust_bridge"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1944,42 +1980,6 @@ name = "regex-syntax"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
-
-[[package]]
-name = "rust_lib_my_app"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "cfg_aliases",
- "flume",
- "flutter_rust_bridge",
- "gdk",
- "gdk-sys",
- "gdkwayland",
- "gdkx11",
- "glib 0.20.9",
- "glib-macros 0.20.7",
- "glib-sys 0.20.9",
- "gobject-sys 0.20.9",
- "gstreamer",
- "gstreamer-app",
- "gstreamer-base",
- "gstreamer-sys",
- "gstreamer-video",
- "gtk-sys",
- "irondash_dart_ffi",
- "irondash_engine_context 0.6.0",
- "irondash_run_loop 0.6.0 (git+https://github.com/nrbnlulu/irondash.git)",
- "irondash_texture",
- "lazy_static",
- "log",
- "simple-log",
- "simple_logger",
- "thread_local",
- "tokio",
- "windows",
-]
 
 [[package]]
 name = "rustc-demangle"
