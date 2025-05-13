@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
       home: Scaffold(
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
         body: Center(
-          child: VideoPlayer(url: "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4")
+          child: VideoPlayer.fromConfig(url: "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_30mb.mp4")
         ),
       ),
     );

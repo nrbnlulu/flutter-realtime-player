@@ -44,13 +44,29 @@ class VideoController {
 class VideoPlayer extends StatefulWidget {
   final VideoController controller;
   final Widget? child;
+  const VideoPlayer._({super.key, required this.controller, this.child});
 
-  VideoPlayer({
-    super.key,
-    required String url,
-    VideoController? controller,
-    this.child,
-  }) : controller = controller ?? VideoController(url: url);
+  factory VideoPlayer.externalController({
+    GlobalKey? key,
+    required VideoController controller,
+    Widget? child,
+  }) {
+    return VideoPlayer._(key: key, controller: controller, child: child);
+  }
+  
+  factory VideoPlayer.fromConfig({
+      GlobalKey? key,
+      required String url,
+      bool mute = true,
+      Widget? child
+  }){
+      return VideoPlayer._(
+        key: key,
+        controller: VideoController(url: url, mute: mute),
+        child: child,
+      );
+  }
+  
 
   @override
   State<VideoPlayer> createState() => _VideoPlayerState();
