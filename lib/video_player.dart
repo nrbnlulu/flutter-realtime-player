@@ -1,16 +1,57 @@
 import 'package:flutter/material.dart';
-import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'package:flutter_gstreamer/rust/api/simple.dart' as rlib;
+import 'package:irondash_engine_context/irondash_engine_context.dart';
 
 import 'rust/core/types.dart';
+
+class VideoController {
+  final String url;
+  final bool mute;
+  int? textureId;
+
+  VideoController({required this.url, this.mute = true});
+
+  Future<void> dispose() async {
+    if (textureId != null) {
+      await rlib.destroyStreamSession(textureId: textureId!);
+    }
+  }
+
+  Future<(int?, String?)> init() async {
+    int? textureId;
+    String? error;
+
+    final handle = await EngineContext.instance.getEngineHandle();
+    // play demo video
+    try {
+      textureId = await rlib.createNewPlayable(
+        engineHandle: handle,
+        videInfo: VideoInfo(
+          uri: url,
+          dimensions: const VideoDimensions(width: 640, height: 360),
+          mute: mute,
+        ),
+      );
+    } catch (e) {
+      error = e.toString();
+    }
+    return (textureId, error);
+  }
+}
 
 // ignore: implementation_imports
 
 class VideoPlayer extends StatefulWidget {
-  const VideoPlayer({super.key, required this.url});
+  final VideoController controller;
+  final Widget? child;
 
-  final String url;
-  final int? textureId = null;
+  VideoPlayer({
+    super.key,
+    required String url,
+    VideoController? controller,
+    this.child,
+  }) : controller = controller ?? VideoController(url: url);
+
   @override
   State<VideoPlayer> createState() => _VideoPlayerState();
 }
@@ -20,26 +61,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder(
-      future: () async {
-        int? textureId;
-        String? error;
-
-        final handle = await EngineContext.instance.getEngineHandle();
-        // play demo video
-        try {
-          textureId = await rlib.createNewPlayable(
-            engineHandle: handle,
-            videInfo: VideoInfo(
-              uri: widget.url,
-              dimensions: const VideoDimensions(width: 640, height: 360),
-              mute: true,
-            ),
-          );
-        } catch (e) {
-          error = e.toString();
-        }
-        return (textureId, error);
-      }(),
+      future: widget.controller.init(),
       builder: (context, snapshot) {
         if (snapshot.data != null) {
           final data = snapshot.data!;
@@ -48,7 +70,12 @@ class _VideoPlayerState extends State<VideoPlayer> {
           }
           if (data.$1 != null) {
             textureId = data.$1;
-            return Texture(textureId: data.$1!);
+            return Stack(
+              children: [
+                Texture(textureId: data.$1!),
+                widget.child ?? const SizedBox(),
+              ],
+            );
           }
         }
         return const CircularProgressIndicator();
