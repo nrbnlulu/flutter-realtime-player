@@ -1,16 +1,16 @@
 use std::{
     alloc::{self, Layout},
-    cell::RefCell,
     sync::{Arc, Mutex},
 };
 
-use anyhow::bail;
 use gst::{
     glib::{clone::Downgrade, object::ObjectExt},
     prelude::ElementExt,
 };
-use irondash_texture::{BoxedPixelData, PayloadProvider, SimplePixelData};
+use irondash_texture::{BoxedPixelData, PayloadProvider};
 use log::error;
+
+use super::fluttersink::utils::LogErr;
 
 struct PixelBuffer {
     ptr: *mut u8,
@@ -75,7 +75,7 @@ impl SoftwareDecoder {
             gst_app::AppSink::builder()
                 .caps(
                     &gst_video::VideoCapsBuilder::new()
-                        .format(gst_video::VideoFormat::Bgra)
+                        .format(gst_video::VideoFormat::Rgba)
                         .build(),
                 )
                 .name(format!("appsink-{}", session_id))
@@ -105,7 +105,7 @@ impl SoftwareDecoder {
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |app| {
                     if let Some(s) = self_weak.upgrade() {
-                        s.on_new_sample(&app, &cb);
+                        s.on_new_sample(&app, &cb).log_err();
                     }
                     Ok(gst::FlowSuccess::Ok)
                 })
@@ -126,7 +126,7 @@ impl SoftwareDecoder {
         let buffer = sample.buffer_owned().unwrap(); // Probably copies!
         let caps = sample.caps().unwrap();
         let video_info = gst_video::VideoInfo::from_caps(caps).expect("couldn't build video info!");
-        if video_info.format() != gst_video::VideoFormat::Bgra {
+        if video_info.format() != gst_video::VideoFormat::Rgba {
             error!("Unsupported format: {:?}", video_info.format());
             return Err(gst::FlowError::NotSupported);
         }
