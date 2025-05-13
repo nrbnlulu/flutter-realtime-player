@@ -4,7 +4,7 @@ import 'package:flutter_gstreamer/rust/frb_generated.dart' as rlib_gen;
 import 'package:flutter_gstreamer/rust/api/simple.dart' as rlib;
 import 'dart:ffi' as ffi;
 export './rust/core/types.dart';
-
+export './video_player.dart' show VideoController, VideoPlayer;
 import 'package:irondash_engine_context/irondash_engine_context.dart';
 
 Future<void> init() async {
