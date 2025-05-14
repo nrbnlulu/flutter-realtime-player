@@ -1,16 +1,15 @@
 use std::{
     alloc::{self, Layout},
-    sync::{Arc, Mutex},
+    cell::RefCell,
+    sync::{atomic::AtomicBool, Arc, Mutex, Weak},
 };
 
-use gst::{
-    glib::{clone::Downgrade, object::ObjectExt},
-    prelude::ElementExt,
-};
-use irondash_texture::{BoxedPixelData, PayloadProvider};
+use ffmpeg::ffi::{av_frame_alloc, avcodec_receive_frame, AVFrame};
+use gst::glib::clone::Downgrade;
+use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::error;
 
-use super::fluttersink::utils::LogErr;
+use super::{fluttersink::utils::LogErr, types};
 
 struct PixelBuffer {
     ptr: *mut u8,
@@ -32,61 +31,44 @@ struct VideoFrame {
     width: u32,
     height: u32,
     /// make sure that data outlives the duration where the shared buffer is used.
-    pixel_buffer: PixelBuffer,
+    frame: ffmpeg::util::frame::Video,
 }
 unsafe impl Send for VideoFrame {}
 unsafe impl Sync for VideoFrame {}
-impl Drop for VideoFrame {
-    fn drop(&mut self) {
-        unsafe {
-            alloc::dealloc(
-                self.pixel_buffer.ptr,
-                Layout::from_size_align(self.pixel_buffer.size, 1).unwrap(),
-            );
-        }
-    }
-}
-impl irondash_texture::PixelDataProvider for VideoFrame {
+
+struct FFmpegFrameWrapper(ffmpeg::util::frame::Video);
+
+
+impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
     fn get(&self) -> irondash_texture::PixelData {
         irondash_texture::PixelData {
-            width: self.width as _,
-            height: self.height as _,
-            data: unsafe {
-                std::slice::from_raw_parts(self.pixel_buffer.ptr, self.pixel_buffer.size)
-            },
+            width: self.0.width() as _,
+            height: self.0.height() as _,
+            data: self.0.data(0),
         }
     }
 }
 
 pub struct SoftwareDecoder {
-    current_frame: Arc<Mutex<Option<Box<VideoFrame>>>>,
-    pipeline: gst::Pipeline,
+    current_frame: Arc<Mutex<Option<Box<FFmpegFrameWrapper>>>>,
+    video_info: types::VideoInfo,
+    kill_sig: AtomicBool,
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
-
+pub type SharedSendableTexture = Arc<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
 impl SoftwareDecoder {
     pub fn new(
-        pipeline: &gst::Pipeline,
+        video_info: &types::VideoInfo,
         session_id: u32,
         engine_handle: i64,
-    ) -> anyhow::Result<(Arc<Self>, i64)> {
-        let appsink = Arc::new(
-            gst_app::AppSink::builder()
-                .caps(
-                    &gst_video::VideoCapsBuilder::new()
-                        .format(gst_video::VideoFormat::Rgba)
-                        .build(),
-                )
-                .name(format!("appsink-{}", session_id))
-                .build(),
-        );
-        pipeline.set_property("video-sink", &*appsink);
-
-        let self_ = Arc::new(Self {
+    ) -> anyhow::Result<(Arc<Self>, i64, SharedSendableTexture)> {
+        let mut self_ = Arc::new(Self {
             current_frame: Arc::new(Mutex::new(None)),
-            pipeline: pipeline.clone(),
+            video_info: video_info.clone(),
+            kill_sig: AtomicBool::new(false),
         });
+
         let self_clone = self_.clone();
         let (sendable, texture_id) = super::fluttersink::utils::invoke_on_platform_main_thread(
             move || -> anyhow::Result<_> {
@@ -97,70 +79,68 @@ impl SoftwareDecoder {
             },
         )?;
 
-        let self_weak = self_.downgrade();
-        let cb = move || {
-            sendable.mark_frame_available();
-        };
-        appsink.set_callbacks(
-            gst_app::AppSinkCallbacks::builder()
-                .new_sample(move |app| {
-                    if let Some(s) = self_weak.upgrade() {
-                        s.on_new_sample(&app, &cb).log_err();
-                    }
-                    Ok(gst::FlowSuccess::Ok)
-                })
-                .build(),
-        );
-
-        Ok((self_, texture_id))
+        Ok((self_, texture_id, sendable))
     }
+    pub fn start(self: &Arc<Self>, sendable_texture: SharedSendableTexture) -> anyhow::Result<()> {
+        let mut ictx = ffmpeg::format::input(&self.video_info.uri)?;
+        let input = ictx
+            .streams()
+            .best(ffmpeg::media::Type::Video)
+            .ok_or(ffmpeg::Error::StreamNotFound)?;
+        let video_stream_index = input.index();
+        let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
+
+        let mut decoder = context_decoder.decoder().video()?;
+        let mut scaler = ffmpeg::software::scaling::Context::get(
+            decoder.format(),
+            decoder.width(),
+            decoder.height(),
+            ffmpeg::format::Pixel::RGBA,
+            decoder.width(),
+            decoder.height(),
+            ffmpeg::software::scaling::Flags::BILINEAR,
+        )?;
+        let cb = move || {
+            sendable_texture.mark_frame_available();
+        };
+        for (stream, packet) in ictx.packets() {
+            if self.kill_sig.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+            if stream.index() == video_stream_index {
+                let mut packet = packet;
+                decoder.send_packet(&mut packet)?;
+                self.on_new_sample(&mut decoder, &mut scaler, &cb)?;
+            }
+        }
+        decoder.send_eof()?;
+        self.on_new_sample(&mut decoder, &mut scaler, &cb)?;
+        Ok(())
+    }
+
     fn on_new_sample<T>(
         &self,
-        app: &gst_app::AppSink,
+        decoder: &mut ffmpeg::decoder::Video,
+        scaler: &mut ffmpeg::software::scaling::Context,
         mark_frame_avb: &T,
-    ) -> Result<gst::FlowSuccess, gst::FlowError>
+    ) -> anyhow::Result<()>
     where
         T: Fn() -> (),
     {
-        let sample = app.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-        let buffer = sample.buffer_owned().unwrap(); // Probably copies!
-        let caps = sample.caps().unwrap();
-        let video_info = gst_video::VideoInfo::from_caps(caps).expect("couldn't build video info!");
-        if video_info.format() != gst_video::VideoFormat::Rgba {
-            error!("Unsupported format: {:?}", video_info.format());
-            return Err(gst::FlowError::NotSupported);
+        let mut decoded = ffmpeg::util::frame::Video::empty();
+        while decoder.receive_frame(&mut decoded).is_ok() {
+            let mut rgb_frame = ffmpeg::util::frame::Video::empty();
+            scaler.run(&decoded, &mut rgb_frame)?;
         }
-        let width = video_info.width();
-        let height = video_info.height();
+        *self.current_frame.lock().unwrap() = Some(Box::new(FFmpegFrameWrapper(decoded)));
 
-        let video_frame = gst_video::VideoFrame::from_buffer_readable(buffer, &video_info).unwrap();
-        let video_buffer = video_frame.buffer();
-        let mut pixel_buffer = PixelBuffer::new(video_buffer.size());
-        video_buffer
-            .copy_to_slice(0, pixel_buffer.mut_slice())
-            .map_err(|_| gst::FlowError::NotSupported)?;
-        let frame = VideoFrame {
-            width,
-            height,
-            pixel_buffer,
-        };
-
-        *self.current_frame.lock().unwrap() = Some(Box::new(frame));
         mark_frame_avb();
-        Ok(gst::FlowSuccess::Ok)
+        Ok(())
     }
 
     pub fn destroy_stream(&self) {
-        let mut curr_frame = self.current_frame.lock().unwrap();
-
-        self.pipeline
-            .set_state(gst::State::Null)
-            .expect("Failed to set pipeline state to Null");
-
-        if let Some(frame) = curr_frame.take() {
-            // drop the frame
-            drop(frame);
-        }
+        self.kill_sig
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -171,11 +151,7 @@ impl PayloadProvider<BoxedPixelData> for SoftwareDecoder {
             frame
         } else {
             // return empty frame
-            Box::new(VideoFrame {
-                width: 0,
-                height: 0,
-                pixel_buffer: PixelBuffer::new(0),
-            })
+            Box::new(FFmpegFrameWrapper(ffmpeg::util::frame::Video::empty()))
         }
     }
 }
