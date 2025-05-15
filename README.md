@@ -1,17 +1,5 @@
-# flutter_gstreamer
-Make sure to initialize irondash and this plugin
-```dart
-// main.dart
-import 'dart:ffi' as ffi;
+# expiriments with video decoding for flutter.
 
-import 'package:my_app/src/rust/api/simple.dart' as rlib;
-import 'package:my_app/src/rust/frb_generated.dart' as rlib_gen;
-
-
-Future<void> main(List<String> args) async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await windowManager.ensureInitialized();
-  await rlib_gen.RustLib.init();
-  final handle = await EngineContext.instance.getEngineHandle();
-  rlib.flutterGstreamerInit(ffiPtr: ffi.NativeApi.initializeApiDLData.address);
-```
+currently there are two branches that are useable.
+- `main` uses ffmpeg software decoder. recommended for live streams. sometimes frames are dropped this need to be fixed.
+- `software-decoder` which uses GStreamer pipeline and an `appsink`. it is more reliable then `main` though I had an issue with RTSP streaming for low-bandwidth connections.
