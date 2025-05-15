@@ -2,16 +2,13 @@
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
     alloc::{self, Layout},
-    cell::RefCell,
-    sync::{atomic::AtomicBool, Arc, Mutex, Weak},
+    sync::{atomic::AtomicBool, Arc, Mutex},
 };
 
-use ffmpeg::ffi::{av_frame_alloc, avcodec_receive_frame, AVFrame};
-use gst::glib::clone::Downgrade;
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
-use log::{debug, error, trace};
+use log::{debug, trace};
 
-use super::{fluttersink::utils::LogErr, types};
+use super::types;
 
 struct PixelBuffer {
     ptr: *mut u8,
@@ -64,7 +61,7 @@ impl SoftwareDecoder {
         session_id: u32,
         engine_handle: i64,
     ) -> anyhow::Result<(Arc<Self>, i64, SharedSendableTexture)> {
-        let mut self_ = Arc::new(Self {
+        let self_ = Arc::new(Self {
             current_frame: Arc::new(Mutex::new(None)),
             video_info: video_info.clone(),
             kill_sig: AtomicBool::new(false),

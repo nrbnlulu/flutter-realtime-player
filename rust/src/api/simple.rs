@@ -1,5 +1,4 @@
 use log::{debug, trace};
-use simple_log::info;
 use simple_logger::SimpleLogger;
 
 use crate::core::{
