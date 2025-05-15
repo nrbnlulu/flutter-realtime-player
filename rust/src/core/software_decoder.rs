@@ -133,6 +133,9 @@ impl SoftwareDecoder {
             *self.current_frame.lock().unwrap() = Some(Box::new(FFmpegFrameWrapper(rgb_frame)));
             trace!("marking frame available");
             mark_frame_avb();
+            if self.kill_sig.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
         }
         Ok(())
     }
