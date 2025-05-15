@@ -1,3 +1,5 @@
+// inspired by
+// - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
     alloc::{self, Layout},
     cell::RefCell,
@@ -7,7 +9,7 @@ use std::{
 use ffmpeg::ffi::{av_frame_alloc, avcodec_receive_frame, AVFrame};
 use gst::glib::clone::Downgrade;
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
-use log::error;
+use log::{debug, error, trace};
 
 use super::{fluttersink::utils::LogErr, types};
 
@@ -37,7 +39,6 @@ unsafe impl Send for VideoFrame {}
 unsafe impl Sync for VideoFrame {}
 
 struct FFmpegFrameWrapper(ffmpeg::util::frame::Video);
-
 
 impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
     fn get(&self) -> irondash_texture::PixelData {
@@ -82,6 +83,7 @@ impl SoftwareDecoder {
         Ok((self_, texture_id, sendable))
     }
     pub fn start(self: &Arc<Self>, sendable_texture: SharedSendableTexture) -> anyhow::Result<()> {
+        trace!("starting ffmpeg session for {}", &self.video_info.uri);
         let mut ictx = ffmpeg::format::input(&self.video_info.uri)?;
         let input = ictx
             .streams()
@@ -131,10 +133,10 @@ impl SoftwareDecoder {
         while decoder.receive_frame(&mut decoded).is_ok() {
             let mut rgb_frame = ffmpeg::util::frame::Video::empty();
             scaler.run(&decoded, &mut rgb_frame)?;
+            *self.current_frame.lock().unwrap() = Some(Box::new(FFmpegFrameWrapper(rgb_frame)));
+            trace!("marking frame available");
+            mark_frame_avb();
         }
-        *self.current_frame.lock().unwrap() = Some(Box::new(FFmpegFrameWrapper(decoded)));
-
-        mark_frame_avb();
         Ok(())
     }
 
@@ -150,8 +152,13 @@ impl PayloadProvider<BoxedPixelData> for SoftwareDecoder {
         if let Some(frame) = curr_frame.take() {
             frame
         } else {
+            debug!("no frame available returning a default");
             // return empty frame
-            Box::new(FFmpegFrameWrapper(ffmpeg::util::frame::Video::empty()))
+            Box::new(FFmpegFrameWrapper(ffmpeg::util::frame::Video::new(
+                ffmpeg::format::Pixel::RGBA,
+                640,
+                480,
+            )))
         }
     }
 }

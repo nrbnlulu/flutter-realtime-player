@@ -4,7 +4,8 @@ use utils::LogErr;
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex}, thread,
+    sync::{Arc, Mutex},
+    thread,
 };
 
 use log::{info, trace};
@@ -14,7 +15,8 @@ use crate::core::software_decoder::SoftwareDecoder;
 use super::types;
 
 pub fn init() -> anyhow::Result<()> {
-    gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))
+    gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))?;
+    ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))
 }
 
 lazy_static::lazy_static! {
@@ -25,16 +27,15 @@ pub fn create_new_playable(
     engine_handle: i64,
     video_info: types::VideoInfo,
 ) -> anyhow::Result<i64> {
+    let (decoder, texture_id, sendable_texture) =
+        SoftwareDecoder::new(&video_info, 0, engine_handle)?;
 
-    let (decoder, texture_id , sendable_texture) = SoftwareDecoder::new(&video_info, 0, engine_handle)?;
-        
-    
     // pipeline.set_property("video-sink", &flutter_sink.video_sink());
-    SESSION_CACHE.lock().unwrap().insert(
-        texture_id,
-        (decoder.clone(), engine_handle),
-    );
-    
+    SESSION_CACHE
+        .lock()
+        .unwrap()
+        .insert(texture_id, (decoder.clone(), engine_handle));
+
     // // wait for the sink to be initialized
     // while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
     //     std::thread::sleep(std::time::Duration::from_millis(10));
@@ -44,8 +45,7 @@ pub fn create_new_playable(
         decoder.start(sendable_texture).log_err();
     });
     trace!("initialized; returning texture id: {}", texture_id);
-    
-    
+
     Ok(texture_id)
 }
 

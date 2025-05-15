@@ -22,7 +22,7 @@ pub fn init_app() {
 
     // Default utilities - feel free to custom
     flutter_rust_bridge::setup_default_user_utils();
-    debug!("Done initializing app");
+    debug!("Done initializing");
 }
 
 lazy_static::lazy_static! {
@@ -34,19 +34,6 @@ pub fn flutter_gstreamer_init(ffi_ptr: i64) {
     if *is_initialized {
         return;
     }
-    #[cfg(target_os = "windows")]
-    unsafe {
-        let module = windows::Win32::System::LibraryLoader::LoadLibraryA(windows::core::PCSTR(
-            b"irondash_engine_context_plugin.dll\0".as_ptr(),
-        ))
-        .unwrap();
-        let a = windows::Win32::System::LibraryLoader::GetProcAddress(
-            module,
-            windows::core::PCSTR(b"IrondashEngineContextGetDevice\0".as_ptr()),
-        );
-        info!("a: {:?}", a);
-    };
-
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
 
     fluttersink::init().log_err();
