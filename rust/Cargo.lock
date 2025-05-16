@@ -525,7 +525,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "flutter_gstreamer"
+name = "flutter_realtime_player"
 version = "0.1.0"
 dependencies = [
  "anyhow",

@@ -1,5 +1,4 @@
 pub mod utils;
-use gst::prelude::*;
 use utils::LogErr;
 
 use std::{
@@ -15,7 +14,6 @@ use crate::core::software_decoder::SoftwareDecoder;
 use super::{software_decoder::SharedSendableTexture, types};
 
 pub fn init() -> anyhow::Result<()> {
-    gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize gstreamer: {:?}", e))?;
     ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))
 }
 

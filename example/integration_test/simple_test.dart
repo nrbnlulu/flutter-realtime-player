@@ -1,6 +1,6 @@
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_gstreamer/flutter_gstreamer.dart';
+import 'package:flutter_realtime_player/flutter_realtime_player.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

@@ -5,7 +5,6 @@ use std::{
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
 };
 
-use glib::clone::Downgrade;
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, trace};
 
@@ -91,7 +90,7 @@ impl SoftwareDecoder {
         let self_ = Arc::new(Self {
             video_info: video_info.clone(),
             kill_sig: AtomicBool::new(false),
-            payload_holder: payload_holder.downgrade(),
+            payload_holder: Arc::downgrade(&payload_holder),
         });
 
         let (sendable, texture_id) =
@@ -126,7 +125,7 @@ impl SoftwareDecoder {
             decoder.height(),
             ffmpeg::software::scaling::Flags::BILINEAR,
         )?;
-        let sendable_weak = sendable_texture.downgrade();
+        let sendable_weak = Arc::downgrade(&sendable_texture);
         drop(sendable_texture);
         let cb = move || {
             if let Some(sendable_weak) = sendable_weak.upgrade() {

@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
-        stem: 'flutter_gstreamer',
+        stem: 'flutter_realtime_player',
         ioDirectory: 'rust/target/release/',
         webPrefix: 'pkg/',
       );
@@ -236,7 +236,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSimpleFlutterGstreamerInitConstMeta =>
       const TaskConstMeta(
-        debugName: "flutter_gstreamer_init",
+        debugName: "flutter_realtime_player_init",
         argNames: ["ffiPtr"],
       );
 

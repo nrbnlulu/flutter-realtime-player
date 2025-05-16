@@ -31,7 +31,7 @@ lazy_static::lazy_static! {
     static ref IS_INITIALIZED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
 }
 
-pub fn flutter_gstreamer_init(ffi_ptr: i64) {
+pub fn flutter_realtime_player_init(ffi_ptr: i64) {
     let mut is_initialized = IS_INITIALIZED.lock().unwrap();
     if *is_initialized {
         return;

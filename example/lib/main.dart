@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:flutter_gstreamer/video_player.dart';
+import 'package:flutter_realtime_player/video_player.dart';
 
 import 'package:window_manager/window_manager.dart';
-import 'package:flutter_gstreamer/flutter_gstreamer.dart' as fl_gst;
+import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 
 
 Future<void> main() async {

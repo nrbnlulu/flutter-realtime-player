@@ -1,4 +1,4 @@
-package com.example.flutter_gstreamer_example
+package com.example.flutter_realtime_player_example
 
 import io.flutter.embedding.android.FlutterActivity
 

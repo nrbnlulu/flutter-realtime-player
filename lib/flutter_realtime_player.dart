@@ -1,7 +1,7 @@
 library;
 
-import 'package:flutter_gstreamer/rust/frb_generated.dart' as rlib_gen;
-import 'package:flutter_gstreamer/rust/api/simple.dart' as rlib;
+import 'package:flutter_realtime_player/rust/frb_generated.dart' as rlib_gen;
+import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'dart:ffi' as ffi;
 export './rust/core/types.dart';
 export './video_player.dart' show VideoController, VideoPlayer;

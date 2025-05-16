@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gstreamer/rust/api/simple.dart' as rlib;
+import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:irondash_engine_context/irondash_engine_context.dart';
 
 import 'rust/core/types.dart';

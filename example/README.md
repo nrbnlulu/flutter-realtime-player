@@ -1,6 +1,6 @@
-# flutter_gstreamer_example
+# flutter_realtime_player_example
 
-Demonstrates how to use the flutter_gstreamer plugin.
+Demonstrates how to use the flutter_realtime_player plugin.
 
 ## Getting Started
 

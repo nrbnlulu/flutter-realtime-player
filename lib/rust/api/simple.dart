@@ -13,8 +13,10 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 String greet({required String name}) =>
     RustLib.instance.api.crateApiSimpleGreet(name: name);
 
-Future<void> flutterGstreamerInit({required PlatformInt64 ffiPtr}) =>
-    RustLib.instance.api.crateApiSimpleFlutterGstreamerInit(ffiPtr: ffiPtr);
+Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
+    RustLib.instance.api.crateApiSimpleFlutterRealtimePlayerInit(
+      ffiPtr: ffiPtr,
+    );
 
 /// returns a texture id, this id is also used to identify the session
 Future<PlatformInt64> createNewPlayable({
