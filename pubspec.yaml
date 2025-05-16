@@ -14,10 +14,10 @@ dependencies:
   flutter_rust_bridge: 2.7.0
   plugin_platform_interface: ^2.0.2
   irondash_engine_context:
-        git:
-          url: "https://github.com/nrbnlulu/irondash.git"
-          ref: dont-unregister-on-drop
-          path: engine_context/dart
+        # git:
+        #   url: "https://github.com/nrbnlulu/irondash.git"
+        #   ref: dont-unregister-on-drop
+        #   path: engine_context/dart
 
       
 dev_dependencies:

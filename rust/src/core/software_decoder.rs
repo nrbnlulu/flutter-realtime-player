@@ -186,7 +186,7 @@ impl SoftwareDecoder {
     pub fn destroy_stream(&self, shared_texture: SharedSendableTexture) {
         self.kill_sig
             .store(true, std::sync::atomic::Ordering::Relaxed);
-        shared_texture.unregister();
+        // shared_texture.unregister();
     }
 }
 

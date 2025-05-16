@@ -612,8 +612,8 @@ dependencies = [
  "gstreamer-video",
  "gtk-sys",
  "irondash_dart_ffi",
- "irondash_engine_context 0.6.0",
- "irondash_run_loop 0.6.0 (git+https://github.com/nrbnlulu/irondash.git?branch=dont-unregister-on-drop)",
+ "irondash_engine_context",
+ "irondash_run_loop 0.6.0",
  "irondash_texture",
  "lazy_static",
  "log",
@@ -1336,7 +1336,8 @@ dependencies = [
 [[package]]
 name = "irondash_dart_ffi"
 version = "0.2.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=dont-unregister-on-drop#0a52f6cb67c295e4adcfe8a91962cf503561e141"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88ed3ea8413fd024d89154472f7aea14e820eb600d0c4318bc001b14dd9b3ddc"
 dependencies = [
  "once_cell",
 ]
@@ -1357,16 +1358,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "irondash_engine_context"
-version = "0.6.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=dont-unregister-on-drop#0a52f6cb67c295e4adcfe8a91962cf503561e141"
+name = "irondash_run_loop"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b669550085d7f2ecad1811118b36f57224dd83fddbc97da17009f429d637239d"
 dependencies = [
- "android_logger 0.11.3",
  "core-foundation",
- "jni",
+ "futures",
+ "icrate",
+ "irondash_engine_context",
  "log",
  "objc2",
- "objc2-foundation",
  "once_cell",
 ]
 
@@ -1378,22 +1380,7 @@ checksum = "b4ad6b87faf3f88fd8e54cd5d33c9b1b0ab20baa9a2f11894f4b82e5a735f1cc"
 dependencies = [
  "core-foundation",
  "futures",
- "irondash_engine_context 0.5.0",
- "log",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "once_cell",
-]
-
-[[package]]
-name = "irondash_run_loop"
-version = "0.6.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=dont-unregister-on-drop#0a52f6cb67c295e4adcfe8a91962cf503561e141"
-dependencies = [
- "core-foundation",
- "futures",
- "irondash_engine_context 0.5.0",
+ "irondash_engine_context",
  "log",
  "objc2",
  "objc2-app-kit",
@@ -1404,15 +1391,16 @@ dependencies = [
 [[package]]
 name = "irondash_texture"
 version = "0.5.0"
-source = "git+https://github.com/nrbnlulu/irondash.git?branch=dont-unregister-on-drop#0a52f6cb67c295e4adcfe8a91962cf503561e141"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b992468499fe05bc22fde60afe036ec7792d2582584b66ea6c93796e3aad72f2"
 dependencies = [
  "core-foundation",
  "cstr",
  "glib-sys 0.16.3",
  "gobject-sys 0.16.3",
  "icrate",
- "irondash_engine_context 0.5.0",
- "irondash_run_loop 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "irondash_engine_context",
+ "irondash_run_loop 0.5.0",
  "jni",
  "log",
  "ndk-sys",
