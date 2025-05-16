@@ -65,7 +65,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.7.0';
 
   @override
-  int get rustContentHash => -1611486642;
+  int get rustContentHash => 2065594785;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -89,7 +89,7 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 textureId,
   });
 
-  Future<void> crateApiSimpleFlutterGstreamerInit({
+  Future<void> crateApiSimpleFlutterRealtimePlayerInit({
     required PlatformInt64 ffiPtr,
   });
 
@@ -208,7 +208,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateApiSimpleFlutterGstreamerInit({
+  Future<void> crateApiSimpleFlutterRealtimePlayerInit({
     required PlatformInt64 ffiPtr,
   }) {
     return handler.executeNormal(
@@ -227,14 +227,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
         ),
-        constMeta: kCrateApiSimpleFlutterGstreamerInitConstMeta,
+        constMeta: kCrateApiSimpleFlutterRealtimePlayerInitConstMeta,
         argValues: [ffiPtr],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiSimpleFlutterGstreamerInitConstMeta =>
+  TaskConstMeta get kCrateApiSimpleFlutterRealtimePlayerInitConstMeta =>
       const TaskConstMeta(
         debugName: "flutter_realtime_player_init",
         argNames: ["ffiPtr"],
