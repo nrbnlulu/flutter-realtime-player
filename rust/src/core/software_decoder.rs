@@ -1,7 +1,8 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
-    alloc::{self, Layout}, cell::RefCell, sync::{atomic::AtomicBool, Arc, Mutex, Weak}
+    alloc::{self, Layout},
+    sync::{atomic::AtomicBool, Arc, Mutex, Weak},
 };
 
 use glib::clone::Downgrade;
@@ -10,7 +11,7 @@ use log::{debug, trace};
 
 use crate::utils::invoke_on_platform_main_thread;
 
-use super::{fluttersink::utils, types};
+use super::types;
 
 struct PixelBuffer {
     ptr: *mut u8,
@@ -28,9 +29,7 @@ impl PixelBuffer {
     }
 }
 
-
 pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video);
-
 
 impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
     fn get(&self) -> irondash_texture::PixelData {
@@ -43,8 +42,7 @@ impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
 }
 
 pub struct PayloadHolder {
-    current_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>
-    
+    current_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
 }
 impl PayloadHolder {
     pub fn new() -> Self {
@@ -52,7 +50,7 @@ impl PayloadHolder {
             current_frame: Mutex::new(None),
         }
     }
-    
+
     pub fn set_payload(&self, payload: Box<FFmpegFrameWrapper>) {
         let mut curr_frame = self.current_frame.lock().unwrap();
         *curr_frame = Some(payload);
@@ -96,20 +94,19 @@ impl SoftwareDecoder {
             payload_holder: payload_holder.downgrade(),
         });
 
-        let (sendable, texture_id) = invoke_on_platform_main_thread(
-            move || -> anyhow::Result<_> {
+        let (sendable, texture_id) =
+            invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
                 let texture =
                     irondash_texture::Texture::new_with_provider(engine_handle, payload_holder)?;
                 let texture_id = texture.id();
                 Ok((texture.into_sendable_texture(), texture_id))
-            },
-        )?;
-        
+            })?;
+
         Ok((self_, texture_id, sendable))
     }
     pub fn start(self: Arc<Self>, sendable_texture: SharedSendableTexture) -> anyhow::Result<()> {
         trace!("starting ffmpeg session for {}", &self.video_info.uri);
-        
+
         let mut ictx = ffmpeg::format::input(&self.video_info.uri)?;
 
         let input = ictx
@@ -118,7 +115,7 @@ impl SoftwareDecoder {
             .ok_or(ffmpeg::Error::StreamNotFound)?;
         let video_stream_index = input.index();
         let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
-        
+
         let mut decoder = context_decoder.decoder().video()?;
         let mut scaler = ffmpeg::software::scaling::Context::get(
             decoder.format(),
@@ -133,7 +130,7 @@ impl SoftwareDecoder {
         drop(sendable_texture);
         let cb = move || {
             if let Some(sendable_weak) = sendable_weak.upgrade() {
-                sendable_weak.mark_frame_available();                
+                sendable_weak.mark_frame_available();
             }
         };
         for (stream, packet) in ictx.packets() {
@@ -146,15 +143,15 @@ impl SoftwareDecoder {
                 self.on_new_sample(&mut decoder, &mut scaler, &cb)?;
             }
         }
-        self.terminate(& mut decoder)?;
+        self.terminate(&mut decoder)?;
         Ok(())
     }
-    fn terminate(&self,decoder: &mut ffmpeg::decoder::Video) -> anyhow::Result<()> {
-        decoder.send_eof().map_err(|e| {
-            anyhow::anyhow!("Error sending EOF: {:?}", e)
-        })
+    fn terminate(&self, decoder: &mut ffmpeg::decoder::Video) -> anyhow::Result<()> {
+        decoder
+            .send_eof()
+            .map_err(|e| anyhow::anyhow!("Error sending EOF: {:?}", e))
     }
-    
+
     fn on_new_sample<T>(
         &self,
         decoder: &mut ffmpeg::decoder::Video,
@@ -173,7 +170,7 @@ impl SoftwareDecoder {
                     payload_holder.set_payload(Box::new(FFmpegFrameWrapper(rgb_frame)));
                 }
                 None => {
-                   break;
+                    break;
                 }
             }
             mark_frame_avb();
@@ -189,5 +186,3 @@ impl SoftwareDecoder {
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
-
-

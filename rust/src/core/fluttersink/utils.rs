@@ -1,6 +1,6 @@
 use glib;
 use irondash_run_loop::RunLoop;
-use log::{error, trace};
+use log::error;
 
 pub(crate) fn invoke_on_gs_main_thread<F, T>(func: F) -> T
 where
@@ -15,8 +15,6 @@ where
     });
     recv.recv().expect("Somehow we dropped the sender")
 }
-
-
 
 pub(crate) fn is_fl_main_thread() -> bool {
     RunLoop::is_main_thread().unwrap_or(false)

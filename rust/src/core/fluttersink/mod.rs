@@ -10,7 +10,7 @@ use std::{
 
 use log::{info, trace};
 
-use crate::{core::software_decoder::SoftwareDecoder};
+use crate::core::software_decoder::SoftwareDecoder;
 
 use super::{software_decoder::SharedSendableTexture, types};
 
@@ -31,10 +31,10 @@ pub fn create_new_playable(
         SoftwareDecoder::new(&video_info, 0, engine_handle)?;
 
     // pipeline.set_property("video-sink", &flutter_sink.video_sink());
-    SESSION_CACHE
-        .lock()
-        .unwrap()
-        .insert(texture_id, (decoder.clone(), engine_handle, sendable_texture.clone()));
+    SESSION_CACHE.lock().unwrap().insert(
+        texture_id,
+        (decoder.clone(), engine_handle, sendable_texture.clone()),
+    );
 
     // // wait for the sink to be initialized
     // while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
