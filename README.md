@@ -1,4 +1,4 @@
-# expiriments with video decoding for flutter.
+# expiriments with realtime video decoding for flutter.
 
 currently there are two branches that are useable.
 - `main` uses ffmpeg software decoder. recommended for live streams. sometimes frames are dropped this need to be fixed.
