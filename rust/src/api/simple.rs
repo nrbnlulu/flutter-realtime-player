@@ -1,10 +1,10 @@
 use log::{debug, trace};
 use simple_logger::SimpleLogger;
 
-use crate::core::{
+use crate::{core::{
     fluttersink::{self, utils::LogErr},
     types::VideoInfo,
-};
+}, utils::invoke_on_platform_main_thread};
 
 #[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
 pub fn greet(name: String) -> String {
@@ -52,5 +52,5 @@ pub fn destroy_engine_streams(engine_id: i64) {
 
 pub fn destroy_stream_session(texture_id: i64) {
     trace!("destroy_stream_session was called");
-    crate::core::fluttersink::destroy_stream_session(texture_id);
+    invoke_on_platform_main_thread(move ||{ crate::core::fluttersink::destroy_stream_session(texture_id)});
 }

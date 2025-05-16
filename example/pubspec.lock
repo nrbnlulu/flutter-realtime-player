@@ -140,10 +140,11 @@ packages:
   irondash_engine_context:
     dependency: transitive
     description:
-      name: irondash_engine_context
-      sha256: cd7b769db11a2b5243b037c8a9b1ecaef02e1ae27a2d909ffa78c1dad747bb10
-      url: "https://pub.dev"
-    source: hosted
+      path: "engine_context/dart"
+      ref: dont-unregister-on-drop
+      resolved-ref: "7bd3260fd52471ece5b2ed28fe8646312d23f7ef"
+      url: "https://github.com/nrbnlulu/irondash.git"
+    source: git
     version: "0.5.4"
   json_annotation:
     dependency: transitive
