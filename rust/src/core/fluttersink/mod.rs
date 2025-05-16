@@ -1,110 +1,80 @@
-mod frame;
-pub mod gltexture;
-pub(super) mod imp;
-pub mod types;
 pub mod utils;
-use std::{rc::Rc, sync::Arc};
+use utils::LogErr;
 
-use frame::Frame;
-use glib::{
-    object::{Cast, ObjectExt},
-    subclass::types::ObjectSubclassIsExt,
-    types::StaticType,
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    thread,
 };
-use gltexture::GLTextureSource;
-use gst::prelude::{ElementExt, ElementExtManual, GstBinExt, GstBinExtManual, GstObjectExt};
-use imp::ArcSendableTexture;
-use log::{error, info};
 
-pub(crate) enum SinkEvent {
-    FrameChanged(Frame),
-}
+use log::{info, trace};
 
-glib::wrapper! {
-    pub struct FlutterTextureSink(ObjectSubclass<imp::FlutterTextureSink>)
-    @extends gst_video::VideoSink, gst_base::BaseSink, gst::Element, gst::Object;
-}
+use crate::core::software_decoder::SoftwareDecoder;
 
-impl FlutterTextureSink {
-    pub fn new(name: Option<&str>) -> Self {
-        gst::Object::builder().name_if_some(name).build().unwrap()
-    }
-}
-
-fn register(plugin: Option<&gst::Plugin>) -> anyhow::Result<()> {
-    gst::Element::register(
-        plugin,
-        "fluttertexturesink",
-        gst::Rank::NONE,
-        FlutterTextureSink::static_type(),
-    )
-    .map_err(|_| anyhow::anyhow!("Failed to register FlutterTextureSink"))
-}
+use super::{software_decoder::SharedSendableTexture, types};
 
 pub fn init() -> anyhow::Result<()> {
-    gst::init()?;
-    register(None)
+    ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))
 }
-pub(crate) type FrameSender = flume::Sender<SinkEvent>;
 
-fn create_flutter_texture(
+lazy_static::lazy_static! {
+static ref SESSION_CACHE: Mutex<HashMap<i64, (Arc<SoftwareDecoder>, i64, SharedSendableTexture)>> = Mutex::new(HashMap::new());
+}
+
+pub fn create_new_playable(
     engine_handle: i64,
-) -> anyhow::Result<(ArcSendableTexture, i64, FrameSender)> {
-    return utils::invoke_on_platform_main_thread(move || {
-        let (tx, rx) = flume::bounded(3);
+    video_info: types::VideoInfo,
+) -> anyhow::Result<i64> {
+    let (decoder, texture_id, sendable_texture) =
+        SoftwareDecoder::new(&video_info, 0, engine_handle)?;
 
-        let provider = Arc::new(GLTextureSource::new(rx)?);
-        let texture =
-            irondash_texture::Texture::new_with_provider(engine_handle, provider.clone())?;
-        let tx_id = texture.id();
-        let sendable_texture = texture.into_sendable_texture();
-        Ok((sendable_texture, tx_id, tx))
+    // pipeline.set_property("video-sink", &flutter_sink.video_sink());
+    SESSION_CACHE.lock().unwrap().insert(
+        texture_id,
+        (decoder.clone(), engine_handle, sendable_texture.clone()),
+    );
+
+    // // wait for the sink to be initialized
+    // while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
+    //     std::thread::sleep(std::time::Duration::from_millis(10));
+    // }
+    trace!("spwaning stream listener");
+    thread::spawn(move || {
+        decoder.start(sendable_texture).log_err();
     });
+    trace!("initialized; returning texture id: {}", texture_id);
+
+    Ok(texture_id)
 }
 
-pub fn testit(engine_handle: i64, uri: String) -> anyhow::Result<i64> {
-    let (sendable_fl_txt, id, tx) = create_flutter_texture(engine_handle)?;
+pub fn destroy_engine_streams(engine_handle: i64) {
+    info!("Destroying streams for engine handle: {}", engine_handle);
+    let mut session_cache = SESSION_CACHE.lock().unwrap();
+    let mut to_remove = vec![];
+    for (texture_id, (decoder, handle, _)) in session_cache.iter() {
+        if *handle == engine_handle {
+            info!("Destroying stream with texture id: {}", texture_id);
+            decoder.destroy_stream();
+            to_remove.push(*texture_id);
+        }
+    }
+    for texture_id in &to_remove {
+        session_cache.remove(&texture_id);
+    }
+    info!(
+        "Destroyed {} streams for engine handle: {}",
+        to_remove.len(),
+        engine_handle
+    );
+}
 
-    let flsink = utils::make_element("fluttertexturesink", None)?;
-    let fl_config = imp::FlutterConfig::new(id, tx, sendable_fl_txt);
-
-    let fl_imp = flsink.downcast_ref::<FlutterTextureSink>().unwrap().imp();
-    fl_imp.set_fl_config(fl_config);
-
-    let pipeline = Rc::new(gst::ElementFactory::make("playbin3")
-        .property("video-sink", &flsink)
-        .property("uri", uri)
-        .build()
-        .unwrap());
-    fl_imp.set_playbin3(pipeline.clone());
-    let bus = pipeline.bus().unwrap();
-
-    pipeline
-        .set_state(gst::State::Playing)
-        .expect("Unable to set the pipeline to the `Playing` state");
-    let bus_watch = bus
-        .add_watch_local(move |_, msg| {
-            use gst::MessageView;
-
-            match msg.view() {
-                MessageView::Info(info) => {
-                    if let Some(s) = info.structure() {
-                    }
-                }
-                MessageView::Eos(..) => info!("End of stream"),
-                MessageView::Error(err) => {
-                    error!(
-                        "Error from {:?}: {} ({:?})",
-                        err.src().map(|s| s.path_string()),
-                        err.error(),
-                        err.debug()
-                    );
-                }
-                _ => (),
-            };
-
-            glib::ControlFlow::Continue
-        })
-        .expect("Failed to add bus watch");
-    Ok(id)
+pub fn destroy_stream_session(texture_id: i64) {
+    info!("Destroying stream session for texture id: {}", texture_id);
+    let mut session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some((decoder, _, _)) = session_cache.remove(&texture_id) {
+        decoder.destroy_stream();
+        info!("Destroyed stream session for texture id: {}", texture_id);
+    } else {
+        info!("No stream session found for texture id: {}", texture_id);
+    }
 }

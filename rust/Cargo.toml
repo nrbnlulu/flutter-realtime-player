@@ -1,5 +1,5 @@
 [package]
-name = "rust_lib_my_app"
+name = "flutter_realtime_player"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,9 +9,13 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.7.0"
-irondash_texture = { version = "0.5.0" }
-irondash_run_loop = { version = "0.5.0" }
-irondash_dart_ffi = "0.2.0"
+
+# irondash
+irondash_texture = "*"
+irondash_run_loop = "*"
+irondash_engine_context = "*"
+irondash_dart_ffi = "*"
+
 simple_logger = "2.1"
 log = "0.4"
 anyhow = "1.0.81"
@@ -19,19 +23,50 @@ async-trait = "0.1.77"
 tokio = { version = "1", features = ["full"] }
 flume = "0.11.1"
 simple-log = "2.1.1"
-irondash_engine_context = "0.5.0"
-image = "0.25.5"
 lazy_static = "1.5.0"
-glib-sys = "0.18.1"
-gobject-sys = "0.18.0"
-gdk-sys = "0.18.0"
-gtk-sys = "0.18.0"
-gl_loader = "0.1.2"
-glow = "0.16.0"
-glib = { git = "https://github.com/gtk-rs/gtk-rs-core", branch = "main" }
-glib-macros = {git = "https://github.com/gtk-rs/gtk-rs-core", branch = "main" }
-gst = {package = "gstreamer", git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", features = ["v1_16"]}
-gst-gl = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-gl" , features = ["v1_16"]}
-gst-video = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-video" , features = ["v1_16"]}
-gst-base = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-base", features = ["v1_16"] }
-gst-allocators = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", branch = "main", package = "gstreamer-allocators", features = ["v1_24"] }
+
+
+thread_local = "1.1.8"
+ffmpeg = {package = "ffmpeg-next", version = "7.1.0"}
+
+
+[target.'cfg(target_os = "windows")'.dependencies.windows]
+version = "0.61.0"
+features = [
+    "Win32_System_Com",
+    "Win32_System_Console",
+    "Win32_System_SystemServices",
+    "Win32_UI_Shell",
+    "Win32_Foundation",
+    "Wdk_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Dxgi",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_WindowsProgramming",
+    "Win32_System_Threading",
+    "Win32_System_Registry",
+]
+
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# GDK (GIMP Drawing Kit) dependencies
+gdk = "0.17.1"
+gdk-sys = "0.17.0"
+gdkwayland = "0.17.0"
+gdkx11 = "0.17.0"
+# GTK (GIMP Toolkit) dependencies
+gtk-sys = "0.17.0"
+
+
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
+
+
+[features]
+wayland = []
