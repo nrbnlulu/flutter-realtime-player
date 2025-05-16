@@ -29,7 +29,7 @@ impl PixelBuffer {
 }
 
 
-struct FFmpegFrameWrapper(ffmpeg::util::frame::Video);
+pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video);
 
 
 impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
@@ -111,13 +111,14 @@ impl SoftwareDecoder {
         trace!("starting ffmpeg session for {}", &self.video_info.uri);
         
         let mut ictx = ffmpeg::format::input(&self.video_info.uri)?;
+
         let input = ictx
             .streams()
             .best(ffmpeg::media::Type::Video)
             .ok_or(ffmpeg::Error::StreamNotFound)?;
         let video_stream_index = input.index();
         let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
-
+        
         let mut decoder = context_decoder.decoder().video()?;
         let mut scaler = ffmpeg::software::scaling::Context::get(
             decoder.format(),
@@ -183,10 +184,9 @@ impl SoftwareDecoder {
         Ok(())
     }
 
-    pub fn destroy_stream(&self, shared_texture: SharedSendableTexture) {
+    pub fn destroy_stream(&self) {
         self.kill_sig
             .store(true, std::sync::atomic::Ordering::Relaxed);
-        // shared_texture.unregister();
     }
 }
 

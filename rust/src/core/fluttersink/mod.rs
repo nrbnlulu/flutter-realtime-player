@@ -53,10 +53,10 @@ pub fn destroy_engine_streams(engine_handle: i64) {
     info!("Destroying streams for engine handle: {}", engine_handle);
     let mut session_cache = SESSION_CACHE.lock().unwrap();
     let mut to_remove = vec![];
-    for (texture_id, (decoder, handle, sendable_texture)) in session_cache.iter() {
+    for (texture_id, (decoder, handle, _)) in session_cache.iter() {
         if *handle == engine_handle {
             info!("Destroying stream with texture id: {}", texture_id);
-            decoder.destroy_stream(sendable_texture.clone());
+            decoder.destroy_stream();
             to_remove.push(*texture_id);
         }
     }
@@ -73,8 +73,8 @@ pub fn destroy_engine_streams(engine_handle: i64) {
 pub fn destroy_stream_session(texture_id: i64) {
     info!("Destroying stream session for texture id: {}", texture_id);
     let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some((decoder, _, sendable_texture)) = session_cache.remove(&texture_id) {
-        decoder.destroy_stream(sendable_texture);
+    if let Some((decoder, _, _)) = session_cache.remove(&texture_id) {
+        decoder.destroy_stream();
         info!("Destroyed stream session for texture id: {}", texture_id);
     } else {
         info!("No stream session found for texture id: {}", texture_id);
