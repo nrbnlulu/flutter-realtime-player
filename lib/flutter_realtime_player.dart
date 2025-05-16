@@ -9,7 +9,7 @@ import 'package:irondash_engine_context/irondash_engine_context.dart';
 
 Future<void> init() async {
   await rlib_gen.RustLib.init();
-  rlib.flutterGstreamerInit(ffiPtr: ffi.NativeApi.initializeApiDLData.address);
+  rlib.flutterRealtimePlayerInit(ffiPtr: ffi.NativeApi.initializeApiDLData.address);
 }
 
 Future<void> dispose() async {
