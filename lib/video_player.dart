@@ -51,13 +51,7 @@ class VideoPlayer extends StatefulWidget {
     required VideoController controller,
     Widget? child,
   }) {
-      ```
-      Update video stream URL and refactor VideoPlayer logic
-      
-      - Changed the video stream URL in main.dart to a new HTTP source.
-      - Refactored VideoPlayer factory method for better formatting.
-      - Moved textureId management to VideoController for cleaner state handling.
-      ```    return VideoPlayer._(key: key, controller: controller, child: child);
+    return VideoPlayer._(key: key, controller: controller, child: child);
   }
 
   factory VideoPlayer.fromConfig({
