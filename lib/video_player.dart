@@ -51,29 +51,38 @@ class VideoPlayer extends StatefulWidget {
     required VideoController controller,
     Widget? child,
   }) {
-    return VideoPlayer._(key: key, controller: controller, child: child);
+      ```
+      Update video stream URL and refactor VideoPlayer logic
+      
+      - Changed the video stream URL in main.dart to a new HTTP source.
+      - Refactored VideoPlayer factory method for better formatting.
+      - Moved textureId management to VideoController for cleaner state handling.
+      ```    return VideoPlayer._(key: key, controller: controller, child: child);
   }
-  
+
   factory VideoPlayer.fromConfig({
-      GlobalKey? key,
-      required String url,
-      bool mute = true,
-      Widget? child
-  }){
-      return VideoPlayer._(
-        key: key,
-        controller: VideoController(url: url, mute: mute),
-        child: child,
-      );
+    GlobalKey? key,
+    required String url,
+    bool mute = true,
+    Widget? child,
+  }) {
+    return VideoPlayer._(
+      key: key,
+      controller: VideoController(url: url, mute: mute),
+      child: child,
+    );
   }
-  
 
   @override
   State<VideoPlayer> createState() => _VideoPlayerState();
 }
 
 class _VideoPlayerState extends State<VideoPlayer> {
-  int? textureId;
+  @override
+  void initState() {
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder(
@@ -85,7 +94,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
             return Text("Error: ${data.$2}");
           }
           if (data.$1 != null) {
-            textureId = data.$1;
+            widget.controller.textureId = data.$1;
             return Stack(
               children: [
                 Texture(textureId: data.$1!),
@@ -103,9 +112,11 @@ class _VideoPlayerState extends State<VideoPlayer> {
   void dispose() {
     super.dispose();
     Future.microtask(() async {
-      if (textureId != null) {
-        await rlib.destroyStreamSession(textureId: textureId!);
-        textureId = null;
+      if (widget.controller.textureId != null) {
+        await rlib.destroyStreamSession(
+          textureId: widget.controller.textureId!,
+        );
+        widget.controller.textureId = null;
       }
     });
   }
