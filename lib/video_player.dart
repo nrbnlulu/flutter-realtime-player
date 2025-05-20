@@ -53,20 +53,19 @@ class VideoPlayer extends StatefulWidget {
   }) {
     return VideoPlayer._(key: key, controller: controller, child: child);
   }
-  
+
   factory VideoPlayer.fromConfig({
-      GlobalKey? key,
-      required String url,
-      bool mute = true,
-      Widget? child
-  }){
-      return VideoPlayer._(
-        key: key,
-        controller: VideoController(url: url, mute: mute),
-        child: child,
-      );
+    GlobalKey? key,
+    required String url,
+    bool mute = true,
+    Widget? child,
+  }) {
+    return VideoPlayer._(
+      key: key,
+      controller: VideoController(url: url, mute: mute),
+      child: child,
+    );
   }
-  
 
   @override
   State<VideoPlayer> createState() => _VideoPlayerState();
