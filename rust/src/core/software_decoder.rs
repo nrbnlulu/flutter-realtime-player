@@ -5,7 +5,7 @@ use std::{
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
 };
 
-use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
+use irondash_texture::{PayloadProvider, PixelData, SendableTexture, SharedPixelData};
 use log::{debug, trace};
 
 use crate::utils::invoke_on_platform_main_thread;
@@ -28,47 +28,31 @@ impl PixelBuffer {
     }
 }
 
-pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video);
 
-impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
-    fn get(&self) -> irondash_texture::PixelData {
-        irondash_texture::PixelData {
-            width: self.0.width() as _,
-            height: self.0.height() as _,
-            data: self.0.data(0),
-        }
-    }
-}
 
 pub struct PayloadHolder {
-    current_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
+    current_frame: Option<SharedPixelData>,
 }
 impl PayloadHolder {
     pub fn new() -> Self {
         Self {
-            current_frame: Mutex::new(None),
+            current_frame: None,
         }
     }
 
-    pub fn set_payload(&self, payload: Box<FFmpegFrameWrapper>) {
-        let mut curr_frame = self.current_frame.lock().unwrap();
-        *curr_frame = Some(payload);
+    pub fn set_payload(&self, payload: SharedPixelData) {
+        let mut curr_frame = self.current_frame.replace(payload).unwrap();
     }
 }
 
-impl PayloadProvider<BoxedPixelData> for PayloadHolder {
-    fn get_payload(&self) -> BoxedPixelData {
-        let mut curr_frame = self.current_frame.lock().unwrap();
-        if let Some(frame) = curr_frame.take() {
+impl PayloadProvider<SharedPixelData> for PayloadHolder {
+    fn get_payload(&self) -> SharedPixelData {
+        if let Some(frame) = self.current_frame {
             frame
         } else {
             debug!("no frame available returning a default");
             // return empty frame
-            Box::new(FFmpegFrameWrapper(ffmpeg::util::frame::Video::new(
-                ffmpeg::format::Pixel::RGBA,
-                640,
-                480,
-            )))
+            Arc::new(Mutex::new(PixelData::new(0, 0, Vec::new())))
         }
     }
 }
@@ -79,7 +63,7 @@ pub struct SoftwareDecoder {
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
-pub type SharedSendableTexture = Arc<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
+pub type SharedSendableTexture = Arc<SendableTexture<SharedPixelData>>;
 impl SoftwareDecoder {
     pub fn new(
         video_info: &types::VideoInfo,
@@ -166,9 +150,15 @@ impl SoftwareDecoder {
             scaler.run(&decoded, &mut rgb_frame)?;
             match self.payload_holder.upgrade() {
                 Some(payload_holder) => {
-                    payload_holder.set_payload(Box::new(FFmpegFrameWrapper(rgb_frame)));
+                    let data = Vec::from(rgb_frame.data(0).to_vec());
+                    payload_holder.set_payload(
+                        Arc::new(
+                            PixelData::new(decoded.width(), decoded.height(), data)
+                        )
+                    );
+
                 }
-                None => {
+                None => { 
                     break;
                 }
             }

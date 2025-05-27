@@ -588,7 +588,7 @@ dependencies = [
  "gtk-sys",
  "irondash_dart_ffi",
  "irondash_engine_context",
- "irondash_run_loop 0.6.0",
+ "irondash_run_loop",
  "irondash_texture",
  "lazy_static",
  "log",
@@ -1143,21 +1143,6 @@ dependencies = [
 
 [[package]]
 name = "irondash_run_loop"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b669550085d7f2ecad1811118b36f57224dd83fddbc97da17009f429d637239d"
-dependencies = [
- "core-foundation",
- "futures",
- "icrate",
- "irondash_engine_context",
- "log",
- "objc2",
- "once_cell",
-]
-
-[[package]]
-name = "irondash_run_loop"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ad6b87faf3f88fd8e54cd5d33c9b1b0ab20baa9a2f11894f4b82e5a735f1cc"
@@ -1175,8 +1160,6 @@ dependencies = [
 [[package]]
 name = "irondash_texture"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b992468499fe05bc22fde60afe036ec7792d2582584b66ea6c93796e3aad72f2"
 dependencies = [
  "core-foundation",
  "cstr",
@@ -1184,7 +1167,7 @@ dependencies = [
  "gobject-sys 0.16.3",
  "icrate",
  "irondash_engine_context",
- "irondash_run_loop 0.5.0",
+ "irondash_run_loop",
  "jni",
  "log",
  "ndk-sys",

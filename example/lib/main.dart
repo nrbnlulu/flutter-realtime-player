@@ -64,7 +64,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
                 width: double.infinity,
                 height: 300,
                 child: VideoPlayer.fromConfig(
-                  url: "http://67.53.46.161:65123/mjpg/video.mjpg",
+                  url: "rtsp://admin:camteam524@62.112.2.79:554/ch_400",
                 ),
               )
             : const Text('Stream is stopped'),
