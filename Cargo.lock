@@ -592,6 +592,7 @@ dependencies = [
  "irondash_texture",
  "lazy_static",
  "log",
+ "once_cell",
  "simple-log",
  "simple_logger",
  "thread_local",

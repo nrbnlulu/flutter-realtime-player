@@ -2,6 +2,7 @@
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
     alloc::{self, Layout},
+    cell::RefCell, // add this
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
 };
 
@@ -12,50 +13,66 @@ use crate::utils::invoke_on_platform_main_thread;
 
 use super::types;
 
-struct PixelBuffer {
-    ptr: *mut u8,
-    size: usize,
-}
-impl PixelBuffer {
-    fn new(size: usize) -> Self {
-        // align 1 used for u8 memory allocations.
-        let ptr = unsafe { alloc::alloc(Layout::from_size_align(size, 1).unwrap()) };
-        Self { ptr, size }
-    }
-
-    fn mut_slice(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.size) }
-    }
-}
-
-
 
 pub struct PayloadHolder {
-    current_frame: Option<SharedPixelData>,
+    current_frame: Mutex<Option<ffmpeg::util::frame::Video>>,
+    cached_frame: Mutex<Option<SharedPixelData>>,
 }
 impl PayloadHolder {
     pub fn new() -> Self {
         Self {
-            current_frame: None,
+            current_frame: Mutex::new(None),
+            cached_frame: Mutex::new(None),
         }
     }
 
-    pub fn set_payload(&self, payload: SharedPixelData) {
-        let mut curr_frame = self.current_frame.replace(payload).unwrap();
+    pub fn set_payload(&self, payload: ffmpeg::util::frame::Video) {
+        trace!("takin lock for current frame");
+        let mut current_frame = self.current_frame.lock().unwrap();
+        trace!("setting payload for current frame");
+        current_frame.replace(payload);
     }
 }
+unsafe impl Sync for PayloadHolder {}
+unsafe impl Send for PayloadHolder {}
 
 impl PayloadProvider<SharedPixelData> for PayloadHolder {
     fn get_payload(&self) -> SharedPixelData {
-        if let Some(frame) = self.current_frame {
-            frame
+        trace!("getting payload from PayloadHolder");
+        let mut current_frame = self.current_frame.lock().unwrap();
+        if let Some(frame) = current_frame.take() {
+            trace!("got current frame, caching it");
+            let mut cached_frame = self.cached_frame.lock().unwrap();
+            let pixel_data = Arc::new(Mutex::new(PixelData::new(
+                1,
+                1,
+                std::ptr::null(),
+            )));
+            trace!("caching pixel data: {}x{}", frame.width(), frame.height());
+            cached_frame.replace(pixel_data.clone());
+            trace!("returning pixel data");
+            pixel_data
         } else {
-            debug!("no frame available returning a default");
-            // return empty frame
-            Arc::new(Mutex::new(PixelData::new(0, 0, Vec::new())))
+            let cached_frame = self.cached_frame.lock().unwrap();
+            if let Some(frame) = cached_frame.as_ref() {
+                // return cached frame
+                debug!("returning cached frame");
+                frame.clone()
+            } else {
+                // no frame available, return empty frame
+                debug!("no cached frame available, returning empty frame");
+
+
+                Arc::new(Mutex::new(PixelData::new(
+                    1 as i32,
+                    1 as i32,
+                    std::ptr::null(),
+                )))
+            }
         }
     }
 }
+
 pub struct SoftwareDecoder {
     video_info: types::VideoInfo,
     kill_sig: AtomicBool,
@@ -150,18 +167,19 @@ impl SoftwareDecoder {
             scaler.run(&decoded, &mut rgb_frame)?;
             match self.payload_holder.upgrade() {
                 Some(payload_holder) => {
-                    let data = Vec::from(rgb_frame.data(0).to_vec());
-                    payload_holder.set_payload(
-                        Arc::new(
-                            PixelData::new(decoded.width(), decoded.height(), data)
-                        )
+                    // not sure we can avoid the clone here.
+                    trace!(
+                        "setting payload for frame: {}x{}",
+                        rgb_frame.width(),
+                        rgb_frame.height()
                     );
-
+                    payload_holder.set_payload(decoded.clone());
                 }
-                None => { 
+                None => {
                     break;
                 }
             }
+            trace!("marking frame as available");
             mark_frame_avb();
             if self.kill_sig.load(std::sync::atomic::Ordering::Relaxed) {
                 break;

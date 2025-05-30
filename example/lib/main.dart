@@ -5,11 +5,12 @@ import 'package:flutter_realtime_player/video_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 
-
 Future<void> main() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    await fl_gst.init();
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await fl_gst.init();
   await windowManager.ensureInitialized();
+
   runApp(const MyApp());
 }
 
@@ -23,11 +24,8 @@ class MyApp extends StatelessWidget {
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
         body: StreamControlWidget(),
       ),
-    );   
+    );
   }
-  
-  
-  
 }
 
 class StreamControlWidget extends StatefulWidget {
@@ -35,19 +33,18 @@ class StreamControlWidget extends StatefulWidget {
 
   @override
   StreamControlWidgetState createState() => StreamControlWidgetState();
-  
 }
 
 class StreamControlWidgetState extends State<StreamControlWidget> {
   bool _isStreaming = true;
 
-  
   void _toggleStream() {
-      debugPrint("Toggle stream");
+    debugPrint("Toggle stream");
     setState(() {
       _isStreaming = !_isStreaming;
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -56,22 +53,23 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       children: [
         ElevatedButton(
           onPressed: _toggleStream,
+
           child: Text(_isStreaming ? 'Stop Stream' : 'Start Stream'),
         ),
         const SizedBox(height: 20),
         _isStreaming
             ? SizedBox(
-                width: double.infinity,
-                height: 300,
-                child: VideoPlayer.fromConfig(
-                  url: "rtsp://admin:camteam524@62.112.2.79:554/ch_400",
-                ),
-              )
+              width: double.infinity,
+              height: 300,
+              child: VideoPlayer.fromConfig(
+                url: "rtsp://admin:camteam524@62.112.2.79:554/ch_400",
+              ),
+            )
             : const Text('Stream is stopped'),
       ],
-      
-      
     );
   }
 }
+
+
 
