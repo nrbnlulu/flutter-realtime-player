@@ -1,4 +1,4 @@
-library;
+clibrary;
 
 import 'package:flutter_realtime_player/rust/frb_generated.dart' as rlib_gen;
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
