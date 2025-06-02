@@ -1,8 +1,7 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
-    alloc::{self, Layout},
-    sync::{atomic::AtomicBool, Arc, Mutex, Weak},
+    alloc::{self, Layout}, ops::Deref, sync::{atomic::AtomicBool, Arc, Mutex, Weak}
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
@@ -28,6 +27,7 @@ impl PixelBuffer {
     }
 }
 
+#[derive(Clone)]
 pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video);
 
 impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
@@ -42,16 +42,21 @@ impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
 
 pub struct PayloadHolder {
     current_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
+    previous_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
 }
 impl PayloadHolder {
     pub fn new() -> Self {
         Self {
             current_frame: Mutex::new(None),
+            previous_frame: Mutex::new(None),
         }
     }
 
     pub fn set_payload(&self, payload: Box<FFmpegFrameWrapper>) {
         let mut curr_frame = self.current_frame.lock().unwrap();
+        let mut prev_frame = self.previous_frame.lock().unwrap();
+        // Move current to previous before replacing
+        *prev_frame = curr_frame.take();
         *curr_frame = Some(payload);
     }
 }
@@ -62,13 +67,20 @@ impl PayloadProvider<BoxedPixelData> for PayloadHolder {
         if let Some(frame) = curr_frame.take() {
             frame
         } else {
-            debug!("no frame available returning a default");
-            // return empty frame
-            Box::new(FFmpegFrameWrapper(ffmpeg::util::frame::Video::new(
-                ffmpeg::format::Pixel::RGBA,
-                640,
-                480,
-            )))
+            // Try to return a clone of the previous frame if it exists
+            let prev_frame = self.previous_frame.lock().unwrap();
+            if let Some(ref prev) = *prev_frame {
+                debug!("returning previous frame");
+                prev.clone()
+            } else {
+                debug!("no frame available returning a default");
+                // return empty frame
+                Box::new(FFmpegFrameWrapper(ffmpeg::util::frame::Video::new(
+                    ffmpeg::format::Pixel::RGBA,
+                    640,
+                    480,
+                )))
+            }
         }
     }
 }
@@ -105,8 +117,10 @@ impl SoftwareDecoder {
     }
     pub fn start(self: Arc<Self>, sendable_texture: SharedSendableTexture) -> anyhow::Result<()> {
         trace!("starting ffmpeg session for {}", &self.video_info.uri);
-
-        let mut ictx = ffmpeg::format::input(&self.video_info.uri)?;
+        let mut option_dict = ffmpeg::Dictionary::new();
+        option_dict.set("rtsp_transport", "tcp");
+        let mut ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
+        
 
         let input = ictx
             .streams()
@@ -116,6 +130,7 @@ impl SoftwareDecoder {
         let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
 
         let mut decoder = context_decoder.decoder().video()?;
+
         let mut scaler = ffmpeg::software::scaling::Context::get(
             decoder.format(),
             decoder.width(),
@@ -125,6 +140,7 @@ impl SoftwareDecoder {
             decoder.height(),
             ffmpeg::software::scaling::Flags::BILINEAR,
         )?;
+        
         let sendable_weak = Arc::downgrade(&sendable_texture);
         drop(sendable_texture);
         let cb = move || {
