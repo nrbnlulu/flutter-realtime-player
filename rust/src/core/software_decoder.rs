@@ -7,7 +7,7 @@ use std::{
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, trace};
 
-use crate::utils::invoke_on_platform_main_thread;
+use crate::{core::fluttersink::utils::LogErr, utils::invoke_on_platform_main_thread};
 
 use super::types;
 
@@ -115,7 +115,7 @@ impl SoftwareDecoder {
 
         Ok((self_, texture_id, sendable))
     }
-    pub fn start(self: Arc<Self>, sendable_texture: SharedSendableTexture) -> anyhow::Result<()> {
+    pub fn start(self: Arc<Self>) -> anyhow::Result<()> {
         trace!("starting ffmpeg session for {}", &self.video_info.uri);
         let mut option_dict = ffmpeg::Dictionary::new();
         option_dict.set("rtsp_transport", "tcp");
@@ -141,6 +141,18 @@ impl SoftwareDecoder {
             ffmpeg::software::scaling::Flags::BILINEAR,
         )?;
         
+        Ok((ictx, video_stream_index, decoder, scaler))
+    }
+
+    fn stream(
+        &self,
+        sendable_texture: SharedSendableTexture,
+        video_stream_index: usize,
+        mut decoder: &mut ffmpeg::decoder::Video,
+        mut scaler: &mut ffmpeg::software::scaling::Context,
+        ictx: &mut ffmpeg::format::context::Input,
+    ) {
+
         let sendable_weak = Arc::downgrade(&sendable_texture);
         drop(sendable_texture);
         let cb = move || {
@@ -154,13 +166,13 @@ impl SoftwareDecoder {
             }
             if stream.index() == video_stream_index {
                 let mut packet = packet;
-                decoder.send_packet(&mut packet)?;
-                self.on_new_sample(&mut decoder, &mut scaler, &cb)?;
+                decoder.send_packet(&mut packet).log_err();
+                self.on_new_sample(&mut decoder, &mut scaler, &cb).log_err();
             }
         }
-        self.terminate(&mut decoder)?;
-        Ok(())
+        self.terminate(&mut decoder).log_err();
     }
+
     fn terminate(&self, decoder: &mut ffmpeg::decoder::Video) -> anyhow::Result<()> {
         decoder
             .send_eof()

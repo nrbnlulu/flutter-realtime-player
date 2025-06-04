@@ -38,11 +38,12 @@ class StreamControlWidget extends StatefulWidget {
 class StreamControlWidgetState extends State<StreamControlWidget> {
   bool _isStreaming = true;
   final TextEditingController _urlController = TextEditingController(
-    text: "http://67.53.46.161:65123/mjpg/video.mjpg",
+    text: "rtsp://admin:camteam524@147.189.145.30:443/ch_400",
   );
   @override
   void dispose() {
     _urlController.dispose();
+    
     super.dispose();
   }
 

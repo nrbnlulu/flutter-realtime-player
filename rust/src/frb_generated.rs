@@ -71,11 +71,9 @@ fn wire__crate__api__simple__create_new_playable_impl(
             let api_vide_info = <crate::core::types::VideoInfo>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
-                transform_result_sse::<_, ()>((move || {
-                    let output_ok = Result::<_, ()>::Ok(crate::api::simple::create_new_playable(
-                        api_engine_handle,
-                        api_vide_info,
-                    ))?;
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::simple::create_new_playable(api_engine_handle, api_vide_info)?;
                     Ok(output_ok)
                 })())
             }

@@ -47,9 +47,10 @@ pub fn flutter_realtime_player_init(ffi_ptr: i64) {
     *is_initialized = true;
 }
 /// returns a texture id, this id is also used to identify the session
-pub fn create_new_playable(engine_handle: i64, vide_info: VideoInfo) -> i64 {
+pub fn create_new_playable(engine_handle: i64, vide_info: VideoInfo) -> Result<i64, String> {
     trace!("get_texture was called with engine_handle: {}, video_info: {:?}", engine_handle, vide_info);
-    crate::core::fluttersink::create_new_playable(engine_handle, vide_info).unwrap()
+    crate::core::fluttersink::create_new_playable(engine_handle, vide_info)
+        .map_err(|e| e.to_string())
 }
 
 pub fn destroy_engine_streams(engine_id: i64) {
