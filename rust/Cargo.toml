@@ -8,7 +8,7 @@ crate-type = ["cdylib", "staticlib"]
 
 
 [dependencies]
-flutter_rust_bridge = "=2.7.0"
+flutter_rust_bridge = "=2.9.0"
 
 # irondash
 irondash_texture = "*"
@@ -16,18 +16,18 @@ irondash_run_loop = "*"
 irondash_engine_context = "*"
 irondash_dart_ffi = "*"
 
-simple_logger = "2.1"
 log = "0.4"
 anyhow = "1.0.81"
 async-trait = "0.1.77"
 tokio = { version = "1", features = ["full"] }
 flume = "0.11.1"
-simple-log = "2.1.1"
 lazy_static = "1.5.0"
 
 
 thread_local = "1.1.8"
 ffmpeg = {package = "ffmpeg-next", version = "7.1.0",  default-features = false, features = ["codec",  "filter", "format", "software-resampling", "software-scaling"] }
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
 
 [target.'cfg(target_os = "windows")'.dependencies.windows]

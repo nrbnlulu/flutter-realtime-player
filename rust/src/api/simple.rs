@@ -1,5 +1,4 @@
 use log::{debug, trace};
-use simple_logger::SimpleLogger;
 
 use crate::{
     core::{
@@ -9,10 +8,6 @@ use crate::{
     utils::invoke_on_platform_main_thread,
 };
 
-#[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
-pub fn greet(name: String) -> String {
-    format!("Hello, {name}!")
-}
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
@@ -20,8 +15,15 @@ pub fn init_app() {
     if *is_initialized {
         return;
     }
-    SimpleLogger::new().init().unwrap();
-
+    let log_file = tracing_appender::rolling::daily("./logs", "flutter_realtime_player");
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(log_file)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_file(true)
+        .with_line_number(true)
+        .init();
     // Default utilities - feel free to custom
     flutter_rust_bridge::setup_default_user_utils();
     debug!("Done initializing");
