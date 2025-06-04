@@ -25,22 +25,25 @@ pub fn create_new_playable(
     engine_handle: i64,
     video_info: types::VideoInfo,
 ) -> anyhow::Result<i64> {
-    let (decoder, texture_id, sendable_texture) =
+    let (decoding_manager, texture_id, sendable_texture) =
         SoftwareDecoder::new(&video_info, 0, engine_handle)?;
 
     // pipeline.set_property("video-sink", &flutter_sink.video_sink());
     SESSION_CACHE.lock().unwrap().insert(
         texture_id,
-        (decoder.clone(), engine_handle, sendable_texture.clone()),
+        (decoding_manager.clone(), engine_handle, sendable_texture.clone()),
     );
 
     // // wait for the sink to be initialized
     // while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
     //     std::thread::sleep(std::time::Duration::from_millis(10));
     // }
-    trace!("spwaning stream listener");
+    decoding_manager.start()?;
     thread::spawn(move || {
-        decoder.start(sendable_texture).log_err();
+        trace!("starting to stream on a new thread");
+        decoding_manager.stream(
+            sendable_texture,
+        );
     });
     trace!("initialized; returning texture id: {}", texture_id);
 
