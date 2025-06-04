@@ -9,7 +9,7 @@ use std::{
 
 use log::{info, trace};
 
-use crate::core::software_decoder::SoftwareDecoder;
+use crate::{core::software_decoder::SoftwareDecoder, utils::invoke_on_platform_main_thread};
 
 use super::{software_decoder::SharedSendableTexture, types};
 
@@ -67,20 +67,29 @@ pub fn destroy_engine_streams(engine_handle: i64) {
 pub fn destroy_stream_session(texture_id: i64) {
     info!("Destroying stream session for texture id: {}", texture_id);
     let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some((decoder, _, _)) = session_cache.remove(&texture_id) {
+    if let Some((decoder, _, sendable_texture)) = session_cache.remove(&texture_id) {
         decoder.destroy_stream();
         let mut retry_count = 0;
-        while retry_count < 10 {
+        const MAX_RETRIES: usize = 30;
+        while retry_count < MAX_RETRIES {
             if Arc::strong_count(&decoder) == 1 {
-                break
+                break;
             }
-            info!("Waiting for all references to be dropped for texture id: {}", texture_id);
+            info!(
+                "Waiting for all references to be dropped for texture id: {}. attempt({})",
+                texture_id, retry_count
+            );
             thread::sleep(std::time::Duration::from_millis(100));
             retry_count += 1;
         }
-        // just for verbosity, it would have been dropped anyways..
-        drop(decoder); 
-        info!("Destroyed stream session for texture id: {}", texture_id);
+        if retry_count == MAX_RETRIES {
+            log::warn!("Forcefully dropped decoder for texture id: {},
+            the texture is held somewhere else thus would panic when unregistered if held on wrong thread.", texture_id);
+        }
+        invoke_on_platform_main_thread(move || {
+            drop(sendable_texture);
+            info!("Destroyed stream session for texture id: {}", texture_id);
+        });
     } else {
         info!("No stream session found for texture id: {}", texture_id);
     }

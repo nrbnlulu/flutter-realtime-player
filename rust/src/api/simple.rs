@@ -56,10 +56,8 @@ pub fn destroy_engine_streams(engine_id: i64) {
     trace!("destroy_playable was called");
     // it is important to call this on the platform main thread
     // because irondash will unregister the texture on Drop, and drop must occur
-    // on the platform main thread
-    invoke_on_platform_main_thread(move || {
-        crate::core::fluttersink::destroy_engine_streams(engine_id)
-    });
+    // on the platform main thread    
+    crate::core::fluttersink::destroy_engine_streams(engine_id);
 }
 
 pub fn destroy_stream_session(texture_id: i64) {
