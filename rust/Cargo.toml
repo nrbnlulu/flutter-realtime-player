@@ -11,10 +11,10 @@ crate-type = ["cdylib", "staticlib"]
 flutter_rust_bridge = "=2.9.0"
 
 # irondash
-irondash_texture = { path = "/home/dev/Desktop/OS/irondash/texture" }
-irondash_run_loop = { path = "/home/dev/Desktop/OS/irondash/run_loop" }
-irondash_engine_context = { path = "/home/dev/Desktop/OS/irondash/engine_context/rust" }
-irondash_dart_ffi = { path = "/home/dev/Desktop/OS/irondash/dart_ffi" }
+irondash_texture = "*"
+irondash_run_loop = "*"
+irondash_engine_context = "*"
+irondash_dart_ffi = "*"
 
 log = "0.4"
 anyhow = "1.0.81"

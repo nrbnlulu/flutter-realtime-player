@@ -28,7 +28,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-
 class StreamControlWidget extends StatefulWidget {
   const StreamControlWidget({super.key});
 
@@ -41,6 +40,11 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
   final TextEditingController _urlController = TextEditingController(
     text: "http://67.53.46.161:65123/mjpg/video.mjpg",
   );
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
+  }
 
   void _toggleStream() {
     debugPrint("Toggle stream");

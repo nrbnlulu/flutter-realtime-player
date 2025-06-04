@@ -83,8 +83,7 @@ pub fn destroy_stream_session(texture_id: i64) {
             retry_count += 1;
         }
         if retry_count == MAX_RETRIES {
-            log::warn!("Forcefully dropped decoder for texture id: {},
-            the texture is held somewhere else thus would panic when unregistered if held on wrong thread.", texture_id);
+            log::warn!("Forcefully dropped decoder for texture id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", texture_id);
         }
         invoke_on_platform_main_thread(move || {
             drop(sendable_texture);
