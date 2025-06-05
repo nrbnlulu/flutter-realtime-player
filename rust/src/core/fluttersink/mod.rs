@@ -9,7 +9,10 @@ use std::{
 
 use log::{info, trace};
 
-use crate::{core::software_decoder::SoftwareDecoder, utils::invoke_on_platform_main_thread};
+use crate::{
+    core::{software_decoder::SoftwareDecoder, types::{DartUpdateStream, StreamMessages}},
+    utils::invoke_on_platform_main_thread,
+};
 
 use super::{software_decoder::SharedSendableTexture, types};
 
@@ -22,32 +25,41 @@ static ref SESSION_CACHE: Mutex<HashMap<i64, (Arc<SoftwareDecoder>, i64, SharedS
 }
 
 pub fn create_new_playable(
+    session_id: i64,
     engine_handle: i64,
     video_info: types::VideoInfo,
-) -> anyhow::Result<i64> {
-    let (decoding_manager, texture_id, sendable_texture) =
-        SoftwareDecoder::new(&video_info, 0, engine_handle)?;
+    update_stream: DartUpdateStream,
+) -> anyhow::Result<()> {
+    let (decoding_manager, payload_holder) = SoftwareDecoder::new(&video_info, session_id)?;
+    decoding_manager.initialize_stream()?;
+    // by now the stream is initialized successfully, we can create a flutter texture
+    let (sendable_texture, texture_id) =
+        invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
+            let texture =
+                irondash_texture::Texture::new_with_provider(engine_handle, payload_holder)?;
+            let texture_id = texture.id();
+            Ok((texture.into_sendable_texture(), texture_id))
+        })?;
 
-    // pipeline.set_property("video-sink", &flutter_sink.video_sink());
     SESSION_CACHE.lock().unwrap().insert(
-        texture_id,
-        (decoding_manager.clone(), engine_handle, sendable_texture.clone()),
+        session_id,
+        (
+            decoding_manager.clone(),
+            engine_handle,
+            sendable_texture.clone(),
+        ),
     );
-
-    // // wait for the sink to be initialized
-    // while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
-    //     std::thread::sleep(std::time::Duration::from_millis(10));
-    // }
-    decoding_manager.start()?;
+    update_stream.add(
+        StreamMessages::StreamAndTextureReady(texture_id)
+    ).log_err();
+    
     thread::spawn(move || {
         trace!("starting to stream on a new thread");
-        decoding_manager.stream(
-            sendable_texture,
-        );
+        decoding_manager.stream(sendable_texture, update_stream);
     });
     trace!("initialized; returning texture id: {}", texture_id);
 
-    Ok(texture_id)
+    Ok(())
 }
 
 pub fn destroy_engine_streams(engine_handle: i64) {

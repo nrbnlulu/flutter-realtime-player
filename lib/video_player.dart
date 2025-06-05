@@ -17,25 +17,26 @@ class VideoController {
     }
   }
 
-  Future<(int?, String?)> init() async {
-    int? textureId;
+  Future<(Stream<rlib.StreamMessages>?, String?)> init() async {
+    Stream<rlib.StreamMessages>? stream;
     String? error;
 
     final handle = await EngineContext.instance.getEngineHandle();
     // play demo video
     try {
-      textureId = await rlib.createNewPlayable(
+      stream = rlib.createNewPlayable(
         engineHandle: handle,
-        videInfo: VideoInfo(
+        videoInfo: VideoInfo(
           uri: url,
           dimensions: const VideoDimensions(width: 640, height: 360),
           mute: mute,
         ),
+
       );
     } catch (e) {
       error = e.toString();
     }
-    return (textureId, error);
+    return (stream, error);
   }
 }
 
