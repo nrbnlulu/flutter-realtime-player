@@ -12,6 +12,8 @@ part 'dart_types.freezed.dart';
 sealed class StreamState with _$StreamState {
   const StreamState._();
 
+  const factory StreamState.init({required PlatformInt64 sessionId}) =
+      StreamState_Init;
   const factory StreamState.error(String field0) = StreamState_Error;
   const factory StreamState.loading() = StreamState_Loading;
   const factory StreamState.playing({required PlatformInt64 textureId}) =

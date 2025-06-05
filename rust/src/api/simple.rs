@@ -60,7 +60,7 @@ pub fn create_new_playable(
     let mut session_counter = SESSION_COUNTER.lock().unwrap();
     *session_counter += 1;
     let session_id = *session_counter;
-
+    sink.add(StreamState::Init { session_id: session_id }).log_err();
     trace!(
         "get_texture was called with engine_handle: {}, video_info: {:?}",
         engine_handle,
@@ -87,7 +87,7 @@ pub fn destroy_engine_streams(engine_id: i64) {
     crate::core::fluttersink::destroy_engine_streams(engine_id);
 }
 
-pub fn destroy_stream_session(texture_id: i64) {
+pub fn destroy_stream_session(session_id: i64) {
     trace!("destroy_stream_session was called");
-    crate::core::fluttersink::destroy_stream_session(texture_id)
+    crate::core::fluttersink::destroy_stream_session(session_id)
 }

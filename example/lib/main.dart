@@ -39,7 +39,7 @@ class StreamControlWidget extends StatefulWidget {
 class StreamControlWidgetState extends State<StreamControlWidget> {
   bool _isStreaming = true;
   final TextEditingController _urlController = TextEditingController(
-    text: "rtsp://admin:camteam524@37.25.34.76:554/ch_402",
+    text: "enter_real.rtsp",
   );
   @override
   void dispose() {

@@ -87,7 +87,7 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<void> crateApiSimpleDestroyStreamSession({
-    required PlatformInt64 textureId,
+    required PlatformInt64 sessionId,
   });
 
   Future<void> crateApiSimpleFlutterRealtimePlayerInit({
@@ -180,13 +180,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<void> crateApiSimpleDestroyStreamSession({
-    required PlatformInt64 textureId,
+    required PlatformInt64 sessionId,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(textureId, serializer);
+          sse_encode_i_64(sessionId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -199,7 +199,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: null,
         ),
         constMeta: kCrateApiSimpleDestroyStreamSessionConstMeta,
-        argValues: [textureId],
+        argValues: [sessionId],
         apiImpl: this,
       ),
     );
@@ -208,7 +208,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleDestroyStreamSessionConstMeta =>
       const TaskConstMeta(
         debugName: "destroy_stream_session",
-        argNames: ["textureId"],
+        argNames: ["sessionId"],
       );
 
   @override
@@ -338,12 +338,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
       case 0:
-        return StreamState_Error(dco_decode_String(raw[1]));
+        return StreamState_Init(sessionId: dco_decode_i_64(raw[1]));
       case 1:
-        return StreamState_Loading();
+        return StreamState_Error(dco_decode_String(raw[1]));
       case 2:
-        return StreamState_Playing(textureId: dco_decode_i_64(raw[1]));
+        return StreamState_Loading();
       case 3:
+        return StreamState_Playing(textureId: dco_decode_i_64(raw[1]));
+      case 4:
         return StreamState_Stopped();
       default:
         throw Exception("unreachable");
@@ -471,14 +473,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var tag_ = sse_decode_i_32(deserializer);
     switch (tag_) {
       case 0:
+        var var_sessionId = sse_decode_i_64(deserializer);
+        return StreamState_Init(sessionId: var_sessionId);
+      case 1:
         var var_field0 = sse_decode_String(deserializer);
         return StreamState_Error(var_field0);
-      case 1:
-        return StreamState_Loading();
       case 2:
+        return StreamState_Loading();
+      case 3:
         var var_textureId = sse_decode_i_64(deserializer);
         return StreamState_Playing(textureId: var_textureId);
-      case 3:
+      case 4:
         return StreamState_Stopped();
       default:
         throw UnimplementedError('');
@@ -614,16 +619,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_stream_state(StreamState self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
-      case StreamState_Error(field0: final field0):
+      case StreamState_Init(sessionId: final sessionId):
         sse_encode_i_32(0, serializer);
+        sse_encode_i_64(sessionId, serializer);
+      case StreamState_Error(field0: final field0):
+        sse_encode_i_32(1, serializer);
         sse_encode_String(field0, serializer);
       case StreamState_Loading():
-        sse_encode_i_32(1, serializer);
-      case StreamState_Playing(textureId: final textureId):
         sse_encode_i_32(2, serializer);
+      case StreamState_Playing(textureId: final textureId):
+        sse_encode_i_32(3, serializer);
         sse_encode_i_64(textureId, serializer);
       case StreamState_Stopped():
-        sse_encode_i_32(3, serializer);
+        sse_encode_i_32(4, serializer);
     }
   }
 

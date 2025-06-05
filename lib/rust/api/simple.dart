@@ -28,7 +28,7 @@ Stream<StreamState> createNewPlayable({
 Future<void> destroyEngineStreams({required PlatformInt64 engineId}) =>
     RustLib.instance.api.crateApiSimpleDestroyEngineStreams(engineId: engineId);
 
-Future<void> destroyStreamSession({required PlatformInt64 textureId}) => RustLib
+Future<void> destroyStreamSession({required PlatformInt64 sessionId}) => RustLib
     .instance
     .api
-    .crateApiSimpleDestroyStreamSession(textureId: textureId);
+    .crateApiSimpleDestroyStreamSession(sessionId: sessionId);

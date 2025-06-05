@@ -146,12 +146,12 @@ fn wire__crate__api__simple__destroy_stream_session_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_texture_id = <i64>::sse_decode(&mut deserializer);
+            let api_session_id = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, ()>((move || {
                     let output_ok = Result::<_, ()>::Ok({
-                        crate::api::simple::destroy_stream_session(api_texture_id);
+                        crate::api::simple::destroy_stream_session(api_session_id);
                     })?;
                     Ok(output_ok)
                 })())
@@ -307,19 +307,25 @@ impl SseDecode for crate::dart_types::StreamState {
         let mut tag_ = <i32>::sse_decode(deserializer);
         match tag_ {
             0 => {
+                let mut var_sessionId = <i64>::sse_decode(deserializer);
+                return crate::dart_types::StreamState::Init {
+                    session_id: var_sessionId,
+                };
+            }
+            1 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
                 return crate::dart_types::StreamState::Error(var_field0);
             }
-            1 => {
+            2 => {
                 return crate::dart_types::StreamState::Loading;
             }
-            2 => {
+            3 => {
                 let mut var_textureId = <i64>::sse_decode(deserializer);
                 return crate::dart_types::StreamState::Playing {
                     texture_id: var_textureId,
                 };
             }
-            3 => {
+            4 => {
                 return crate::dart_types::StreamState::Stopped;
             }
             _ => {
@@ -421,14 +427,17 @@ fn pde_ffi_dispatcher_sync_impl(
 impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamState {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
+            crate::dart_types::StreamState::Init { session_id } => {
+                [0.into_dart(), session_id.into_into_dart().into_dart()].into_dart()
+            }
             crate::dart_types::StreamState::Error(field0) => {
-                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::dart_types::StreamState::Loading => [1.into_dart()].into_dart(),
+            crate::dart_types::StreamState::Loading => [2.into_dart()].into_dart(),
             crate::dart_types::StreamState::Playing { texture_id } => {
-                [2.into_dart(), texture_id.into_into_dart().into_dart()].into_dart()
+                [3.into_dart(), texture_id.into_into_dart().into_dart()].into_dart()
             }
-            crate::dart_types::StreamState::Stopped => [3.into_dart()].into_dart(),
+            crate::dart_types::StreamState::Stopped => [4.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -556,19 +565,23 @@ impl SseEncode for crate::dart_types::StreamState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         match self {
-            crate::dart_types::StreamState::Error(field0) => {
+            crate::dart_types::StreamState::Init { session_id } => {
                 <i32>::sse_encode(0, serializer);
+                <i64>::sse_encode(session_id, serializer);
+            }
+            crate::dart_types::StreamState::Error(field0) => {
+                <i32>::sse_encode(1, serializer);
                 <String>::sse_encode(field0, serializer);
             }
             crate::dart_types::StreamState::Loading => {
-                <i32>::sse_encode(1, serializer);
+                <i32>::sse_encode(2, serializer);
             }
             crate::dart_types::StreamState::Playing { texture_id } => {
-                <i32>::sse_encode(2, serializer);
+                <i32>::sse_encode(3, serializer);
                 <i64>::sse_encode(texture_id, serializer);
             }
             crate::dart_types::StreamState::Stopped => {
-                <i32>::sse_encode(3, serializer);
+                <i32>::sse_encode(4, serializer);
             }
             _ => {
                 unimplemented!("");

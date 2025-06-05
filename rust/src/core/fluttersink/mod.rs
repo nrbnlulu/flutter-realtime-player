@@ -79,10 +79,10 @@ pub fn destroy_engine_streams(engine_handle: i64) {
     }
 }
 
-pub fn destroy_stream_session(texture_id: i64) {
-    info!("Destroying stream session for texture id: {}", texture_id);
+pub fn destroy_stream_session(session_id: i64) {
+    info!("Destroying stream session : {}", session_id);
     let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some((decoder, _, sendable_texture)) = session_cache.remove(&texture_id) {
+    if let Some((decoder, _, sendable_texture)) = session_cache.remove(&session_id) {
         decoder.destroy_stream();
         let mut retry_count = 0;
         const MAX_RETRIES: usize = 30;
@@ -91,20 +91,20 @@ pub fn destroy_stream_session(texture_id: i64) {
                 break;
             }
             info!(
-                "Waiting for all references to be dropped for texture id: {}. attempt({})",
-                texture_id, retry_count
+                "Waiting for all references to be dropped for session id: {}. attempt({})",
+                session_id, retry_count
             );
             thread::sleep(std::time::Duration::from_millis(100));
             retry_count += 1;
         }
         if retry_count == MAX_RETRIES {
-            log::warn!("Forcefully dropped decoder for texture id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", texture_id);
+            log::warn!("Forcefully dropped decoder for session id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", session_id);
         }
         invoke_on_platform_main_thread(move || {
             drop(sendable_texture);
-            info!("Destroyed stream session for texture id: {}", texture_id);
+            info!("Destroyed stream session for session id: {}", session_id);
         });
     } else {
-        info!("No stream session found for texture id: {}", texture_id);
+        info!("No stream session found for session id: {}", session_id);
     }
 }

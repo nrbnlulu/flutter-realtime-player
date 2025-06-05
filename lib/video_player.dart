@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
@@ -8,13 +10,13 @@ import 'rust/core/types.dart';
 class VideoController {
   final String url;
   final bool mute;
-  int? textureId;
+  int? sessionId;
 
   VideoController({required this.url, this.mute = true});
 
   Future<void> dispose() async {
-    if (textureId != null) {
-      await rlib.destroyStreamSession(textureId: textureId!);
+    if (sessionId != null) {
+      await rlib.destroyStreamSession(sessionId: sessionId!);
     }
   }
 
@@ -74,6 +76,8 @@ class VideoPlayer extends StatefulWidget {
 
 class _VideoPlayerState extends State<VideoPlayer> {
   StreamState? currentState;
+  Stream<StreamState>? stream;
+  StreamSubscription<StreamState>? streamSubscription;
 
   @override
   void initState() {
@@ -87,7 +91,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
           mute: widget.controller.mute,
         ),
       );
-      stream.listen(
+      streamSubscription = stream.listen(
         (state) => setState(() {
           currentState = state;
         }),
@@ -112,6 +116,9 @@ class _VideoPlayerState extends State<VideoPlayer> {
       return loadingWidget('initializing...');
     }
     switch (currentState!) {
+      case StreamState_Init(sessionId: final sessionId):
+        widget.controller.sessionId = sessionId;
+        return loadingWidget('initializing stream...');
       case StreamState_Loading():
         return loadingWidget('loading video...');
       case StreamState_Error(field0: final message):
@@ -122,9 +129,6 @@ class _VideoPlayerState extends State<VideoPlayer> {
           ),
         );
       case StreamState_Playing(textureId: final textureId):
-        if (widget.controller.textureId == null) {
-          widget.controller.textureId = textureId;
-        }
         return Stack(
           children: [
             Texture(textureId: textureId),
@@ -135,6 +139,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
         return Center(
           child: Text('Video stopped', style: const TextStyle(fontSize: 16)),
         );
+      
     }
   }
 
@@ -142,11 +147,12 @@ class _VideoPlayerState extends State<VideoPlayer> {
   void dispose() {
     super.dispose();
     Future.microtask(() async {
-      if (widget.controller.textureId != null) {
+      await streamSubscription?.cancel();
+      if (widget.controller.sessionId != null) {
         await rlib.destroyStreamSession(
-          textureId: widget.controller.textureId!,
+          sessionId: widget.controller.sessionId!,
         );
-        widget.controller.textureId = null;
+        widget.controller.sessionId = null;
       }
     });
   }
