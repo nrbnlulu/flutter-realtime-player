@@ -1,9 +1,4 @@
-use std::sync::{Arc, Mutex};
-
-use flutter_rust_bridge::DartFnFuture;
-use serde::{Deserialize, Serialize};
-
-use crate::frb_generated::StreamSink;
+use crate::{dart_types::StreamState, frb_generated::StreamSink};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoDimensions {
@@ -35,13 +30,5 @@ impl VideoInfo {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum StreamMessages {
-    Error(String),
-    Loading,
-    Playing,
-    Stopped,
-    StreamAndTextureReady(i64),
-}
 
-pub type DartUpdateStream = StreamSink<StreamMessages>;
+pub type DartUpdateStream = StreamSink<StreamState>;

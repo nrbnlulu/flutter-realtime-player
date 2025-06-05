@@ -4,8 +4,6 @@ use flutter_rust_bridge::DartFnFuture;
 use irondash_run_loop::RunLoop;
 use log::trace;
 
-use crate::core::types::StreamMessages;
-
 
 /// Inboke the given function on the flutter engine main thread.
 pub(crate) fn invoke_on_platform_main_thread<F, T>(func: F) -> T
@@ -26,4 +24,3 @@ where
             func()
         })
 }
-

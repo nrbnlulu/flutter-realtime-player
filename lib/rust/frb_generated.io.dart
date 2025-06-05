@@ -8,6 +8,7 @@ import 'core/types.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
+import 'dart_types.dart';
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 
@@ -23,7 +24,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
-  RustStreamSink<StreamMessages> dco_decode_StreamSink_stream_messages_Sse(
+  RustStreamSink<StreamState> dco_decode_StreamSink_stream_state_Sse(
     dynamic raw,
   );
 
@@ -52,7 +53,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
 
   @protected
-  StreamMessages dco_decode_stream_messages(dynamic raw);
+  StreamState dco_decode_stream_state(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -73,7 +74,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
-  RustStreamSink<StreamMessages> sse_decode_StreamSink_stream_messages_Sse(
+  RustStreamSink<StreamState> sse_decode_StreamSink_stream_state_Sse(
     SseDeserializer deserializer,
   );
 
@@ -102,7 +103,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
 
   @protected
-  StreamMessages sse_decode_stream_messages(SseDeserializer deserializer);
+  StreamState sse_decode_stream_state(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -126,8 +127,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_StreamSink_stream_messages_Sse(
-    RustStreamSink<StreamMessages> self,
+  void sse_encode_StreamSink_stream_state_Sse(
+    RustStreamSink<StreamState> self,
     SseSerializer serializer,
   );
 
@@ -162,10 +163,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_stream_messages(
-    StreamMessages self,
-    SseSerializer serializer,
-  );
+  void sse_encode_stream_state(StreamState self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

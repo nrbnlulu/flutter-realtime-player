@@ -7,6 +7,7 @@ import 'api/simple.dart';
 import 'core/types.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart_types.dart';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
@@ -76,7 +77,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  Stream<StreamMessages> crateApiSimpleCreateNewPlayable({
+  Stream<StreamState> crateApiSimpleCreateNewPlayable({
     required PlatformInt64 engineHandle,
     required VideoInfo videoInfo,
   });
@@ -105,11 +106,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Stream<StreamMessages> crateApiSimpleCreateNewPlayable({
+  Stream<StreamState> crateApiSimpleCreateNewPlayable({
     required PlatformInt64 engineHandle,
     required VideoInfo videoInfo,
   }) {
-    final sink = RustStreamSink<StreamMessages>();
+    final sink = RustStreamSink<StreamState>();
     unawaited(
       handler.executeNormal(
         NormalTask(
@@ -117,7 +118,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             final serializer = SseSerializer(generalizedFrbRustBinding);
             sse_encode_i_64(engineHandle, serializer);
             sse_encode_box_autoadd_video_info(videoInfo, serializer);
-            sse_encode_StreamSink_stream_messages_Sse(sink, serializer);
+            sse_encode_StreamSink_stream_state_Sse(sink, serializer);
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
@@ -277,7 +278,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  RustStreamSink<StreamMessages> dco_decode_StreamSink_stream_messages_Sse(
+  RustStreamSink<StreamState> dco_decode_StreamSink_stream_state_Sse(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -333,19 +334,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  StreamMessages dco_decode_stream_messages(dynamic raw) {
+  StreamState dco_decode_stream_state(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
       case 0:
-        return StreamMessages_Error(dco_decode_String(raw[1]));
+        return StreamState_Error(dco_decode_String(raw[1]));
       case 1:
-        return StreamMessages_Loading();
+        return StreamState_Loading();
       case 2:
-        return StreamMessages_Playing();
+        return StreamState_Playing(textureId: dco_decode_i_64(raw[1]));
       case 3:
-        return StreamMessages_Stopped();
-      case 4:
-        return StreamMessages_StreamAndTextureReady(dco_decode_i_64(raw[1]));
+        return StreamState_Stopped();
       default:
         throw Exception("unreachable");
     }
@@ -403,7 +402,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  RustStreamSink<StreamMessages> sse_decode_StreamSink_stream_messages_Sse(
+  RustStreamSink<StreamState> sse_decode_StreamSink_stream_state_Sse(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -466,23 +465,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  StreamMessages sse_decode_stream_messages(SseDeserializer deserializer) {
+  StreamState sse_decode_stream_state(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var tag_ = sse_decode_i_32(deserializer);
     switch (tag_) {
       case 0:
         var var_field0 = sse_decode_String(deserializer);
-        return StreamMessages_Error(var_field0);
+        return StreamState_Error(var_field0);
       case 1:
-        return StreamMessages_Loading();
+        return StreamState_Loading();
       case 2:
-        return StreamMessages_Playing();
+        var var_textureId = sse_decode_i_64(deserializer);
+        return StreamState_Playing(textureId: var_textureId);
       case 3:
-        return StreamMessages_Stopped();
-      case 4:
-        var var_field0 = sse_decode_i_64(deserializer);
-        return StreamMessages_StreamAndTextureReady(var_field0);
+        return StreamState_Stopped();
       default:
         throw UnimplementedError('');
     }
@@ -538,15 +535,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_StreamSink_stream_messages_Sse(
-    RustStreamSink<StreamMessages> self,
+  void sse_encode_StreamSink_stream_state_Sse(
+    RustStreamSink<StreamState> self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(
       self.setupAndSerialize(
         codec: SseCodec(
-          decodeSuccessData: sse_decode_stream_messages,
+          decodeSuccessData: sse_decode_stream_state,
           decodeErrorData: sse_decode_AnyhowException,
         ),
       ),
@@ -614,24 +611,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_stream_messages(
-    StreamMessages self,
-    SseSerializer serializer,
-  ) {
+  void sse_encode_stream_state(StreamState self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
-      case StreamMessages_Error(field0: final field0):
+      case StreamState_Error(field0: final field0):
         sse_encode_i_32(0, serializer);
         sse_encode_String(field0, serializer);
-      case StreamMessages_Loading():
+      case StreamState_Loading():
         sse_encode_i_32(1, serializer);
-      case StreamMessages_Playing():
+      case StreamState_Playing(textureId: final textureId):
         sse_encode_i_32(2, serializer);
-      case StreamMessages_Stopped():
+        sse_encode_i_64(textureId, serializer);
+      case StreamState_Stopped():
         sse_encode_i_32(3, serializer);
-      case StreamMessages_StreamAndTextureReady(field0: final field0):
-        sse_encode_i_32(4, serializer);
-        sse_encode_i_64(field0, serializer);
     }
   }
 

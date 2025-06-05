@@ -10,8 +10,10 @@ use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, trace};
 
 use crate::{
-    core::{fluttersink::utils::LogErr, types::{DartUpdateStream, StreamMessages}},
-    utils::invoke_on_platform_main_thread,
+    core::{
+        fluttersink::utils::LogErr,
+        types::DartUpdateStream,
+    }, dart_types::StreamState, utils::invoke_on_platform_main_thread
 };
 
 use super::types;
@@ -108,7 +110,10 @@ unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
 pub type SharedSendableTexture = Arc<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
 impl SoftwareDecoder {
-    pub fn new(video_info: &types::VideoInfo, session_id: i64) -> anyhow::Result<(Arc<Self>, Arc<PayloadHolder>)> {
+    pub fn new(
+        video_info: &types::VideoInfo,
+        session_id: i64,
+    ) -> anyhow::Result<(Arc<Self>, Arc<PayloadHolder>)> {
         let payload_holder = Arc::new(PayloadHolder::new());
         let self_ = Arc::new(Self {
             video_info: video_info.clone(),
@@ -164,6 +169,7 @@ impl SoftwareDecoder {
         &self,
         sendable_texture: SharedSendableTexture,
         update_stream: DartUpdateStream,
+        texture_id: i64,
     ) {
         let mut decoding_context = self.decoding_context.lock().unwrap();
         let mut decoding_context = decoding_context
@@ -177,12 +183,14 @@ impl SoftwareDecoder {
                 sendable_weak.mark_frame_available();
             }
         };
+        let mut first_frame = true;
+
         for (stream, packet) in decoding_context.ictx.packets() {
             if self.kill_sig.load(std::sync::atomic::Ordering::Relaxed) {
-                update_stream.add(StreamMessages::Stopped).log_err();
+                update_stream.add(StreamState::Stopped).log_err();
                 break;
             }
-            
+
             if stream.index() == decoding_context.video_stream_index {
                 let mut packet = packet;
                 decoding_context.decoder.send_packet(&mut packet).log_err();
@@ -192,6 +200,13 @@ impl SoftwareDecoder {
                     &cb,
                 )
                 .log_err();
+                if first_frame {
+                    first_frame = false;
+                    trace!("first frame received, marking stream as playing");
+                    update_stream
+                        .add(StreamState::Playing { texture_id })
+                        .log_err();
+                }
             }
         }
         self.terminate(&mut decoding_context.decoder).log_err();

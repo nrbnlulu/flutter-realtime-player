@@ -10,7 +10,10 @@ use std::{
 use log::{info, trace};
 
 use crate::{
-    core::{software_decoder::SoftwareDecoder, types::{DartUpdateStream, StreamMessages}},
+    core::{
+        software_decoder::SoftwareDecoder,
+        types::{DartUpdateStream},
+    },
     utils::invoke_on_platform_main_thread,
 };
 
@@ -49,13 +52,10 @@ pub fn create_new_playable(
             sendable_texture.clone(),
         ),
     );
-    update_stream.add(
-        StreamMessages::StreamAndTextureReady(texture_id)
-    ).log_err();
-    
+
     thread::spawn(move || {
         trace!("starting to stream on a new thread");
-        decoding_manager.stream(sendable_texture, update_stream);
+        decoding_manager.stream(sendable_texture, update_stream, texture_id);
     });
     trace!("initialized; returning texture id: {}", texture_id);
 

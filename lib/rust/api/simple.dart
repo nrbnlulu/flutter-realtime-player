@@ -4,10 +4,9 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../core/types.dart';
+import '../dart_types.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
-part 'simple.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `IS_INITIALIZED`, `SESSION_COUNTER`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `deref`, `initialize`, `initialize`
@@ -18,7 +17,7 @@ Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
     );
 
 /// returns a texture id, this id is also used to identify the session
-Stream<StreamMessages> createNewPlayable({
+Stream<StreamState> createNewPlayable({
   required PlatformInt64 engineHandle,
   required VideoInfo videoInfo,
 }) => RustLib.instance.api.crateApiSimpleCreateNewPlayable(
@@ -33,15 +32,3 @@ Future<void> destroyStreamSession({required PlatformInt64 textureId}) => RustLib
     .instance
     .api
     .crateApiSimpleDestroyStreamSession(textureId: textureId);
-
-@freezed
-sealed class StreamMessages with _$StreamMessages {
-  const StreamMessages._();
-
-  const factory StreamMessages.error(String field0) = StreamMessages_Error;
-  const factory StreamMessages.loading() = StreamMessages_Loading;
-  const factory StreamMessages.playing() = StreamMessages_Playing;
-  const factory StreamMessages.stopped() = StreamMessages_Stopped;
-  const factory StreamMessages.streamAndTextureReady(PlatformInt64 field0) =
-      StreamMessages_StreamAndTextureReady;
-}

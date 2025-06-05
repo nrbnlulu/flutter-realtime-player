@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
+import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:irondash_engine_context/irondash_engine_context.dart';
 
 import 'rust/core/types.dart';
@@ -17,8 +18,8 @@ class VideoController {
     }
   }
 
-  Future<(Stream<rlib.StreamMessages>?, String?)> init() async {
-    Stream<rlib.StreamMessages>? stream;
+  Future<(Stream<StreamState>?, String?)> init() async {
+    Stream<StreamState>? stream;
     String? error;
 
     final handle = await EngineContext.instance.getEngineHandle();
@@ -31,7 +32,6 @@ class VideoController {
           dimensions: const VideoDimensions(width: 640, height: 360),
           mute: mute,
         ),
-
       );
     } catch (e) {
       error = e.toString();
@@ -73,34 +73,69 @@ class VideoPlayer extends StatefulWidget {
 }
 
 class _VideoPlayerState extends State<VideoPlayer> {
+  StreamState? currentState;
+
   @override
   void initState() {
     super.initState();
+    Future.microtask(() async {
+      final stream = rlib.createNewPlayable(
+        engineHandle: await EngineContext.instance.getEngineHandle(),
+        videoInfo: VideoInfo(
+          uri: widget.controller.url,
+          dimensions: const VideoDimensions(width: 640, height: 360),
+          mute: widget.controller.mute,
+        ),
+      );
+      stream.listen(
+        (state) => setState(() {
+          currentState = state;
+        }),
+      );
+    });
+  }
+
+  Widget loadingWidget(String message) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const CircularProgressIndicator(),
+        const SizedBox(width: 10),
+        Text(message, style: const TextStyle(fontSize: 16)),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: widget.controller.init(),
-      builder: (context, snapshot) {
-        if (snapshot.data != null) {
-          final data = snapshot.data!;
-          if (data.$2 != null) {
-            return Text("Error: ${data.$2}");
-          }
-          if (data.$1 != null) {
-            widget.controller.textureId = data.$1;
-            return Stack(
-              children: [
-                Texture(textureId: data.$1!),
-                widget.child ?? const SizedBox(),
-              ],
-            );
-          }
+    if (currentState == null) {
+      return loadingWidget('initializing...');
+    }
+    switch (currentState!) {
+      case StreamState_Loading():
+        return loadingWidget('loading video...');
+      case StreamState_Error(field0: final message):
+        return Center(
+          child: Text(
+            'Error: $message',
+            style: const TextStyle(color: Colors.red, fontSize: 16),
+          ),
+        );
+      case StreamState_Playing(textureId: final textureId):
+        if (widget.controller.textureId == null) {
+          widget.controller.textureId = textureId;
         }
-        return const CircularProgressIndicator();
-      },
-    );
+        return Stack(
+          children: [
+            Texture(textureId: textureId),
+            widget.child ?? const SizedBox(),
+          ],
+        );
+      case StreamState_Stopped():
+        return Center(
+          child: Text('Video stopped', style: const TextStyle(fontSize: 16)),
+        );
+    }
   }
 
   @override

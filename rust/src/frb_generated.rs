@@ -70,7 +70,7 @@ fn wire__crate__api__simple__create_new_playable_impl(
             let api_engine_handle = <i64>::sse_decode(&mut deserializer);
             let api_video_info = <crate::core::types::VideoInfo>::sse_decode(&mut deserializer);
             let api_sink = <StreamSink<
-                crate::api::simple::StreamMessages,
+                crate::dart_types::StreamState,
                 flutter_rust_bridge::for_generated::SseCodec,
             >>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -229,21 +229,6 @@ fn wire__crate__api__simple__init_app_impl(
     )
 }
 
-// Section: static_checks
-
-#[allow(clippy::unnecessary_literal_unwrap)]
-const _: fn() = || match None::<crate::api::simple::StreamMessages>.unwrap() {
-    crate::api::simple::StreamMessages::Error(field0) => {
-        let _: String = field0;
-    }
-    crate::api::simple::StreamMessages::Loading => {}
-    crate::api::simple::StreamMessages::Playing => {}
-    crate::api::simple::StreamMessages::Stopped => {}
-    crate::api::simple::StreamMessages::StreamAndTextureReady(field0) => {
-        let _: i64 = field0;
-    }
-};
-
 // Section: dart2rust
 
 impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
@@ -255,7 +240,7 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
 }
 
 impl SseDecode
-    for StreamSink<crate::api::simple::StreamMessages, flutter_rust_bridge::for_generated::SseCodec>
+    for StreamSink<crate::dart_types::StreamState, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -316,27 +301,26 @@ impl SseDecode for Option<i32> {
     }
 }
 
-impl SseDecode for crate::api::simple::StreamMessages {
+impl SseDecode for crate::dart_types::StreamState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut tag_ = <i32>::sse_decode(deserializer);
         match tag_ {
             0 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::api::simple::StreamMessages::Error(var_field0);
+                return crate::dart_types::StreamState::Error(var_field0);
             }
             1 => {
-                return crate::api::simple::StreamMessages::Loading;
+                return crate::dart_types::StreamState::Loading;
             }
             2 => {
-                return crate::api::simple::StreamMessages::Playing;
+                let mut var_textureId = <i64>::sse_decode(deserializer);
+                return crate::dart_types::StreamState::Playing {
+                    texture_id: var_textureId,
+                };
             }
             3 => {
-                return crate::api::simple::StreamMessages::Stopped;
-            }
-            4 => {
-                let mut var_field0 = <i64>::sse_decode(deserializer);
-                return crate::api::simple::StreamMessages::StreamAndTextureReady(var_field0);
+                return crate::dart_types::StreamState::Stopped;
             }
             _ => {
                 unimplemented!("");
@@ -434,18 +418,17 @@ fn pde_ffi_dispatcher_sync_impl(
 // Section: rust2dart
 
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::simple::StreamMessages> {
+impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamState {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        match self.0 {
-            crate::api::simple::StreamMessages::Error(field0) => {
+        match self {
+            crate::dart_types::StreamState::Error(field0) => {
                 [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::simple::StreamMessages::Loading => [1.into_dart()].into_dart(),
-            crate::api::simple::StreamMessages::Playing => [2.into_dart()].into_dart(),
-            crate::api::simple::StreamMessages::Stopped => [3.into_dart()].into_dart(),
-            crate::api::simple::StreamMessages::StreamAndTextureReady(field0) => {
-                [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            crate::dart_types::StreamState::Loading => [1.into_dart()].into_dart(),
+            crate::dart_types::StreamState::Playing { texture_id } => {
+                [2.into_dart(), texture_id.into_into_dart().into_dart()].into_dart()
             }
+            crate::dart_types::StreamState::Stopped => [3.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -453,14 +436,14 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::simple::StreamMess
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for FrbWrapper<crate::api::simple::StreamMessages>
+    for crate::dart_types::StreamState
 {
 }
-impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::simple::StreamMessages>>
-    for crate::api::simple::StreamMessages
+impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::StreamState>
+    for crate::dart_types::StreamState
 {
-    fn into_into_dart(self) -> FrbWrapper<crate::api::simple::StreamMessages> {
-        self.into()
+    fn into_into_dart(self) -> crate::dart_types::StreamState {
+        self
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -513,7 +496,7 @@ impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
 }
 
 impl SseEncode
-    for StreamSink<crate::api::simple::StreamMessages, flutter_rust_bridge::for_generated::SseCodec>
+    for StreamSink<crate::dart_types::StreamState, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -569,26 +552,23 @@ impl SseEncode for Option<i32> {
     }
 }
 
-impl SseEncode for crate::api::simple::StreamMessages {
+impl SseEncode for crate::dart_types::StreamState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         match self {
-            crate::api::simple::StreamMessages::Error(field0) => {
+            crate::dart_types::StreamState::Error(field0) => {
                 <i32>::sse_encode(0, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::api::simple::StreamMessages::Loading => {
+            crate::dart_types::StreamState::Loading => {
                 <i32>::sse_encode(1, serializer);
             }
-            crate::api::simple::StreamMessages::Playing => {
+            crate::dart_types::StreamState::Playing { texture_id } => {
                 <i32>::sse_encode(2, serializer);
+                <i64>::sse_encode(texture_id, serializer);
             }
-            crate::api::simple::StreamMessages::Stopped => {
+            crate::dart_types::StreamState::Stopped => {
                 <i32>::sse_encode(3, serializer);
-            }
-            crate::api::simple::StreamMessages::StreamAndTextureReady(field0) => {
-                <i32>::sse_encode(4, serializer);
-                <i64>::sse_encode(field0, serializer);
             }
             _ => {
                 unimplemented!("");
