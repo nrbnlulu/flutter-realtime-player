@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+
 import 'package:flutter_realtime_player/video_player.dart';
 
 import 'package:window_manager/window_manager.dart';
@@ -38,7 +39,7 @@ class StreamControlWidget extends StatefulWidget {
 class StreamControlWidgetState extends State<StreamControlWidget> {
   bool _isStreaming = true;
   final TextEditingController _urlController = TextEditingController(
-    text: "rtsp://admin:camteam524@147.189.145.30:443/ch_400",
+    text: "enter_real.rtsp",
   );
   @override
   void dispose() {

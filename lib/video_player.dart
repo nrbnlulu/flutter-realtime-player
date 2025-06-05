@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
+import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:irondash_engine_context/irondash_engine_context.dart';
 
 import 'rust/core/types.dart';
@@ -7,26 +10,26 @@ import 'rust/core/types.dart';
 class VideoController {
   final String url;
   final bool mute;
-  int? textureId;
+  int? sessionId;
 
   VideoController({required this.url, this.mute = true});
 
   Future<void> dispose() async {
-    if (textureId != null) {
-      await rlib.destroyStreamSession(textureId: textureId!);
+    if (sessionId != null) {
+      await rlib.destroyStreamSession(sessionId: sessionId!);
     }
   }
 
-  Future<(int?, String?)> init() async {
-    int? textureId;
+  Future<(Stream<StreamState>?, String?)> init() async {
+    Stream<StreamState>? stream;
     String? error;
 
     final handle = await EngineContext.instance.getEngineHandle();
     // play demo video
     try {
-      textureId = await rlib.createNewPlayable(
+      stream = rlib.createNewPlayable(
         engineHandle: handle,
-        videInfo: VideoInfo(
+        videoInfo: VideoInfo(
           uri: url,
           dimensions: const VideoDimensions(width: 640, height: 360),
           mute: mute,
@@ -35,7 +38,7 @@ class VideoController {
     } catch (e) {
       error = e.toString();
     }
-    return (textureId, error);
+    return (stream, error);
   }
 }
 
@@ -72,45 +75,84 @@ class VideoPlayer extends StatefulWidget {
 }
 
 class _VideoPlayerState extends State<VideoPlayer> {
+  StreamState? currentState;
+  Stream<StreamState>? stream;
+  StreamSubscription<StreamState>? streamSubscription;
+
   @override
   void initState() {
     super.initState();
+    Future.microtask(() async {
+      final stream = rlib.createNewPlayable(
+        engineHandle: await EngineContext.instance.getEngineHandle(),
+        videoInfo: VideoInfo(
+          uri: widget.controller.url,
+          dimensions: const VideoDimensions(width: 640, height: 360),
+          mute: widget.controller.mute,
+        ),
+      );
+      streamSubscription = stream.listen(
+        (state) => setState(() {
+          currentState = state;
+        }),
+      );
+    });
+  }
+
+  Widget loadingWidget(String message) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const CircularProgressIndicator(),
+        const SizedBox(width: 10),
+        Text(message, style: const TextStyle(fontSize: 16)),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: widget.controller.init(),
-      builder: (context, snapshot) {
-        if (snapshot.data != null) {
-          final data = snapshot.data!;
-          if (data.$2 != null) {
-            return Text("Error: ${data.$2}");
-          }
-          if (data.$1 != null) {
-            widget.controller.textureId = data.$1;
-            return Stack(
-              children: [
-                Texture(textureId: data.$1!),
-                widget.child ?? const SizedBox(),
-              ],
-            );
-          }
-        }
-        return const CircularProgressIndicator();
-      },
-    );
+    if (currentState == null) {
+      return loadingWidget('initializing...');
+    }
+    switch (currentState!) {
+      case StreamState_Init(sessionId: final sessionId):
+        widget.controller.sessionId = sessionId;
+        return loadingWidget('initializing stream...');
+      case StreamState_Loading():
+        return loadingWidget('loading video...');
+      case StreamState_Error(field0: final message):
+        return Center(
+          child: Text(
+            'Error: $message',
+            style: const TextStyle(color: Colors.red, fontSize: 16),
+          ),
+        );
+      case StreamState_Playing(textureId: final textureId):
+        return Stack(
+          children: [
+            Texture(textureId: textureId),
+            widget.child ?? const SizedBox(),
+          ],
+        );
+      case StreamState_Stopped():
+        return Center(
+          child: Text('Video stopped', style: const TextStyle(fontSize: 16)),
+        );
+      
+    }
   }
 
   @override
   void dispose() {
     super.dispose();
     Future.microtask(() async {
-      if (widget.controller.textureId != null) {
+      await streamSubscription?.cancel();
+      if (widget.controller.sessionId != null) {
         await rlib.destroyStreamSession(
-          textureId: widget.controller.textureId!,
+          sessionId: widget.controller.sessionId!,
         );
-        widget.controller.textureId = null;
+        widget.controller.sessionId = null;
       }
     });
   }

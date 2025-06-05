@@ -1,3 +1,5 @@
+use crate::{dart_types::StreamState, frb_generated::StreamSink};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoDimensions {
     pub width: u32,
@@ -27,3 +29,6 @@ impl VideoInfo {
         }
     }
 }
+
+
+pub type DartUpdateStream = StreamSink<StreamState>;

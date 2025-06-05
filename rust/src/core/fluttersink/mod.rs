@@ -9,7 +9,13 @@ use std::{
 
 use log::{info, trace};
 
-use crate::{core::software_decoder::SoftwareDecoder, utils::invoke_on_platform_main_thread};
+use crate::{
+    core::{
+        software_decoder::SoftwareDecoder,
+        types::{DartUpdateStream},
+    },
+    utils::invoke_on_platform_main_thread,
+};
 
 use super::{software_decoder::SharedSendableTexture, types};
 
@@ -22,29 +28,38 @@ static ref SESSION_CACHE: Mutex<HashMap<i64, (Arc<SoftwareDecoder>, i64, SharedS
 }
 
 pub fn create_new_playable(
+    session_id: i64,
     engine_handle: i64,
     video_info: types::VideoInfo,
-) -> anyhow::Result<i64> {
-    let (decoder, texture_id, sendable_texture) =
-        SoftwareDecoder::new(&video_info, 0, engine_handle)?;
+    update_stream: DartUpdateStream,
+) -> anyhow::Result<()> {
+    let (decoding_manager, payload_holder) = SoftwareDecoder::new(&video_info, session_id)?;
+    decoding_manager.initialize_stream()?;
+    // by now the stream is initialized successfully, we can create a flutter texture
+    let (sendable_texture, texture_id) =
+        invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
+            let texture =
+                irondash_texture::Texture::new_with_provider(engine_handle, payload_holder)?;
+            let texture_id = texture.id();
+            Ok((texture.into_sendable_texture(), texture_id))
+        })?;
 
-    // pipeline.set_property("video-sink", &flutter_sink.video_sink());
     SESSION_CACHE.lock().unwrap().insert(
-        texture_id,
-        (decoder.clone(), engine_handle, sendable_texture.clone()),
+        session_id,
+        (
+            decoding_manager.clone(),
+            engine_handle,
+            sendable_texture.clone(),
+        ),
     );
 
-    // // wait for the sink to be initialized
-    // while !initialized_sig.load(std::sync::atomic::Ordering::Relaxed) {
-    //     std::thread::sleep(std::time::Duration::from_millis(10));
-    // }
-    trace!("spwaning stream listener");
     thread::spawn(move || {
-        decoder.start(sendable_texture).log_err();
+        trace!("starting to stream on a new thread");
+        decoding_manager.stream(sendable_texture, update_stream, texture_id);
     });
     trace!("initialized; returning texture id: {}", texture_id);
 
-    Ok(texture_id)
+    Ok(())
 }
 
 pub fn destroy_engine_streams(engine_handle: i64) {
@@ -64,10 +79,10 @@ pub fn destroy_engine_streams(engine_handle: i64) {
     }
 }
 
-pub fn destroy_stream_session(texture_id: i64) {
-    info!("Destroying stream session for texture id: {}", texture_id);
+pub fn destroy_stream_session(session_id: i64) {
+    info!("Destroying stream session : {}", session_id);
     let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some((decoder, _, sendable_texture)) = session_cache.remove(&texture_id) {
+    if let Some((decoder, _, sendable_texture)) = session_cache.remove(&session_id) {
         decoder.destroy_stream();
         let mut retry_count = 0;
         const MAX_RETRIES: usize = 30;
@@ -76,20 +91,20 @@ pub fn destroy_stream_session(texture_id: i64) {
                 break;
             }
             info!(
-                "Waiting for all references to be dropped for texture id: {}. attempt({})",
-                texture_id, retry_count
+                "Waiting for all references to be dropped for session id: {}. attempt({})",
+                session_id, retry_count
             );
             thread::sleep(std::time::Duration::from_millis(100));
             retry_count += 1;
         }
         if retry_count == MAX_RETRIES {
-            log::warn!("Forcefully dropped decoder for texture id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", texture_id);
+            log::warn!("Forcefully dropped decoder for session id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", session_id);
         }
         invoke_on_platform_main_thread(move || {
             drop(sendable_texture);
-            info!("Destroyed stream session for texture id: {}", texture_id);
+            info!("Destroyed stream session for session id: {}", session_id);
         });
     } else {
-        info!("No stream session found for texture id: {}", texture_id);
+        info!("No stream session found for session id: {}", session_id);
     }
 }

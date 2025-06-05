@@ -1,13 +1,20 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
-    alloc::{self, Layout}, ops::Deref, sync::{atomic::AtomicBool, Arc, Mutex, Weak}
+    alloc::{self, Layout},
+    ops::Deref,
+    sync::{atomic::AtomicBool, Arc, Mutex, Weak},
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, trace};
 
-use crate::{core::fluttersink::utils::LogErr, utils::invoke_on_platform_main_thread};
+use crate::{
+    core::{
+        fluttersink::utils::LogErr,
+        types::DartUpdateStream,
+    }, dart_types::StreamState, utils::invoke_on_platform_main_thread
+};
 
 use super::types;
 
@@ -84,10 +91,20 @@ impl PayloadProvider<BoxedPixelData> for PayloadHolder {
         }
     }
 }
+
+struct DecodingContext {
+    ictx: ffmpeg::format::context::Input,
+    video_stream_index: usize,
+    decoder: ffmpeg::decoder::Video,
+    scaler: ffmpeg::software::scaling::Context,
+}
+
 pub struct SoftwareDecoder {
     video_info: types::VideoInfo,
     kill_sig: AtomicBool,
     payload_holder: Weak<PayloadHolder>,
+    session_id: i64,
+    decoding_context: Mutex<Option<DecodingContext>>,
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
@@ -95,43 +112,38 @@ pub type SharedSendableTexture = Arc<SendableTexture<Box<dyn irondash_texture::P
 impl SoftwareDecoder {
     pub fn new(
         video_info: &types::VideoInfo,
-        session_id: u32,
-        engine_handle: i64,
-    ) -> anyhow::Result<(Arc<Self>, i64, SharedSendableTexture)> {
+        session_id: i64,
+    ) -> anyhow::Result<(Arc<Self>, Arc<PayloadHolder>)> {
         let payload_holder = Arc::new(PayloadHolder::new());
         let self_ = Arc::new(Self {
             video_info: video_info.clone(),
             kill_sig: AtomicBool::new(false),
             payload_holder: Arc::downgrade(&payload_holder),
+            session_id,
+            decoding_context: Mutex::new(None),
         });
-
-        let (sendable, texture_id) =
-            invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
-                let texture =
-                    irondash_texture::Texture::new_with_provider(engine_handle, payload_holder)?;
-                let texture_id = texture.id();
-                Ok((texture.into_sendable_texture(), texture_id))
-            })?;
-
-        Ok((self_, texture_id, sendable))
+        Ok((self_, payload_holder))
     }
-    pub fn start(self: Arc<Self>) -> anyhow::Result<()> {
+
+    pub fn initialize_stream(self: &Arc<Self>) -> anyhow::Result<()> {
         trace!("starting ffmpeg session for {}", &self.video_info.uri);
         let mut option_dict = ffmpeg::Dictionary::new();
         option_dict.set("rtsp_transport", "tcp");
-        let mut ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
-        
+        option_dict.set("timeout", "1"); // 5 seconds timeout
+        let ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
+        trace!("got ictx");
 
         let input = ictx
             .streams()
             .best(ffmpeg::media::Type::Video)
             .ok_or(ffmpeg::Error::StreamNotFound)?;
+        trace!("got input stream: {:?}", input);
         let video_stream_index = input.index();
         let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
 
-        let mut decoder = context_decoder.decoder().video()?;
+        let decoder = context_decoder.decoder().video()?;
 
-        let mut scaler = ffmpeg::software::scaling::Context::get(
+        let scaler = ffmpeg::software::scaling::Context::get(
             decoder.format(),
             decoder.width(),
             decoder.height(),
@@ -140,18 +152,29 @@ impl SoftwareDecoder {
             decoder.height(),
             ffmpeg::software::scaling::Flags::BILINEAR,
         )?;
-        
-        Ok((ictx, video_stream_index, decoder, scaler))
+        let context = DecodingContext {
+            ictx,
+            video_stream_index,
+            decoder,
+            scaler,
+        };
+        let mut decoding_context = self.decoding_context.lock().unwrap();
+        decoding_context.replace(context);
+        trace!("ffmpeg session started for {}", &self.video_info.uri);
+
+        Ok(())
     }
 
-    fn stream(
+    pub fn stream(
         &self,
         sendable_texture: SharedSendableTexture,
-        video_stream_index: usize,
-        mut decoder: &mut ffmpeg::decoder::Video,
-        mut scaler: &mut ffmpeg::software::scaling::Context,
-        ictx: &mut ffmpeg::format::context::Input,
+        update_stream: DartUpdateStream,
+        texture_id: i64,
     ) {
+        let mut decoding_context = self.decoding_context.lock().unwrap();
+        let mut decoding_context = decoding_context
+            .take()
+            .expect("Decoding context not initialized");
 
         let sendable_weak = Arc::downgrade(&sendable_texture);
         drop(sendable_texture);
@@ -160,17 +183,33 @@ impl SoftwareDecoder {
                 sendable_weak.mark_frame_available();
             }
         };
-        for (stream, packet) in ictx.packets() {
+        let mut first_frame = true;
+
+        for (stream, packet) in decoding_context.ictx.packets() {
             if self.kill_sig.load(std::sync::atomic::Ordering::Relaxed) {
+                update_stream.add(StreamState::Stopped).log_err();
                 break;
             }
-            if stream.index() == video_stream_index {
+
+            if stream.index() == decoding_context.video_stream_index {
                 let mut packet = packet;
-                decoder.send_packet(&mut packet).log_err();
-                self.on_new_sample(&mut decoder, &mut scaler, &cb).log_err();
+                decoding_context.decoder.send_packet(&mut packet).log_err();
+                self.on_new_sample(
+                    &mut decoding_context.decoder,
+                    &mut decoding_context.scaler,
+                    &cb,
+                )
+                .log_err();
+                if first_frame {
+                    first_frame = false;
+                    trace!("first frame received, marking stream as playing");
+                    update_stream
+                        .add(StreamState::Playing { texture_id })
+                        .log_err();
+                }
             }
         }
-        self.terminate(&mut decoder).log_err();
+        self.terminate(&mut decoding_context.decoder).log_err();
     }
 
     fn terminate(&self, decoder: &mut ffmpeg::decoder::Video) -> anyhow::Result<()> {

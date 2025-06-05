@@ -4,11 +4,12 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../core/types.dart';
+import '../dart_types.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `IS_INITIALIZED`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `initialize`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `IS_INITIALIZED`, `SESSION_COUNTER`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `deref`, `initialize`, `initialize`
 
 Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
     RustLib.instance.api.crateApiSimpleFlutterRealtimePlayerInit(
@@ -16,18 +17,18 @@ Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
     );
 
 /// returns a texture id, this id is also used to identify the session
-Future<PlatformInt64> createNewPlayable({
+Stream<StreamState> createNewPlayable({
   required PlatformInt64 engineHandle,
-  required VideoInfo videInfo,
+  required VideoInfo videoInfo,
 }) => RustLib.instance.api.crateApiSimpleCreateNewPlayable(
   engineHandle: engineHandle,
-  videInfo: videInfo,
+  videoInfo: videoInfo,
 );
 
 Future<void> destroyEngineStreams({required PlatformInt64 engineId}) =>
     RustLib.instance.api.crateApiSimpleDestroyEngineStreams(engineId: engineId);
 
-Future<void> destroyStreamSession({required PlatformInt64 textureId}) => RustLib
+Future<void> destroyStreamSession({required PlatformInt64 sessionId}) => RustLib
     .instance
     .api
-    .crateApiSimpleDestroyStreamSession(textureId: textureId);
+    .crateApiSimpleDestroyStreamSession(sessionId: sessionId);
