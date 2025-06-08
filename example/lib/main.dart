@@ -47,6 +47,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     super.dispose();
   }
 
+
   void _toggleStream() {
     debugPrint("Toggle stream");
     setState(() {
@@ -90,7 +91,6 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
             ElevatedButton(
               onPressed: _openInNewWindow,
               child: const Text('Open in New Window'),
-
             ),
           ],
         ),
@@ -107,9 +107,3 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     );
   }
 }
-
-
-
-
-
-

@@ -3,10 +3,10 @@ use log::{debug, trace};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use crate::{
-    core::{
-        fluttersink,
-        types::VideoInfo,
-    }, dart_types::StreamState, frb_generated::StreamSink, utils::LogErr
+    core::{fluttersink, types::VideoInfo},
+    dart_types::StreamState,
+    frb_generated::StreamSink,
+    utils::LogErr,
 };
 
 #[flutter_rust_bridge::frb(init)]
@@ -40,8 +40,9 @@ pub fn init_app() {
         .with(env_filter) // Apply the environment filter
         .with(console_layer) // Add the stdout layer
         .with(file_layer) // Add the file layer
-        .try_init().unwrap(); // Set as the global default subscriber
-    
+        .try_init()
+        .unwrap(); // Set as the global default subscriber
+
     // Default utilities - feel free to custom
     flutter_rust_bridge::setup_default_user_utils();
     debug!("Done initializing");
@@ -67,8 +68,6 @@ lazy_static::lazy_static! {
     static ref SESSION_COUNTER: std::sync::Mutex<i64> = std::sync::Mutex::new(0);
 }
 
-
-
 /// returns a texture id, this id is also used to identify the session
 pub fn create_new_playable(
     engine_handle: i64,
@@ -78,23 +77,25 @@ pub fn create_new_playable(
     let mut session_counter = SESSION_COUNTER.lock().unwrap();
     *session_counter += 1;
     let session_id = *session_counter;
-    sink.add(StreamState::Init { session_id: session_id }).log_err();
+    sink.add(StreamState::Init {
+        session_id: session_id,
+    })
+    .log_err();
     trace!(
         "get_texture was called with engine_handle: {}, video_info: {:?}",
         engine_handle,
         video_info
     );
-    crate::core::fluttersink::create_new_playable(
+    let _ = crate::core::fluttersink::create_new_playable(
         session_id,
         engine_handle,
         video_info,
         sink.clone(),
     )
     .inspect_err(|e| {
-        log::error!("Failed to create new playable: {:?}", e);
-        sink.add(StreamState::Error(e.to_string())).log_err();
-    })
-    .log_err();
+        log::info!("Failed to create new playable: {:?}", e);
+        let _ = sink.add(StreamState::Error(e.to_string()));
+    });
 }
 
 pub fn destroy_engine_streams(engine_id: i64) {
