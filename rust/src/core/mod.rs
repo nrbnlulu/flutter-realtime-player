@@ -3,10 +3,9 @@ pub mod software_decoder;
 pub mod types;
 use log::debug;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-use flutter_rust_bridge::frb;
 
 lazy_static::lazy_static! {
-    static ref IS_INITIALIZED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+    pub static ref IS_INITIALIZED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
     static ref WORKER_GUARD: std::sync::Mutex<Option<tracing_appender::non_blocking::WorkerGuard>> = std::sync::Mutex::new(None);
 }
 

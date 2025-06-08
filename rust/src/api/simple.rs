@@ -1,7 +1,7 @@
 use log::{debug, trace};
 
 use crate::{
-    core::{fluttersink, types::VideoInfo},
+    core::{fluttersink, types::VideoInfo, IS_INITIALIZED},
     dart_types::StreamState,
     frb_generated::StreamSink,
     utils::LogErr,
