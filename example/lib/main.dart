@@ -38,7 +38,7 @@ class StreamControlWidget extends StatefulWidget {
 class StreamControlWidgetState extends State<StreamControlWidget> {
   bool _isStreaming = true;
   final TextEditingController _urlController = TextEditingController(
-    text: "rtsp://demo:554/ch_402",
+    text: "rtsp:://your_stream_url_here",
   );
   @override
   void dispose() {
@@ -59,6 +59,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     final window = await DesktopMultiWindow.createWindow(
       jsonEncode({'url': url}),
     );
+
     window
       ..setFrame(const Offset(100, 100) & const Size(800, 600))
       ..setTitle('Stream Window')
