@@ -93,6 +93,7 @@ struct DecodingContext {
     video_stream_index: usize,
     decoder: ffmpeg::decoder::Video,
     scaler: ffmpeg::software::scaling::Context,
+    framerate: u32,
 }
 
 pub enum StreamExitResult {
@@ -159,11 +160,13 @@ impl SoftwareDecoder {
             decoder.height(),
             ffmpeg::software::scaling::Flags::BILINEAR,
         )?;
+        let frame_rate = input.avg_frame_rate().numerator();
         let context = DecodingContext {
             ictx,
             video_stream_index,
             decoder,
             scaler,
+            framerate: frame_rate as _
         };
         let mut decoding_context = self.decoding_context.lock().unwrap();
         decoding_context.replace(context);
@@ -234,6 +237,8 @@ impl SoftwareDecoder {
                 return StreamExitResult::LegalExit;
             }
             let mut packet = ffmpeg::Packet::empty();
+
+            trace!("Input stream framerate: {}", framerate);
             match packet.read(&mut decoding_context.ictx) {
                 Ok(..) => unsafe {
                     let stream = ffmpeg::format::stream::Stream::wrap(
@@ -283,6 +288,8 @@ impl SoftwareDecoder {
                     return StreamExitResult::Error;
                 }
             }
+            // wait for the next frame
+            thread::sleep(std::time::Duration::from_millis(1000 / decoding_context.framerate as u64));
         }
     }
 
