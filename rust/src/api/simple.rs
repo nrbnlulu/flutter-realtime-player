@@ -1,36 +1,15 @@
-use flutter_rust_bridge::frb;
 use log::{debug, trace};
 
 use crate::{
-    core::{
-        fluttersink::{self, utils::LogErr},
-        types::VideoInfo,
-    }, dart_types::StreamState, frb_generated::StreamSink
+    core::{fluttersink, types::VideoInfo, IS_INITIALIZED},
+    dart_types::StreamState,
+    frb_generated::StreamSink,
+    utils::LogErr,
 };
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
-    let is_initialized = IS_INITIALIZED.lock().unwrap();
-    if *is_initialized {
-        return;
-    }
-    let log_file = tracing_appender::rolling::daily("./logs", "flutter_realtime_player.log");
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(log_file)
-        .with_thread_ids(true)
-        .with_thread_names(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_ansi(false)
-        .init();
-    // Default utilities - feel free to custom
-    flutter_rust_bridge::setup_default_user_utils();
-    debug!("Done initializing");
-}
-
-lazy_static::lazy_static! {
-    static ref IS_INITIALIZED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+    crate::core::init_logger();
 }
 
 pub fn flutter_realtime_player_init(ffi_ptr: i64) {
@@ -49,8 +28,6 @@ lazy_static::lazy_static! {
     static ref SESSION_COUNTER: std::sync::Mutex<i64> = std::sync::Mutex::new(0);
 }
 
-
-
 /// returns a texture id, this id is also used to identify the session
 pub fn create_new_playable(
     engine_handle: i64,
@@ -60,23 +37,25 @@ pub fn create_new_playable(
     let mut session_counter = SESSION_COUNTER.lock().unwrap();
     *session_counter += 1;
     let session_id = *session_counter;
-    sink.add(StreamState::Init { session_id: session_id }).log_err();
+    sink.add(StreamState::Init {
+        session_id: session_id,
+    })
+    .log_err();
     trace!(
         "get_texture was called with engine_handle: {}, video_info: {:?}",
         engine_handle,
         video_info
     );
-    crate::core::fluttersink::create_new_playable(
+    let _ = crate::core::fluttersink::create_new_playable(
         session_id,
         engine_handle,
         video_info,
         sink.clone(),
     )
     .inspect_err(|e| {
-        log::error!("Failed to create new playable: {:?}", e);
+        log::debug!("Failed to create new playable: {:?}", e);
         sink.add(StreamState::Error(e.to_string())).log_err();
-    })
-    .log_err();
+    });
 }
 
 pub fn destroy_engine_streams(engine_id: i64) {

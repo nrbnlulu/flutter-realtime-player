@@ -1,6 +1,3 @@
-pub mod utils;
-use utils::LogErr;
-
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -10,10 +7,7 @@ use std::{
 use log::{info, trace};
 
 use crate::{
-    core::{
-        software_decoder::SoftwareDecoder,
-        types::{DartUpdateStream},
-    },
+    core::{software_decoder::SoftwareDecoder, types::DartUpdateStream},
     utils::invoke_on_platform_main_thread,
 };
 

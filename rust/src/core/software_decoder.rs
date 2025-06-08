@@ -2,19 +2,15 @@
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
     alloc::{self, Layout},
-    ops::Deref,
+    mem,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
+    thread,
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
-use log::{debug, trace};
+use log::{debug, info, trace};
 
-use crate::{
-    core::{
-        fluttersink::utils::LogErr,
-        types::DartUpdateStream,
-    }, dart_types::StreamState, utils::invoke_on_platform_main_thread
-};
+use crate::{core::types::DartUpdateStream, dart_types::StreamState, utils::LogErr};
 
 use super::types;
 
@@ -99,6 +95,11 @@ struct DecodingContext {
     scaler: ffmpeg::software::scaling::Context,
 }
 
+pub enum StreamExitResult {
+    LegalExit,
+    EOF,
+    Error,
+}
 pub struct SoftwareDecoder {
     video_info: types::VideoInfo,
     kill_sig: AtomicBool,
@@ -109,6 +110,7 @@ pub struct SoftwareDecoder {
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
 pub type SharedSendableTexture = Arc<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
+type WeakSendableTexture = Weak<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
 impl SoftwareDecoder {
     pub fn new(
         video_info: &types::VideoInfo,
@@ -125,11 +127,14 @@ impl SoftwareDecoder {
         Ok((self_, payload_holder))
     }
 
-    pub fn initialize_stream(self: &Arc<Self>) -> anyhow::Result<()> {
+    pub fn initialize_stream(&self) -> anyhow::Result<()> {
         trace!("starting ffmpeg session for {}", &self.video_info.uri);
         let mut option_dict = ffmpeg::Dictionary::new();
-        option_dict.set("rtsp_transport", "tcp");
-        option_dict.set("timeout", "1"); // 5 seconds timeout
+        option_dict.set("prefer_tcp", "1");
+        // if Watch a stream over UDP, with a max reordering delay of 0.5 second
+        option_dict.set("max_delay", "500000"); // 0.5 second worth of packets
+                                                // tcp socket global timeout
+        option_dict.set("timeout", "1000000"); // 1 second timeout
         let ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
         trace!("got ictx");
 
@@ -164,20 +169,54 @@ impl SoftwareDecoder {
 
         Ok(())
     }
-
+    fn asked_for_termination(&self) -> bool {
+        self.kill_sig.load(std::sync::atomic::Ordering::Relaxed)
+    }
     pub fn stream(
         &self,
         sendable_texture: SharedSendableTexture,
-        update_stream: DartUpdateStream,
+        dart_update_stream: DartUpdateStream,
         texture_id: i64,
     ) {
+        let weak_sendable_texture: WeakSendableTexture = Arc::downgrade(&sendable_texture);
+        drop(sendable_texture); // drop the strong reference to allow cleanup
+
+        let first_res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
+        if matches!(first_res, StreamExitResult::Error) {
+            loop {
+                if self.asked_for_termination() {
+                    break;
+                }
+                trace!("stream failed, reinitializing in 2 seconds");
+                thread::sleep(std::time::Duration::from_secs(2));
+                if let Err(e) = self.initialize_stream() {
+                    info!("Failed to reinitialize stream: {:?}", e);
+                    dart_update_stream
+                        .add(StreamState::Error(
+                            "stream initialization failed, reinitializing in 2 seconds".to_owned(),
+                        ))
+                        .log_err();
+                    continue;
+                }
+                trace!("stream reinitialized, resuming");
+                let res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
+                if matches!(res, StreamExitResult::LegalExit | StreamExitResult::EOF) {
+                    break;
+                }
+            }
+        }
+    }
+    fn stream_impl(
+        &self,
+        sendable_weak: &WeakSendableTexture,
+        dart_update_stream: &DartUpdateStream,
+        texture_id: i64,
+    ) -> StreamExitResult {
         let mut decoding_context = self.decoding_context.lock().unwrap();
         let mut decoding_context = decoding_context
             .take()
             .expect("Decoding context not initialized");
 
-        let sendable_weak = Arc::downgrade(&sendable_texture);
-        drop(sendable_texture);
         let cb = move || {
             if let Some(sendable_weak) = sendable_weak.upgrade() {
                 sendable_weak.mark_frame_available();
@@ -185,31 +224,64 @@ impl SoftwareDecoder {
         };
         let mut first_frame = true;
 
-        for (stream, packet) in decoding_context.ictx.packets() {
-            if self.kill_sig.load(std::sync::atomic::Ordering::Relaxed) {
-                update_stream.add(StreamState::Stopped).log_err();
-                break;
+        loop {
+            if self.asked_for_termination() {
+                dart_update_stream.add(StreamState::Stopped).log_err();
+                trace!("stream killed, exiting");
+                self.terminate(&mut decoding_context.decoder).log_err();
+                return StreamExitResult::LegalExit;
             }
-
-            if stream.index() == decoding_context.video_stream_index {
-                let mut packet = packet;
-                decoding_context.decoder.send_packet(&mut packet).log_err();
-                self.on_new_sample(
-                    &mut decoding_context.decoder,
-                    &mut decoding_context.scaler,
-                    &cb,
-                )
-                .log_err();
-                if first_frame {
-                    first_frame = false;
-                    trace!("first frame received, marking stream as playing");
-                    update_stream
-                        .add(StreamState::Playing { texture_id })
+            let mut packet = ffmpeg::Packet::empty();
+            match packet.read(&mut decoding_context.ictx) {
+                Ok(..) => unsafe {
+                    let stream = ffmpeg::format::stream::Stream::wrap(
+                        // this somehow gets the raw C ptr to the stream..
+                        mem::transmute_copy(&&decoding_context.ictx),
+                        packet.stream(),
+                    );
+                    if packet.is_empty() {
+                        trace!("received empty packet, skipping");
+                        continue;
+                    }
+                    if stream.index() == decoding_context.video_stream_index {
+                        decoding_context.decoder.send_packet(&mut packet).log_err();
+                        self.on_new_sample(
+                            &mut decoding_context.decoder,
+                            &mut decoding_context.scaler,
+                            &cb,
+                        )
                         .log_err();
+                        if first_frame {
+                            first_frame = false;
+                            trace!("first frame received, marking stream as playing");
+                            dart_update_stream
+                                .add(StreamState::Playing { texture_id })
+                                .log_err();
+                        }
+                    }
+                },
+
+                Err(ffmpeg::Error::Eof) => {
+                    self.terminate(&mut decoding_context.decoder).log_err();
+                    return StreamExitResult::EOF;
+                }
+                Err(ffmpeg::Error::Other {
+                    errno: ffmpeg::error::EAGAIN,
+                }) => {
+                    // EAGAIN means try again, so just continue the loop
+                    continue;
+                }
+                Err(..) => {
+                    info!("Failed to get frame");
+                    dart_update_stream
+                        .add(StreamState::Error(
+                            "stream corrupted, reinitializing".to_owned(),
+                        ))
+                        .log_err();
+                    return StreamExitResult::Error;
                 }
             }
         }
-        self.terminate(&mut decoding_context.decoder).log_err();
     }
 
     fn terminate(&self, decoder: &mut ffmpeg::decoder::Video) -> anyhow::Result<()> {
@@ -240,7 +312,7 @@ impl SoftwareDecoder {
                 }
             }
             mark_frame_avb();
-            if self.kill_sig.load(std::sync::atomic::Ordering::Relaxed) {
+            if self.asked_for_termination() {
                 break;
             }
         }

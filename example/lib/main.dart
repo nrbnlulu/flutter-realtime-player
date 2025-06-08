@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 import 'package:flutter_realtime_player/video_player.dart';
 
 import 'package:window_manager/window_manager.dart';
@@ -39,12 +38,12 @@ class StreamControlWidget extends StatefulWidget {
 class StreamControlWidgetState extends State<StreamControlWidget> {
   bool _isStreaming = true;
   final TextEditingController _urlController = TextEditingController(
-    text: "enter_real.rtsp",
+    text: "rtsp://demo:554/ch_402",
   );
   @override
   void dispose() {
     _urlController.dispose();
-    
+
     super.dispose();
   }
 
@@ -86,6 +85,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
               onPressed: _toggleStream,
               child: Text(_isStreaming ? 'Stop Stream' : 'Start Stream'),
             ),
+
             const SizedBox(width: 10),
             ElevatedButton(
               onPressed: _openInNewWindow,
@@ -93,6 +93,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
             ),
           ],
         ),
+
         const SizedBox(height: 20),
         _isStreaming
             ? SizedBox(
