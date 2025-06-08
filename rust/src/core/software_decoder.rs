@@ -238,7 +238,6 @@ impl SoftwareDecoder {
             }
             let mut packet = ffmpeg::Packet::empty();
 
-            trace!("Input stream framerate: {}", framerate);
             match packet.read(&mut decoding_context.ictx) {
                 Ok(..) => unsafe {
                     let stream = ffmpeg::format::stream::Stream::wrap(
