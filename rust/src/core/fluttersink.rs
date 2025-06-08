@@ -53,7 +53,8 @@ pub fn create_new_playable(
 
     thread::spawn(move || {
         trace!("starting to stream on a new thread");
-        decoding_manager.stream(sendable_texture, update_stream, texture_id);
+            decoding_manager.stream(sendable_texture, update_stream, texture_id);
+
     });
     trace!("initialized; returning texture id: {}", texture_id);
 

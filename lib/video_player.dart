@@ -139,19 +139,25 @@ class _VideoPlayerState extends State<VideoPlayer> {
         return Center(
           child: Text('Video stopped', style: const TextStyle(fontSize: 16)),
         );
-      
     }
   }
 
   @override
   void dispose() {
     super.dispose();
+
     Future.microtask(() async {
       await streamSubscription?.cancel();
+    });
+    Future.microtask(() async {
       if (widget.controller.sessionId != null) {
-        await rlib.destroyStreamSession(
-          sessionId: widget.controller.sessionId!,
-        );
+        try {
+          await rlib.destroyStreamSession(
+            sessionId: widget.controller.sessionId!,
+          );
+        } catch (e) {
+          // Optionally handle the error, e.g., log it
+        }
         widget.controller.sessionId = null;
       }
     });
