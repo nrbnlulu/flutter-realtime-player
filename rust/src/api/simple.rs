@@ -53,8 +53,8 @@ pub fn create_new_playable(
         sink.clone(),
     )
     .inspect_err(|e| {
-        log::info!("Failed to create new playable: {:?}", e);
-        let _ = sink.add(StreamState::Error(e.to_string()));
+        log::debug!("Failed to create new playable: {:?}", e);
+        sink.add(StreamState::Error(e.to_string())).log_err();
     });
 }
 

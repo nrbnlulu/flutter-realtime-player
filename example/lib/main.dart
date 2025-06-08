@@ -47,7 +47,6 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     super.dispose();
   }
 
-
   void _toggleStream() {
     debugPrint("Toggle stream");
     setState(() {

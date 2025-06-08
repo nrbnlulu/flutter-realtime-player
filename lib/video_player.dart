@@ -147,9 +147,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
     super.dispose();
 
     Future.microtask(() async {
-      await streamSubscription?.cancel();
-    });
-    Future.microtask(() async {
+      streamSubscription?.cancel();
       if (widget.controller.sessionId != null) {
         try {
           await rlib.destroyStreamSession(
@@ -159,6 +157,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
           // Optionally handle the error, e.g., log it
         }
         widget.controller.sessionId = null;
+
       }
     });
   }
