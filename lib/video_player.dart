@@ -157,7 +157,6 @@ class _VideoPlayerState extends State<VideoPlayer> {
           // Optionally handle the error, e.g., log it
         }
         widget.controller.sessionId = null;
-
       }
     });
   }

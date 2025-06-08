@@ -130,11 +130,13 @@ impl SoftwareDecoder {
     pub fn initialize_stream(&self) -> anyhow::Result<()> {
         trace!("starting ffmpeg session for {}", &self.video_info.uri);
         let mut option_dict = ffmpeg::Dictionary::new();
-        option_dict.set("prefer_tcp", "1");
+        option_dict.set("prefer_tcp", "0");
         // if Watch a stream over UDP, with a max reordering delay of 0.5 second
         option_dict.set("max_delay", "500000"); // 0.5 second worth of packets
                                                 // tcp socket global timeout
         option_dict.set("timeout", "1000000"); // 1 second timeout
+        option_dict.set("analyzeduration", "1M"); // 1 Minuet worth of packets
+
         let ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
         trace!("got ictx");
 
