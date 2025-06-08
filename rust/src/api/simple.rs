@@ -1,11 +1,12 @@
 use flutter_rust_bridge::frb;
 use log::{debug, trace};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use crate::{
     core::{
-        fluttersink::{self, utils::LogErr},
+        fluttersink,
         types::VideoInfo,
-    }, dart_types::StreamState, frb_generated::StreamSink
+    }, dart_types::StreamState, frb_generated::StreamSink, utils::LogErr
 };
 
 #[flutter_rust_bridge::frb(init)]
@@ -14,16 +15,33 @@ pub fn init_app() {
     if *is_initialized {
         return;
     }
-    let log_file = tracing_appender::rolling::daily("./logs", "flutter_realtime_player.log");
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(log_file)
+    let file_appender = tracing_appender::rolling::daily("./logs", "flutter_realtime_player.log");
+    let (non_blocking_file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(non_blocking_file_writer)
         .with_thread_ids(true)
         .with_thread_names(true)
         .with_file(true)
         .with_line_number(true)
-        .with_ansi(false)
-        .init();
+        .with_ansi(false);
+    let console_layer = tracing_subscriber::fmt::layer()
+        .with_writer(std::io::stdout)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_ansi(false);
+    let env_filter = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info")) // Default to info level if RUST_LOG is not set
+        .unwrap();
+    // 5. Combine the layers and initialize the global subscriber
+    tracing_subscriber::registry()
+        .with(env_filter) // Apply the environment filter
+        .with(console_layer) // Add the stdout layer
+        .with(file_layer) // Add the file layer
+        .try_init().unwrap(); // Set as the global default subscriber
+    
     // Default utilities - feel free to custom
     flutter_rust_bridge::setup_default_user_utils();
     debug!("Done initializing");

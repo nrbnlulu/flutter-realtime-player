@@ -11,9 +11,8 @@ use log::{debug, trace};
 
 use crate::{
     core::{
-        fluttersink::utils::LogErr,
         types::DartUpdateStream,
-    }, dart_types::StreamState, utils::invoke_on_platform_main_thread
+    }, dart_types::StreamState, utils::{invoke_on_platform_main_thread, LogErr}
 };
 
 use super::types;
