@@ -9,8 +9,7 @@ lazy_static::lazy_static! {
     static ref WORKER_GUARD: std::sync::Mutex<Option<tracing_appender::non_blocking::WorkerGuard>> = std::sync::Mutex::new(None);
 }
 
-
-pub(crate) fn init_logger(){
+pub(crate) fn init_logger() {
     let is_initialized = IS_INITIALIZED.lock().unwrap();
     if *is_initialized {
         return;

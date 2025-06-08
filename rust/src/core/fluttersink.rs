@@ -1,4 +1,3 @@
-
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -8,10 +7,7 @@ use std::{
 use log::{info, trace};
 
 use crate::{
-    core::{
-        software_decoder::SoftwareDecoder,
-        types::{DartUpdateStream},
-    },
+    core::{software_decoder::SoftwareDecoder, types::DartUpdateStream},
     utils::invoke_on_platform_main_thread,
 };
 
@@ -53,8 +49,7 @@ pub fn create_new_playable(
 
     thread::spawn(move || {
         trace!("starting to stream on a new thread");
-            decoding_manager.stream(sendable_texture, update_stream, texture_id);
-
+        decoding_manager.stream(sendable_texture, update_stream, texture_id);
     });
     trace!("initialized; returning texture id: {}", texture_id);
 

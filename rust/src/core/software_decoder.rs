@@ -3,18 +3,14 @@
 use std::{
     alloc::{self, Layout},
     mem,
-    ops::Deref,
-    sync::{atomic::AtomicBool, Arc, Mutex, Weak}, thread,
+    sync::{atomic::AtomicBool, Arc, Mutex, Weak},
+    thread,
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, info, trace};
 
-use crate::{
-    core::types::DartUpdateStream,
-    dart_types::StreamState,
-    utils::{invoke_on_platform_main_thread, LogErr},
-};
+use crate::{core::types::DartUpdateStream, dart_types::StreamState, utils::LogErr};
 
 use super::types;
 
@@ -184,7 +180,7 @@ impl SoftwareDecoder {
     ) {
         let weak_sendable_texture: WeakSendableTexture = Arc::downgrade(&sendable_texture);
         drop(sendable_texture); // drop the strong reference to allow cleanup
-        
+
         let first_res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
         if matches!(first_res, StreamExitResult::Error) {
             loop {
@@ -269,7 +265,9 @@ impl SoftwareDecoder {
                     self.terminate(&mut decoding_context.decoder).log_err();
                     return StreamExitResult::EOF;
                 }
-                Err(ffmpeg::Error::Other { errno: ffmpeg::error::EAGAIN }) => {
+                Err(ffmpeg::Error::Other {
+                    errno: ffmpeg::error::EAGAIN,
+                }) => {
                     // EAGAIN means try again, so just continue the loop
                     continue;
                 }

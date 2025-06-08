@@ -30,5 +30,4 @@ impl VideoInfo {
     }
 }
 
-
 pub type DartUpdateStream = StreamSink<StreamState>;

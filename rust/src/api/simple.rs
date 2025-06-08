@@ -7,13 +7,10 @@ use crate::{
     utils::LogErr,
 };
 
-
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     crate::core::init_logger();
 }
-
-
 
 pub fn flutter_realtime_player_init(ffi_ptr: i64) {
     let mut is_initialized = IS_INITIALIZED.lock().unwrap();
