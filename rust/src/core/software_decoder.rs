@@ -4,7 +4,7 @@ use std::{
     alloc::{self, Layout},
     mem,
     ops::Deref,
-    sync::{atomic::AtomicBool, Arc, Mutex, Weak},
+    sync::{atomic::AtomicBool, Arc, Mutex, Weak}, thread,
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
@@ -191,13 +191,13 @@ impl SoftwareDecoder {
                 if self.asked_for_termination() {
                     break;
                 }
-
-                trace!("stream failed, reinitializing");
+                trace!("stream failed, reinitializing in 2 seconds");
+                thread::sleep(std::time::Duration::from_secs(2));
                 if let Err(e) = self.initialize_stream() {
                     info!("Failed to reinitialize stream: {:?}", e);
                     dart_update_stream
                         .add(StreamState::Error(
-                            "stream initialization failed".to_owned(),
+                            "stream initialization failed, reinitializing in 2 seconds".to_owned(),
                         ))
                         .log_err();
                     continue;
@@ -269,7 +269,10 @@ impl SoftwareDecoder {
                     self.terminate(&mut decoding_context.decoder).log_err();
                     return StreamExitResult::EOF;
                 }
-
+                Err(ffmpeg::Error::Other { errno: ffmpeg::error::EAGAIN }) => {
+                    // EAGAIN means try again, so just continue the loop
+                    continue;
+                }
                 Err(..) => {
                     info!("Failed to get frame");
                     dart_update_stream

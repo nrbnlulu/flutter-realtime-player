@@ -38,7 +38,7 @@ class StreamControlWidget extends StatefulWidget {
 class StreamControlWidgetState extends State<StreamControlWidget> {
   bool _isStreaming = true;
   final TextEditingController _urlController = TextEditingController(
-    text: "rtsp://admin:camteam524@37.25.34.76:554/ch_402",
+    text: "rtsp://demo:554/ch_402",
   );
   @override
   void dispose() {
@@ -90,7 +90,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
             ElevatedButton(
               onPressed: _openInNewWindow,
               child: const Text('Open in New Window'),
-              
+
             ),
           ],
         ),
