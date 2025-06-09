@@ -11,8 +11,9 @@ class VideoController {
   final String url;
   final bool mute;
   int? sessionId;
+  Map<String, String>? ffmpegOptions;
 
-  VideoController({required this.url, this.mute = true});
+  VideoController({required this.url, this.mute = true, this.ffmpegOptions});
 
   Future<void> dispose() async {
     if (sessionId != null) {
@@ -29,6 +30,7 @@ class VideoController {
     try {
       stream = rlib.createNewPlayable(
         engineHandle: handle,
+        ffmpegOptions: ffmpegOptions,
         videoInfo: VideoInfo(
           uri: url,
           dimensions: const VideoDimensions(width: 640, height: 360),
@@ -47,6 +49,7 @@ class VideoController {
 class VideoPlayer extends StatefulWidget {
   final VideoController controller;
   final Widget? child;
+
   const VideoPlayer._({super.key, required this.controller, this.child});
 
   factory VideoPlayer.fromController({
@@ -60,12 +63,13 @@ class VideoPlayer extends StatefulWidget {
   factory VideoPlayer.fromConfig({
     GlobalKey? key,
     required String url,
+    Map<String, String>? ffmpegOptions,
     bool mute = true,
     Widget? child,
   }) {
     return VideoPlayer._(
       key: key,
-      controller: VideoController(url: url, mute: mute),
+      controller: VideoController(url: url, mute: mute, ffmpegOptions: ffmpegOptions),
       child: child,
     );
   }

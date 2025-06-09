@@ -1,10 +1,7 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
-    alloc::{self, Layout},
-    mem,
-    sync::{atomic::AtomicBool, Arc, Mutex, Weak},
-    thread,
+    alloc::{self, Layout}, collections::HashMap, mem, sync::{atomic::AtomicBool, Arc, Mutex, Weak}, thread
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
@@ -107,6 +104,7 @@ pub struct SoftwareDecoder {
     payload_holder: Weak<PayloadHolder>,
     session_id: i64,
     decoding_context: Mutex<Option<DecodingContext>>,
+    ffmpeg_options: Option<HashMap<String, String>>,
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
@@ -116,6 +114,7 @@ impl SoftwareDecoder {
     pub fn new(
         video_info: &types::VideoInfo,
         session_id: i64,
+        ffmpeg_options: Option<HashMap<String, String>>,
     ) -> anyhow::Result<(Arc<Self>, Arc<PayloadHolder>)> {
         let payload_holder = Arc::new(PayloadHolder::new());
         let self_ = Arc::new(Self {
@@ -124,6 +123,7 @@ impl SoftwareDecoder {
             payload_holder: Arc::downgrade(&payload_holder),
             session_id,
             decoding_context: Mutex::new(None),
+            ffmpeg_options
         });
         Ok((self_, payload_holder))
     }
@@ -134,10 +134,11 @@ impl SoftwareDecoder {
         option_dict.set("prefer_tcp", "0");
         // if Watch a stream over UDP, with a max reordering delay of 0.5 second
         option_dict.set("max_delay", "500000"); // 0.5 second worth of packets
-                                                // tcp socket global timeout
-        option_dict.set("timeout", "1000000"); // 1 second timeout
-        option_dict.set("analyzeduration", "1M"); // 1 Minuet worth of packets
-
+        if let Some(ref options) = self.ffmpeg_options {
+            for (key, value) in options {
+                option_dict.set(key, value);
+            }
+        }
         let ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
         trace!("got ictx");
 
@@ -166,7 +167,7 @@ impl SoftwareDecoder {
             video_stream_index,
             decoder,
             scaler,
-            framerate: frame_rate as _
+            framerate: frame_rate as _,
         };
         let mut decoding_context = self.decoding_context.lock().unwrap();
         decoding_context.replace(context);
@@ -288,7 +289,9 @@ impl SoftwareDecoder {
                 }
             }
             // wait for the next frame
-            thread::sleep(std::time::Duration::from_millis(1000 / decoding_context.framerate as u64));
+            thread::sleep(std::time::Duration::from_millis(
+                1000 / decoding_context.framerate as u64,
+            ));
         }
     }
 

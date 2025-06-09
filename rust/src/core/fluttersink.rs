@@ -26,8 +26,9 @@ pub fn create_new_playable(
     engine_handle: i64,
     video_info: types::VideoInfo,
     update_stream: DartUpdateStream,
+    ffmpeg_options: Option<HashMap<String, String>>,
 ) -> anyhow::Result<()> {
-    let (decoding_manager, payload_holder) = SoftwareDecoder::new(&video_info, session_id)?;
+    let (decoding_manager, payload_holder) = SoftwareDecoder::new(&video_info, session_id, ffmpeg_options)?;
     decoding_manager.initialize_stream()?;
     // by now the stream is initialized successfully, we can create a flutter texture
     let (sendable_texture, texture_id) =

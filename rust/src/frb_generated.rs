@@ -69,6 +69,8 @@ fn wire__crate__api__simple__create_new_playable_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_engine_handle = <i64>::sse_decode(&mut deserializer);
             let api_video_info = <crate::core::types::VideoInfo>::sse_decode(&mut deserializer);
+            let api_ffmpeg_options =
+                <Option<std::collections::HashMap<String, String>>>::sse_decode(&mut deserializer);
             let api_sink = <StreamSink<
                 crate::dart_types::StreamState,
                 flutter_rust_bridge::for_generated::SseCodec,
@@ -80,6 +82,7 @@ fn wire__crate__api__simple__create_new_playable_impl(
                         crate::api::simple::create_new_playable(
                             api_engine_handle,
                             api_video_info,
+                            api_ffmpeg_options,
                             api_sink,
                         );
                     })?;
@@ -239,6 +242,14 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
     }
 }
 
+impl SseDecode for std::collections::HashMap<String, String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <Vec<(String, String)>>::sse_decode(deserializer);
+        return inner.into_iter().collect();
+    }
+}
+
 impl SseDecode
     for StreamSink<crate::dart_types::StreamState, flutter_rust_bridge::for_generated::SseCodec>
 {
@@ -290,6 +301,31 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for Vec<(String, String)> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<(String, String)>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Option<std::collections::HashMap<String, String>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<std::collections::HashMap<String, String>>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<i32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -298,6 +334,15 @@ impl SseDecode for Option<i32> {
         } else {
             return None;
         }
+    }
+}
+
+impl SseDecode for (String, String) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_field0 = <String>::sse_decode(deserializer);
+        let mut var_field1 = <String>::sse_decode(deserializer);
+        return (var_field0, var_field1);
     }
 }
 
@@ -504,6 +549,13 @@ impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
     }
 }
 
+impl SseEncode for std::collections::HashMap<String, String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<(String, String)>>::sse_encode(self.into_iter().collect(), serializer);
+    }
+}
+
 impl SseEncode
     for StreamSink<crate::dart_types::StreamState, flutter_rust_bridge::for_generated::SseCodec>
 {
@@ -551,6 +603,26 @@ impl SseEncode for Vec<u8> {
     }
 }
 
+impl SseEncode for Vec<(String, String)> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <(String, String)>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<std::collections::HashMap<String, String>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <std::collections::HashMap<String, String>>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<i32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -558,6 +630,14 @@ impl SseEncode for Option<i32> {
         if let Some(value) = self {
             <i32>::sse_encode(value, serializer);
         }
+    }
+}
+
+impl SseEncode for (String, String) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.0, serializer);
+        <String>::sse_encode(self.1, serializer);
     }
 }
 

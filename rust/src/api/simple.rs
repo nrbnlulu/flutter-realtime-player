@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use log::{debug, trace};
 
 use crate::{
@@ -32,6 +34,7 @@ lazy_static::lazy_static! {
 pub fn create_new_playable(
     engine_handle: i64,
     video_info: VideoInfo,
+    ffmpeg_options: Option<HashMap<String, String>>,
     sink: StreamSink<StreamState>,
 ) {
     let mut session_counter = SESSION_COUNTER.lock().unwrap();
@@ -51,6 +54,7 @@ pub fn create_new_playable(
         engine_handle,
         video_info,
         sink.clone(),
+        ffmpeg_options,
     )
     .inspect_err(|e| {
         log::debug!("Failed to create new playable: {:?}", e);

@@ -8,8 +8,8 @@ import '../dart_types.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `IS_INITIALIZED`, `SESSION_COUNTER`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `deref`, `initialize`, `initialize`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SESSION_COUNTER`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `initialize`
 
 Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
     RustLib.instance.api.crateApiSimpleFlutterRealtimePlayerInit(
@@ -20,9 +20,11 @@ Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
 Stream<StreamState> createNewPlayable({
   required PlatformInt64 engineHandle,
   required VideoInfo videoInfo,
+  Map<String, String>? ffmpegOptions,
 }) => RustLib.instance.api.crateApiSimpleCreateNewPlayable(
   engineHandle: engineHandle,
   videoInfo: videoInfo,
+  ffmpegOptions: ffmpegOptions,
 );
 
 Future<void> destroyEngineStreams({required PlatformInt64 engineId}) =>
