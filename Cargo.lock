@@ -455,16 +455,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
-name = "ffmpeg-next"
-version = "7.1.0"
-source = "git+https://github.com/nrbnlulu/rust-ffmpeg?branch=support-7.1-windows#dba44724193af8eca661242c7a3129c919ad8da4"
-dependencies = [
- "bitflags 2.9.1",
- "ffmpeg-sys-next",
- "libc",
-]
-
-[[package]]
 name = "ffmpeg-sys-next"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -484,7 +474,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cfg_aliases",
- "ffmpeg-next",
  "flutter_rust_bridge",
  "gdk",
  "gdk-sys",
@@ -497,6 +486,7 @@ dependencies = [
  "irondash_texture",
  "lazy_static",
  "log",
+ "rffmpeg",
  "thread_local",
  "tracing-appender",
  "tracing-subscriber",
@@ -1516,6 +1506,16 @@ name = "regex-syntax"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
+
+[[package]]
+name = "rffmpeg"
+version = "7.1.0"
+source = "git+https://github.com/nrbnlulu/rffmpeg?branch=master#e995c2b6fcd78e7af6c5d3f4c601106b2fe4242d"
+dependencies = [
+ "bitflags 2.9.1",
+ "ffmpeg-sys-next",
+ "libc",
+]
 
 [[package]]
 name = "rustc-demangle"
