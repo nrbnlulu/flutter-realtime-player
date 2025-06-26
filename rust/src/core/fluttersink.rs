@@ -14,7 +14,9 @@ use crate::{
 use super::{software_decoder::SharedSendableTexture, types};
 
 pub fn init() -> anyhow::Result<()> {
-    ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))
+    ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))?;
+    ffmpeg::util::log::set_level(ffmpeg::util::log::Level::Fatal);
+    Ok(())
 }
 
 lazy_static::lazy_static! {
