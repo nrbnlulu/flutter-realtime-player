@@ -12,6 +12,9 @@ class VideoController {
   final bool mute;
   int? sessionId;
   Map<String, String>? ffmpegOptions;
+  Stream<StreamState>? _stream;
+
+  Stream<StreamState>? get stream => _stream;
 
   VideoController({required this.url, this.mute = true, this.ffmpegOptions});
 
@@ -37,6 +40,7 @@ class VideoController {
           mute: mute,
         ),
       );
+      _stream = stream;
     } catch (e) {
       error = e.toString();
     }
@@ -80,21 +84,26 @@ class VideoPlayer extends StatefulWidget {
 
 class _VideoPlayerState extends State<VideoPlayer> {
   StreamState? currentState;
-  Stream<StreamState>? stream;
+  late Stream<StreamState> stream;
   StreamSubscription<StreamState>? streamSubscription;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() async {
-      final stream = rlib.createNewPlayable(
-        engineHandle: await EngineContext.instance.getEngineHandle(),
-        videoInfo: VideoInfo(
-          uri: widget.controller.url,
-          dimensions: const VideoDimensions(width: 640, height: 360),
-          mute: widget.controller.mute,
-        ),
-      );
+      if (widget.controller.stream case final intiatedStream?) {
+        stream = intiatedStream;
+      } else {
+        stream = rlib.createNewPlayable(
+          engineHandle: await EngineContext.instance.getEngineHandle(),
+          videoInfo: VideoInfo(
+            uri: widget.controller.url,
+            dimensions: const VideoDimensions(width: 640, height: 360),
+            mute: widget.controller.mute,
+          ),
+        );
+      }
+
       streamSubscription = stream.listen(
         (state) => setState(() {
           currentState = state;
@@ -127,22 +136,12 @@ class _VideoPlayerState extends State<VideoPlayer> {
         return loadingWidget('loading video...');
       case StreamState_Error(field0: final message):
         return Center(
-          child: Text(
-            'Error: $message',
-            style: const TextStyle(color: Colors.red, fontSize: 16),
-          ),
+          child: Text('Error: $message', style: const TextStyle(color: Colors.red, fontSize: 16)),
         );
       case StreamState_Playing(textureId: final textureId):
-        return Stack(
-          children: [
-            Texture(textureId: textureId),
-            widget.child ?? const SizedBox(),
-          ],
-        );
+        return Stack(children: [Texture(textureId: textureId), widget.child ?? const SizedBox()]);
       case StreamState_Stopped():
-        return Center(
-          child: Text('Video stopped', style: const TextStyle(fontSize: 16)),
-        );
+        return Center(child: Text('Video stopped', style: const TextStyle(fontSize: 16)));
     }
   }
 
@@ -154,9 +153,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
       streamSubscription?.cancel();
       if (widget.controller.sessionId != null) {
         try {
-          await rlib.destroyStreamSession(
-            sessionId: widget.controller.sessionId!,
-          );
+          await rlib.destroyStreamSession(sessionId: widget.controller.sessionId!);
         } catch (e) {
           // Optionally handle the error, e.g., log it
         }
