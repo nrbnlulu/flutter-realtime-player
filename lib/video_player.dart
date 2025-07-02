@@ -12,6 +12,9 @@ class VideoController {
   final bool mute;
   int? sessionId;
   Map<String, String>? ffmpegOptions;
+  Stream<StreamState>? _stream;
+
+  Stream<StreamState>? get stream => _stream;
 
   VideoController({required this.url, this.mute = true, this.ffmpegOptions});
 
@@ -37,6 +40,7 @@ class VideoController {
           mute: mute,
         ),
       );
+      _stream = stream;
     } catch (e) {
       error = e.toString();
     }
@@ -69,7 +73,11 @@ class VideoPlayer extends StatefulWidget {
   }) {
     return VideoPlayer._(
       key: key,
-      controller: VideoController(url: url, mute: mute, ffmpegOptions: ffmpegOptions),
+      controller: VideoController(
+        url: url,
+        mute: mute,
+        ffmpegOptions: ffmpegOptions,
+      ),
       child: child,
     );
   }
@@ -80,22 +88,27 @@ class VideoPlayer extends StatefulWidget {
 
 class _VideoPlayerState extends State<VideoPlayer> {
   StreamState? currentState;
-  Stream<StreamState>? stream;
+  late Stream<StreamState> streamState;
   StreamSubscription<StreamState>? streamSubscription;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() async {
-      final stream = rlib.createNewPlayable(
-        engineHandle: await EngineContext.instance.getEngineHandle(),
-        videoInfo: VideoInfo(
-          uri: widget.controller.url,
-          dimensions: const VideoDimensions(width: 640, height: 360),
-          mute: widget.controller.mute,
-        ),
-      );
-      streamSubscription = stream.listen(
+      if (widget.controller.stream case final initiatedStream?) {
+        streamState = initiatedStream;
+      } else {
+        streamState = rlib.createNewPlayable(
+          engineHandle: await EngineContext.instance.getEngineHandle(),
+          videoInfo: VideoInfo(
+            uri: widget.controller.url,
+            dimensions: const VideoDimensions(width: 640, height: 360),
+            mute: widget.controller.mute,
+          ),
+        );
+      }
+
+      streamSubscription = streamState.listen(
         (state) => setState(() {
           currentState = state;
         }),
