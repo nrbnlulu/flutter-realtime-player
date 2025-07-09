@@ -4,11 +4,11 @@ use std::{
     thread,
 };
 
-use log::{info, trace};
+use log::{error, info, trace};
 
 use crate::{
     core::{software_decoder::SoftwareDecoder, types::DartUpdateStream},
-    utils::invoke_on_platform_main_thread,
+    utils::{invoke_on_platform_main_thread, LogErr},
 };
 
 use super::{software_decoder::SharedSendableTexture, types};
@@ -31,8 +31,7 @@ pub fn create_new_playable(
     ffmpeg_options: Option<HashMap<String, String>>,
 ) -> anyhow::Result<()> {
     let (decoding_manager, payload_holder) = SoftwareDecoder::new(&video_info, session_id, ffmpeg_options)?;
-    decoding_manager.initialize_stream()?;
-    // by now the stream is initialized successfully, we can create a flutter texture
+
     let (sendable_texture, texture_id) =
         invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
             let texture =
@@ -51,10 +50,12 @@ pub fn create_new_playable(
     );
 
     thread::spawn(move || {
-        trace!("starting to stream on a new thread");
-        decoding_manager.stream(sendable_texture, update_stream, texture_id);
+        if let Err(err) = decoding_manager.stream(sendable_texture, update_stream, texture_id){
+            error!("Error streaming video: {}", err);
+        }
+
+        
     });
-    trace!("initialized; returning texture id: {}", texture_id);
 
     Ok(())
 }

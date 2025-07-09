@@ -119,6 +119,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     final Map<String, String> options = {};
     for (final entry in controllers) {
       final key = entry.key.text.trim();
+      
       final value = entry.value.text.trim();
       if (key.isNotEmpty) {
         options[key] = value;
@@ -131,7 +132,9 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     final url = _streams[index].urlController.text;
     final window = await DesktopMultiWindow.createWindow(
       jsonEncode({'url': url}),
+      
     );
+    
 
     window
       ..setFrame(const Offset(100, 100) & const Size(800, 600))
