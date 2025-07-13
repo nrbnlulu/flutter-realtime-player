@@ -292,7 +292,7 @@ impl SoftwareDecoder {
             if self.asked_for_termination() {
                 return Ok(());
             }
-
+            dart_update_stream.add(StreamState::Loading).log_err();
             if let Err(e) = self.initialize_stream() {
                 info!(
                     "Failed to reinitialize stream({}): {}",
