@@ -128,6 +128,74 @@ unsafe impl Sync for SoftwareDecoder {}
 pub type SharedSendableTexture = Arc<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
 type WeakSendableTexture = Weak<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
 impl SoftwareDecoder {
+    /// Validates if a stream is compatible with software scaling
+    fn validate_stream_compatibility(
+        decoder: &ffmpeg::decoder::Video,
+    ) -> Result<(), ffmpeg::Error> {
+        let width = decoder.width();
+        let height = decoder.height();
+
+        // Validate frame dimensions
+        if width == 0 || height == 0 {
+            error!("Invalid frame dimensions: {}x{}", width, height);
+            return Err(ffmpeg::Error::InvalidData);
+        }
+
+        // Warn about potentially problematic dimensions
+        if width % 2 != 0 || height % 2 != 0 {
+            warn!(
+                "Stream has odd dimensions: {}x{}, this might cause issues with some codecs",
+                width, height
+            );
+        }
+
+        // Check for extremely large dimensions that might cause memory issues
+        if width > 7680 || height > 4320 {
+            warn!(
+                "Very large frame dimensions detected: {}x{}, this may cause performance issues",
+                width, height
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Creates a scaler with fallback options for maximum compatibility
+    fn create_scaler_with_fallbacks(
+        src_format: ffmpeg::format::Pixel,
+        width: u32,
+        height: u32,
+        dst_format: ffmpeg::format::Pixel,
+    ) -> Result<ffmpeg::software::scaling::Context, ffmpeg::Error> {
+        // Try different scaling algorithms in order of preference
+        let scaling_flags = [
+            ffmpeg::software::scaling::Flags::FAST_BILINEAR,
+            ffmpeg::software::scaling::Flags::BILINEAR,
+            ffmpeg::software::scaling::Flags::POINT,
+            ffmpeg::software::scaling::Flags::AREA,
+        ];
+
+        for flag in scaling_flags.iter() {
+            match ffmpeg::software::scaling::Context::get(
+                src_format, width, height, dst_format, width, height, *flag,
+            ) {
+                Ok(scaler) => {
+                    if !flag.contains(ffmpeg::software::scaling::Flags::FAST_BILINEAR)
+                        && !flag.contains(ffmpeg::software::scaling::Flags::BILINEAR)
+                    {
+                        warn!("Using fallback scaling algorithm: {:?}", flag);
+                    }
+                    return Ok(scaler);
+                }
+                Err(e) => {
+                    warn!("Scaling with {:?} failed: {}", flag, e);
+                }
+            }
+        }
+
+        Err(ffmpeg::Error::InvalidData)
+    }
+
     pub fn new(
         video_info: &types::VideoInfo,
         session_id: i64,
@@ -140,7 +208,7 @@ impl SoftwareDecoder {
             payload_holder: Arc::downgrade(&payload_holder),
             session_id,
             decoding_context: Mutex::new(None),
-            ffmpeg_options,
+            ffmpeg_options: ffmpeg_options,
         });
         Ok((self_, payload_holder))
     }
@@ -154,27 +222,43 @@ impl SoftwareDecoder {
             }
         }
         let ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
-        trace!("got ictx");
-
         let input = ictx
             .streams()
             .best(ffmpeg::media::Type::Video)
             .ok_or(ffmpeg::Error::StreamNotFound)?;
-        trace!("got input stream: {:?}", input);
         let video_stream_index = input.index();
         let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
-
         let decoder = context_decoder.decoder().video()?;
-
-        let scaler = ffmpeg::software::scaling::Context::get(
+        trace!(
+            "got decoder(
+            format={:?},
+            width={:?},
+            height={:?},
+            frame_rate={:?}
+            ",
             decoder.format(),
             decoder.width(),
             decoder.height(),
-            ffmpeg::format::Pixel::RGBA,
-            decoder.width(),
-            decoder.height(),
-            ffmpeg::software::scaling::Flags::BILINEAR,
-        )?;
+            decoder.frame_rate()
+        );
+
+        // Validate stream compatibility
+        Self::validate_stream_compatibility(&decoder)?;
+
+        // Create scaler with fallback options
+        let src_format = decoder.format();
+        let dst_format = ffmpeg::format::Pixel::RGBA;
+        let width = decoder.width();
+        let height = decoder.height();
+
+        let scaler = Self::create_scaler_with_fallbacks(src_format, width, height, dst_format)
+            .map_err(|e| {
+                error!(
+                    "Failed to create scaler for stream {}: {}",
+                    &self.video_info.uri, e
+                );
+                e
+            })?;
         let frame_rate = input.avg_frame_rate().numerator();
         let context = DecodingContext {
             ictx,
@@ -201,7 +285,6 @@ impl SoftwareDecoder {
         sendable_texture: SharedSendableTexture,
         dart_update_stream: DartUpdateStream,
         texture_id: i64,
-        
     ) -> Result<(), StreamExitResult> {
         let weak_sendable_texture: WeakSendableTexture = Arc::downgrade(&sendable_texture);
         drop(sendable_texture); // drop the strong reference to allow cleanup
@@ -217,20 +300,16 @@ impl SoftwareDecoder {
                 );
                 dart_update_stream
                     .add(StreamState::Error(format!(
-                        "stream({}) initialization failed, reinitializing in 2 seconds",
-                        &self.video_info.uri
+                        "stream({}) initialization failed: {}, reinitializing in 2 seconds",
+                        &self.video_info.uri, e
                     )))
                     .log_err();
             } else {
-                trace!("stream({}) initialized", &self.video_info.uri);
+                info!("stream({}) successfully initialized", &self.video_info.uri);
                 let res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
                 if matches!(res, StreamExitResult::LegalExit | StreamExitResult::EOF) {
                     break; // no need to reinitialize
                 }
-                warn!(
-                    "stream({}) exited with error: {:?}; reinitializing in 2 seconds",
-                    &self.video_info.uri, res
-                );
             }
             thread::sleep(Duration::from_millis(2000));
         }
@@ -289,19 +368,26 @@ impl SoftwareDecoder {
                                 .log_err();
                                 if first_frame {
                                     first_frame = false;
-                                    trace!("first frame received, marking stream as playing");
-                                    let _ = dart_update_stream
-                                        .add(StreamState::Playing { texture_id });
-                                } 
+                                    trace!(
+                                        "First frame received for stream {}, marking as playing",
+                                        &self.video_info.uri
+                                    );
+                                    let _ =
+                                        dart_update_stream.add(StreamState::Playing { texture_id });
+                                }
                             }
                             Err(err) => {
-                                error!("error sending packet to decoder: {}", err);
+                                error!(
+                                    "Error sending packet to decoder for stream {}: {}",
+                                    &self.video_info.uri, err
+                                );
                             }
                         }
                     }
                 },
 
                 Err(ffmpeg::Error::Eof) => {
+                    info!("Stream {} reached end of file", &self.video_info.uri);
                     self.terminate(&mut decoding_context.decoder).log_err();
                     return StreamExitResult::EOF;
                 }
@@ -309,14 +395,15 @@ impl SoftwareDecoder {
                     errno: ffmpeg::error::EAGAIN,
                 }) => {
                     // EAGAIN means try again, so just continue the loop
+                    // Decoder is not ready, try again later
+                    trace!("EAGAIN received, retrying packet read");
                     continue;
                 }
                 Err(..) => {
                     info!("Failed to get frame");
-                    let _ = dart_update_stream
-                        .add(StreamState::Error(
-                            "stream corrupted, reinitializing".to_owned(),
-                        ));
+                    let _ = dart_update_stream.add(StreamState::Error(
+                        "stream corrupted, reinitializing".to_owned(),
+                    ));
                     return StreamExitResult::Error;
                 }
             }
