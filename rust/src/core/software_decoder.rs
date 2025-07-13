@@ -10,7 +10,7 @@ use std::{
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use tracing_subscriber::fmt::format::Format;
 
 use crate::{core::types::DartUpdateStream, dart_types::StreamState, utils::LogErr};
@@ -145,7 +145,7 @@ impl SoftwareDecoder {
         Ok((self_, payload_holder))
     }
 
-    pub fn initialize_stream(&self) -> anyhow::Result<()> {
+    pub fn initialize_stream(&self) -> Result<(), ffmpeg::Error> {
         trace!("starting ffmpeg session for {}", &self.video_info.uri);
         let mut option_dict = ffmpeg::Dictionary::new();
         if let Some(ref options) = self.ffmpeg_options {
@@ -201,17 +201,18 @@ impl SoftwareDecoder {
         sendable_texture: SharedSendableTexture,
         dart_update_stream: DartUpdateStream,
         texture_id: i64,
-    ) -> anyhow::Result<()> {
+        
+    ) -> Result<(), StreamExitResult> {
         let weak_sendable_texture: WeakSendableTexture = Arc::downgrade(&sendable_texture);
         drop(sendable_texture); // drop the strong reference to allow cleanup
         loop {
             if self.asked_for_termination() {
                 return Ok(());
             }
-            
+
             if let Err(e) = self.initialize_stream() {
                 info!(
-                    "Failed to reinitialize stream({}): {:?}",
+                    "Failed to reinitialize stream({}): {}",
                     &self.video_info.uri, e
                 );
                 dart_update_stream
@@ -224,7 +225,7 @@ impl SoftwareDecoder {
                 trace!("stream({}) initialized", &self.video_info.uri);
                 let res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
                 if matches!(res, StreamExitResult::LegalExit | StreamExitResult::EOF) {
-                    break;  // no need to reinitialize
+                    break; // no need to reinitialize
                 }
                 warn!(
                     "stream({}) exited with error: {:?}; reinitializing in 2 seconds",
@@ -233,7 +234,7 @@ impl SoftwareDecoder {
             }
             thread::sleep(Duration::from_millis(2000));
         }
-        dart_update_stream.add(StreamState::Stopped).log_err();
+        let _ = dart_update_stream.add(StreamState::Stopped);
         Ok(())
     }
 
@@ -257,7 +258,7 @@ impl SoftwareDecoder {
 
         loop {
             if self.asked_for_termination() {
-                dart_update_stream.add(StreamState::Stopped).log_err();
+                let _ = dart_update_stream.add(StreamState::Stopped);
                 trace!("stream killed, exiting");
                 self.terminate(&mut decoding_context.decoder).log_err();
                 return StreamExitResult::LegalExit;
@@ -278,19 +279,24 @@ impl SoftwareDecoder {
                         continue;
                     }
                     if stream.index() == decoding_context.video_stream_index {
-                        decoding_context.decoder.send_packet(&mut packet).log_err();
-                        self.on_new_sample(
-                            &mut decoding_context.decoder,
-                            &mut decoding_context.scaler,
-                            &cb,
-                        )
-                        .log_err();
-                        if first_frame {
-                            first_frame = false;
-                            trace!("first frame received, marking stream as playing");
-                            dart_update_stream
-                                .add(StreamState::Playing { texture_id })
+                        match decoding_context.decoder.send_packet(&mut packet) {
+                            Ok(_) => {
+                                self.on_new_sample(
+                                    &mut decoding_context.decoder,
+                                    &mut decoding_context.scaler,
+                                    &cb,
+                                )
                                 .log_err();
+                                if first_frame {
+                                    first_frame = false;
+                                    trace!("first frame received, marking stream as playing");
+                                    let _ = dart_update_stream
+                                        .add(StreamState::Playing { texture_id });
+                                } 
+                            }
+                            Err(err) => {
+                                error!("error sending packet to decoder: {}", err);
+                            }
                         }
                     }
                 },
@@ -307,16 +313,13 @@ impl SoftwareDecoder {
                 }
                 Err(..) => {
                     info!("Failed to get frame");
-                    dart_update_stream
+                    let _ = dart_update_stream
                         .add(StreamState::Error(
                             "stream corrupted, reinitializing".to_owned(),
-                        ))
-                        .log_err();
+                        ));
                     return StreamExitResult::Error;
                 }
             }
-            
-            
         }
     }
 

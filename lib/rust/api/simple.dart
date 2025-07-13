@@ -27,6 +27,12 @@ Stream<StreamState> createNewPlayable({
   ffmpegOptions: ffmpegOptions,
 );
 
+/// marks the session as required by the ui
+/// if the ui won't call this every 2 seconds
+/// this session will terminate itself.
+Future<void> markSessionAlive({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleMarkSessionAlive(sessionId: sessionId);
+
 Future<void> destroyEngineStreams({required PlatformInt64 engineId}) =>
     RustLib.instance.api.crateApiSimpleDestroyEngineStreams(engineId: engineId);
 

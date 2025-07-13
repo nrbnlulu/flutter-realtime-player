@@ -20,7 +20,6 @@ pub(crate) fn init_logger() {
     let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(non_blocking_file_writer)
         .with_thread_ids(true)
-        .with_thread_names(true)
         .with_file(true)
         .with_line_number(true)
         .with_ansi(false);

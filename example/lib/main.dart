@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+
 import 'package:flutter_realtime_player/video_player.dart';
 
 import 'package:window_manager/window_manager.dart';
@@ -62,9 +63,14 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
   }
 
   void _toggleStream(int index) {
+
     setState(() {
-      _streams[index].isStreaming = !_streams[index].isStreaming;
-    });
+        if (_streams[index].isStreaming) {
+          _streams[index].isStreaming = false;
+          
+        } else {
+          _streams[index].isStreaming = true;
+        }    });
   }
 
   void _addStream() {
@@ -346,6 +352,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                   height: 240,
                   child: VideoPlayer.fromConfig(
                     url: stream.urlController.text,
+                    
                     ffmpegOptions: widget.collectFfmpegOptions(
                       stream.ffmpegOptionControllers,
                     ),

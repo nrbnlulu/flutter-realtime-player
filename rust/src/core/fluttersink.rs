@@ -19,9 +19,43 @@ pub fn init() -> anyhow::Result<()> {
     Ok(())
 }
 
-lazy_static::lazy_static! {
-static ref SESSION_CACHE: Mutex<HashMap<i64, (Arc<SoftwareDecoder>, i64, SharedSendableTexture)>> = Mutex::new(HashMap::new());
+struct SessionContext{
+    pub decoder: Arc<SoftwareDecoder>,
+    pub engine_handle: i64,
+    pub sendable_texture: SharedSendableTexture,
+    pub last_alive_mark: std::time::SystemTime
 }
+lazy_static::lazy_static! {
+static ref SESSION_CACHE: Mutex<HashMap<i64, SessionContext>> = Mutex::new(HashMap::new());
+}
+pub fn stream_alive_tester_task(){
+    loop {
+        let mut closed_sessions = Vec::new();
+        
+        {
+            let session_cache = SESSION_CACHE.lock().unwrap();
+            let now = std::time::SystemTime::now();
+            for (session_id, ctx) in session_cache.iter(){
+                if now.duration_since(ctx.last_alive_mark).unwrap().as_millis() > 5000 {
+                    ctx.decoder.destroy_stream();
+                    closed_sessions.push(session_id.clone());
+                }
+            }
+        }
+        if !closed_sessions.is_empty(){
+            // drop the sessions on platform thread
+            invoke_on_platform_main_thread(move|| {
+                let mut session_cache = SESSION_CACHE.lock().unwrap();
+    
+                for session_id in closed_sessions {
+                    session_cache.remove(&session_id);
+                } 
+            }); 
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+}
+
 
 pub fn create_new_playable(
     session_id: i64,
@@ -42,32 +76,36 @@ pub fn create_new_playable(
 
     SESSION_CACHE.lock().unwrap().insert(
         session_id,
-        (
-            decoding_manager.clone(),
+        SessionContext{
+            decoder: decoding_manager.clone(),
             engine_handle,
-            sendable_texture.clone(),
-        ),
+            sendable_texture: sendable_texture.clone(),
+            last_alive_mark: std::time::SystemTime::now(),
+        },
     );
 
     thread::spawn(move || {
-        if let Err(err) = decoding_manager.stream(sendable_texture, update_stream, texture_id){
-            error!("Error streaming video: {}", err);
-        }
-
-        
+        let _ = decoding_manager.stream(sendable_texture, update_stream, texture_id);        
     });
 
     Ok(())
+}
+
+pub fn mark_session_alive(session_id: i64){
+    let mut session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some(ctx) = session_cache.get_mut(&session_id) {
+        ctx.last_alive_mark = std::time::SystemTime::now();
+    }
 }
 
 pub fn destroy_engine_streams(engine_handle: i64) {
     info!("Destroying streams for engine handle: {}", engine_handle);
     let session_cache = SESSION_CACHE.lock().unwrap();
     let mut to_remove = vec![];
-    for (texture_id, (decoder, handle, _)) in session_cache.iter() {
-        if *handle == engine_handle {
+    for (texture_id, ctx) in session_cache.iter() {
+        if ctx.engine_handle == engine_handle {
             info!("Destroying stream with texture id: {}", texture_id);
-            decoder.destroy_stream();
+            ctx.decoder.destroy_stream();
             to_remove.push(*texture_id);
         }
     }
@@ -80,12 +118,12 @@ pub fn destroy_engine_streams(engine_handle: i64) {
 pub fn destroy_stream_session(session_id: i64) {
     info!("Destroying stream session : {}", session_id);
     let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some((decoder, _, sendable_texture)) = session_cache.remove(&session_id) {
-        decoder.destroy_stream();
+    if let Some(ctx) = session_cache.remove(&session_id) {
+        ctx.decoder.destroy_stream();
         let mut retry_count = 0;
         const MAX_RETRIES: usize = 30;
         while retry_count < MAX_RETRIES {
-            if Arc::strong_count(&decoder) == 1 {
+            if Arc::strong_count(&ctx.decoder) == 1 {
                 break;
             }
             info!(
@@ -99,7 +137,7 @@ pub fn destroy_stream_session(session_id: i64) {
             log::warn!("Forcefully dropped decoder for session id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", session_id);
         }
         invoke_on_platform_main_thread(move || {
-            drop(sendable_texture);
+            drop(ctx.sendable_texture);
             info!("Destroyed stream session for session id: {}", session_id);
         });
     } else {
