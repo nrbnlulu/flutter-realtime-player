@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 import 'package:flutter_realtime_player/video_player.dart';
 
 import 'package:window_manager/window_manager.dart';
@@ -63,14 +62,13 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
   }
 
   void _toggleStream(int index) {
-
     setState(() {
-        if (_streams[index].isStreaming) {
-          _streams[index].isStreaming = false;
-          
-        } else {
-          _streams[index].isStreaming = true;
-        }    });
+      if (_streams[index].isStreaming) {
+        _streams[index].isStreaming = false;
+      } else {
+        _streams[index].isStreaming = true;
+      }
+    });
   }
 
   void _addStream() {
@@ -125,7 +123,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     final Map<String, String> options = {};
     for (final entry in controllers) {
       final key = entry.key.text.trim();
-      
+
       final value = entry.value.text.trim();
       if (key.isNotEmpty) {
         options[key] = value;
@@ -138,9 +136,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     final url = _streams[index].urlController.text;
     final window = await DesktopMultiWindow.createWindow(
       jsonEncode({'url': url}),
-      
     );
-    
 
     window
       ..setFrame(const Offset(100, 100) & const Size(800, 600))
@@ -314,7 +310,6 @@ class _StreamGridItemState extends State<_StreamGridItem>
                           ),
                         ],
                       );
-                      
                     }),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -353,7 +348,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                   height: 240,
                   child: VideoPlayer.fromConfig(
                     url: stream.urlController.text,
-                    
+
                     ffmpegOptions: widget.collectFfmpegOptions(
                       stream.ffmpegOptionControllers,
                     ),

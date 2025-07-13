@@ -30,7 +30,7 @@ class VideoController {
     await rlib.destroyStreamSession(sessionId: sessionId);
   }
 
-  static Future<(VideoController?, String?)> init({
+  static Future<(VideoController?, String?)> create({
     required String url,
     bool mute = true,
     Map<String, String>? ffmpegOptions,
@@ -97,7 +97,7 @@ class VideoPlayer extends StatefulWidget {
     Widget? child,
   }) {
     return FutureBuilder(
-      future: VideoController.init(
+      future: VideoController.create(
         url: url,
         mute: mute,
         ffmpegOptions: ffmpegOptions,
