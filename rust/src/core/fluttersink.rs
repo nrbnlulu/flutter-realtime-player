@@ -46,7 +46,7 @@ pub fn stream_alive_tester_task(){
             // drop the sessions on platform thread
             invoke_on_platform_main_thread(move|| {
                 let mut session_cache = SESSION_CACHE.lock().unwrap();
-    
+                info!("Closing sessions that was not pinged recently: {:?}", closed_sessions);
                 for session_id in closed_sessions {
                     session_cache.remove(&session_id);
                 } 
@@ -64,7 +64,7 @@ pub fn create_new_playable(
     update_stream: DartUpdateStream,
     ffmpeg_options: Option<HashMap<String, String>>,
 ) -> anyhow::Result<()> {
-    let (decoding_manager, payload_holder) = SoftwareDecoder::new(&video_info, session_id, ffmpeg_options)?;
+    let (decoding_manager, payload_holder) = SoftwareDecoder::new(&video_info, session_id, ffmpeg_options);
 
     let (sendable_texture, texture_id) =
         invoke_on_platform_main_thread(move || -> anyhow::Result<_> {

@@ -314,6 +314,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                           ),
                         ],
                       );
+                      
                     }),
                     Align(
                       alignment: Alignment.centerLeft,

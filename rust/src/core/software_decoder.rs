@@ -200,7 +200,7 @@ impl SoftwareDecoder {
         video_info: &types::VideoInfo,
         session_id: i64,
         ffmpeg_options: Option<HashMap<String, String>>,
-    ) -> anyhow::Result<(Arc<Self>, Arc<PayloadHolder>)> {
+    ) -> (Arc<Self>, Arc<PayloadHolder>) {
         let payload_holder = Arc::new(PayloadHolder::new());
         let self_ = Arc::new(Self {
             video_info: video_info.clone(),
@@ -210,7 +210,7 @@ impl SoftwareDecoder {
             decoding_context: Mutex::new(None),
             ffmpeg_options: ffmpeg_options,
         });
-        Ok((self_, payload_holder))
+        (self_, payload_holder)
     }
 
     pub fn initialize_stream(&self) -> Result<(), ffmpeg::Error> {
@@ -292,6 +292,7 @@ impl SoftwareDecoder {
             if self.asked_for_termination() {
                 return Ok(());
             }
+            trace!("ffmpeg session initializing for {}", &self.video_info.uri);
             dart_update_stream.add(StreamState::Loading).log_err();
             if let Err(e) = self.initialize_stream() {
                 info!(

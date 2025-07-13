@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.10.0';
 
   @override
-  int get rustContentHash => -320280045;
+  int get rustContentHash => 603167255;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -78,10 +78,13 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
 abstract class RustLibApi extends BaseApi {
   Stream<StreamState> crateApiSimpleCreateNewPlayable({
+    required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
     required VideoInfo videoInfo,
     Map<String, String>? ffmpegOptions,
   });
+
+  Future<PlatformInt64> crateApiSimpleCreateNewSession();
 
   Future<void> crateApiSimpleDestroyEngineStreams({
     required PlatformInt64 engineId,
@@ -112,6 +115,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Stream<StreamState> crateApiSimpleCreateNewPlayable({
+    required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
     required VideoInfo videoInfo,
     Map<String, String>? ffmpegOptions,
@@ -122,6 +126,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         NormalTask(
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_i_64(sessionId, serializer);
             sse_encode_i_64(engineHandle, serializer);
             sse_encode_box_autoadd_video_info(videoInfo, serializer);
             sse_encode_opt_Map_String_String_None(ffmpegOptions, serializer);
@@ -135,10 +140,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           },
           codec: SseCodec(
             decodeSuccessData: sse_decode_unit,
-            decodeErrorData: null,
+            decodeErrorData: sse_decode_AnyhowException,
           ),
           constMeta: kCrateApiSimpleCreateNewPlayableConstMeta,
-          argValues: [engineHandle, videoInfo, ffmpegOptions, sink],
+          argValues: [sessionId, engineHandle, videoInfo, ffmpegOptions, sink],
           apiImpl: this,
         ),
       ),
@@ -149,8 +154,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleCreateNewPlayableConstMeta =>
       const TaskConstMeta(
         debugName: "create_new_playable",
-        argNames: ["engineHandle", "videoInfo", "ffmpegOptions", "sink"],
+        argNames: [
+          "sessionId",
+          "engineHandle",
+          "videoInfo",
+          "ffmpegOptions",
+          "sink",
+        ],
       );
+
+  @override
+  Future<PlatformInt64> crateApiSimpleCreateNewSession() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSimpleCreateNewSessionConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleCreateNewSessionConstMeta =>
+      const TaskConstMeta(debugName: "create_new_session", argNames: []);
 
   @override
   Future<void> crateApiSimpleDestroyEngineStreams({
@@ -164,7 +202,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 3,
             port: port_,
           );
         },
@@ -197,7 +235,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -230,7 +268,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -260,7 +298,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 6,
             port: port_,
           );
         },
@@ -290,7 +328,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -410,14 +448,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
       case 0:
-        return StreamState_Init(sessionId: dco_decode_i_64(raw[1]));
-      case 1:
         return StreamState_Error(dco_decode_String(raw[1]));
-      case 2:
+      case 1:
         return StreamState_Loading();
-      case 3:
+      case 2:
         return StreamState_Playing(textureId: dco_decode_i_64(raw[1]));
-      case 4:
+      case 3:
         return StreamState_Stopped();
       default:
         throw Exception("unreachable");
@@ -591,17 +627,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var tag_ = sse_decode_i_32(deserializer);
     switch (tag_) {
       case 0:
-        var var_sessionId = sse_decode_i_64(deserializer);
-        return StreamState_Init(sessionId: var_sessionId);
-      case 1:
         var var_field0 = sse_decode_String(deserializer);
         return StreamState_Error(var_field0);
-      case 2:
+      case 1:
         return StreamState_Loading();
-      case 3:
+      case 2:
         var var_textureId = sse_decode_i_64(deserializer);
         return StreamState_Playing(textureId: var_textureId);
-      case 4:
+      case 3:
         return StreamState_Stopped();
       default:
         throw UnimplementedError('');
@@ -784,19 +817,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_stream_state(StreamState self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
-      case StreamState_Init(sessionId: final sessionId):
-        sse_encode_i_32(0, serializer);
-        sse_encode_i_64(sessionId, serializer);
       case StreamState_Error(field0: final field0):
-        sse_encode_i_32(1, serializer);
+        sse_encode_i_32(0, serializer);
         sse_encode_String(field0, serializer);
       case StreamState_Loading():
-        sse_encode_i_32(2, serializer);
+        sse_encode_i_32(1, serializer);
       case StreamState_Playing(textureId: final textureId):
-        sse_encode_i_32(3, serializer);
+        sse_encode_i_32(2, serializer);
         sse_encode_i_64(textureId, serializer);
       case StreamState_Stopped():
-        sse_encode_i_32(4, serializer);
+        sse_encode_i_32(3, serializer);
     }
   }
 

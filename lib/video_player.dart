@@ -11,29 +11,37 @@ import 'rust/core/types.dart';
 class VideoController {
   final String url;
   final bool mute;
-  int? sessionId;
   Map<String, String>? ffmpegOptions;
-  Stream<StreamState>? _stream;
-  bool _running = false;
-  Stream<StreamState>? get stream => _stream;
 
-  VideoController({required this.url, this.mute = true, this.ffmpegOptions});
+  final int sessionId;
+  Stream<StreamState> stateStream;
+  bool _running = false;
+
+  VideoController({
+    required this.url,
+    required this.sessionId,
+    required this.stateStream,
+    this.mute = true,
+    this.ffmpegOptions,
+  });
 
   Future<void> dispose() async {
     _running = false;
-    if (sessionId != null) {
-      await rlib.destroyStreamSession(sessionId: sessionId!);
-    }
+    await rlib.destroyStreamSession(sessionId: sessionId);
   }
 
-  Future<(Stream<StreamState>?, String?)> init() async {
-    Stream<StreamState>? stream;
-    String? error;
-
+  static Future<(VideoController?, String?)> init({
+    required String url,
+    bool mute = true,
+    Map<String, String>? ffmpegOptions,
+  }) async {
     final handle = await EngineContext.instance.getEngineHandle();
+    final sessionId = await rlib.createNewSession();
+
     // play demo video
     try {
-      stream = rlib.createNewPlayable(
+      final stream = rlib.createNewPlayable(
+        sessionId: sessionId,
         engineHandle: handle,
         ffmpegOptions: ffmpegOptions,
         videoInfo: VideoInfo(
@@ -42,22 +50,26 @@ class VideoController {
           mute: mute,
         ),
       );
-      _stream = stream;
-    } catch (e) {
-      error = e.toString();
-    }
-    _running = true;
-    // start ping tasl
-    Future.microtask(() async {
-      while (_running) {
-        await Future.delayed(const Duration(seconds: 1));
-        // ping rust side to annonce we still want the stream.
-        if (sessionId != null) {
-          rlib.markSessionAlive(sessionId: sessionId!);
+      final ret = VideoController(
+        sessionId: sessionId,
+        stateStream: stream,
+        url: url,
+        ffmpegOptions: ffmpegOptions,
+        mute: mute,
+      );
+      ret._running = true;
+      // start ping task
+      Future.microtask(() async {
+        while (ret._running) {
+          // ping rust side to annonce we still want the stream.
+          rlib.markSessionAlive(sessionId: sessionId);
+          await Future.delayed(const Duration(seconds: 1));
         }
-      }
-    });
-    return (stream, error);
+      });
+      return (ret, null);
+    } catch (e) {
+      return (null, e.toString());
+    }
   }
 }
 
@@ -77,20 +89,34 @@ class VideoPlayer extends StatefulWidget {
     return VideoPlayer._(key: key, controller: controller, child: child);
   }
 
-  factory VideoPlayer.fromConfig({
+  static Widget fromConfig({
     GlobalKey? key,
     required String url,
     Map<String, String>? ffmpegOptions,
     bool mute = true,
     Widget? child,
   }) {
-    final controller = VideoController(
-      url: url,
-      mute: mute,
-      ffmpegOptions: ffmpegOptions,
+    return FutureBuilder(
+      future: VideoController.init(
+        url: url,
+        mute: mute,
+        ffmpegOptions: ffmpegOptions,
+      ),
+      builder: (ctx, res) {
+        if (res.hasError) {
+          return Text(res.error.toString());
+        }
+        final (controller, err) = res.data!;
+        if (err != null) {
+          return Text(err);
+        }
+        return VideoPlayer.fromController(
+          key: key,
+          controller: controller!,
+          child: child,
+        );
+      },
     );
-
-    return VideoPlayer._(key: key, controller: controller, child: child);
   }
 
   @override
@@ -105,22 +131,10 @@ class _VideoPlayerState extends State<VideoPlayer> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() async {
-      if (widget.controller.stream case final initiatedStream?) {
-        rustStateStream = initiatedStream;
-      } else {
-        final (res, err) = await widget.controller.init();
-        if (res != null) {
-          rustStateStream = res;
-        } else {
-          rustStateStream = Stream.value(StreamState_Error(err!));
-        }
-      }
 
-      streamSubscription = rustStateStream.listen((state) {
-        setState(() {
-          currentState = state;
-        });
+    streamSubscription = widget.controller.stateStream.listen((state) {
+      setState(() {
+        currentState = state;
       });
     });
   }
@@ -142,11 +156,8 @@ class _VideoPlayerState extends State<VideoPlayer> {
       return loadingWidget('initializing...');
     }
     switch (currentState!) {
-      case StreamState_Init(sessionId: final sessionId):
-        widget.controller.sessionId = sessionId;
-        return loadingWidget('initializing stream...');
       case StreamState_Loading():
-        return loadingWidget('loading video...');
+        return loadingWidget('initializing stream...');
       case StreamState_Error(field0: final message):
         return Center(
           child: Text(
@@ -174,24 +185,19 @@ class _VideoPlayerState extends State<VideoPlayer> {
 
     Future.microtask(() async {
       streamSubscription?.cancel();
-      if (widget.controller.sessionId != null) {
-        try {
-          if (kDebugMode) {
-            debugPrint(
-              'disposing stream session(${widget.controller.sessionId})',
-            );
-          }
-          await rlib.destroyStreamSession(
-            sessionId: widget.controller.sessionId!,
+      try {
+        if (kDebugMode) {
+          debugPrint(
+            'disposing stream session(${widget.controller.sessionId})',
           );
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint(
-              'Error disposing session(${widget.controller.sessionId}): $e',
-            );
-          }
         }
-        widget.controller.sessionId = null;
+        await rlib.destroyStreamSession(sessionId: widget.controller.sessionId);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint(
+            'Error disposing session(${widget.controller.sessionId}): $e',
+          );
+        }
       }
     });
   }
