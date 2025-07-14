@@ -4,7 +4,7 @@ use std::{
     thread,
 };
 
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 
 use crate::{
     core::{software_decoder::SoftwareDecoder, types::DartUpdateStream},
@@ -121,20 +121,20 @@ pub fn destroy_stream_session(session_id: i64) {
     if let Some(ctx) = session_cache.remove(&session_id) {
         ctx.decoder.destroy_stream();
         let mut retry_count = 0;
-        const MAX_RETRIES: usize = 30;
+        const MAX_RETRIES: usize = 50;
         while retry_count < MAX_RETRIES {
             if Arc::strong_count(&ctx.decoder) == 1 {
                 break;
             }
-            info!(
+            debug!(
                 "Waiting for all references to be dropped for session id: {}. attempt({})",
                 session_id, retry_count
             );
-            thread::sleep(std::time::Duration::from_millis(100));
+            thread::sleep(std::time::Duration::from_millis(500));
             retry_count += 1;
         }
-        if retry_count == MAX_RETRIES {
-            log::warn!("Forcefully dropped decoder for session id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", session_id);
+        if retry_count == MAX_RETRIES{
+            log::error!("Forcefully dropped decoder for session id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", session_id);
         }
         invoke_on_platform_main_thread(move || {
             drop(ctx.sendable_texture);
