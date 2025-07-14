@@ -4,11 +4,11 @@ use std::{
     thread,
 };
 
-use log::{debug, error, info, trace};
+use log::{debug, info};
 
 use crate::{
     core::{software_decoder::SoftwareDecoder, types::DartUpdateStream},
-    utils::{invoke_on_platform_main_thread, LogErr},
+    utils::invoke_on_platform_main_thread,
 };
 
 use super::{software_decoder::SharedSendableTexture, types};

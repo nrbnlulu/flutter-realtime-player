@@ -20,6 +20,8 @@ where
             func()
         })
 }
+
+#[allow(unused)]
 pub(crate) fn is_fl_main_thread() -> bool {
     RunLoop::is_main_thread().unwrap_or(false)
 }

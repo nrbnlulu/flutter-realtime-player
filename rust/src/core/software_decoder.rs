@@ -11,7 +11,6 @@ use std::{
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, error, info, trace, warn};
-use tracing_subscriber::fmt::format::Format;
 
 use crate::{core::types::DartUpdateStream, dart_types::StreamState, utils::LogErr};
 
@@ -119,6 +118,7 @@ pub struct SoftwareDecoder {
     video_info: types::VideoInfo,
     kill_sig: AtomicBool,
     payload_holder: Weak<PayloadHolder>,
+    #[allow(unused)]
     session_id: i64,
     decoding_context: Mutex<Option<DecodingContext>>,
     ffmpeg_options: Option<HashMap<String, String>>,
