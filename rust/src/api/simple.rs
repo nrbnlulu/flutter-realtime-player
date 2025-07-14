@@ -32,13 +32,10 @@ lazy_static::lazy_static! {
 }
 /// updates the counter and returns a session id
 /// note that this doesn't create any resources apart from raising the counter
-pub fn create_new_session(
-
-) -> i64 {
+pub fn create_new_session() -> i64 {
     let mut session_counter = SESSION_COUNTER.lock().unwrap();
     *session_counter += 1;
-     *session_counter
-    
+    *session_counter
 }
 
 /// returns a session id that represents a playing session in rust
@@ -55,17 +52,17 @@ pub fn create_new_playable(
         video_info,
         session_id
     );
-     crate::core::fluttersink::create_new_playable(
+    crate::core::fluttersink::create_new_playable(
         session_id,
         engine_handle,
         video_info,
         sink.clone(),
         ffmpeg_options,
     )?;
-     Ok(())
+    Ok(())
 }
 /// marks the session as required by the ui
-/// if the ui won't call this every 2 seconds 
+/// if the ui won't call this every 2 seconds
 /// this session will terminate itself.
 pub fn mark_session_alive(session_id: i64) {
     let _ = crate::core::fluttersink::mark_session_alive(session_id);
