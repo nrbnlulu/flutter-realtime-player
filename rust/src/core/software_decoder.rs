@@ -1,7 +1,6 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
-    alloc::{self, Layout},
     collections::HashMap,
     fmt, mem,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
