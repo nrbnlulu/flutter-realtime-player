@@ -20,6 +20,8 @@ where
             func()
         })
 }
+
+#[allow(unused)]
 pub(crate) fn is_fl_main_thread() -> bool {
     RunLoop::is_main_thread().unwrap_or(false)
 }
@@ -30,13 +32,14 @@ pub trait LogErr<T> {
 
 impl<T, E> LogErr<T> for Result<T, E>
 where
-    E: std::fmt::Debug,
+    E: std::fmt::Display,
 {
+    #[track_caller]
     fn log_err(self) -> Option<T> {
         match self {
             Ok(value) => Some(value),
             Err(err) => {
-                error!("Error: {:?}", err);
+                error!("Error: {}", err);
                 None
             }
         }

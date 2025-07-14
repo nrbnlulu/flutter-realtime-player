@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.10.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 44913789;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 603167255;
 
 // Section: executor
 
@@ -67,6 +67,7 @@ fn wire__crate__api__simple__create_new_playable_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <i64>::sse_decode(&mut deserializer);
             let api_engine_handle = <i64>::sse_decode(&mut deserializer);
             let api_video_info = <crate::core::types::VideoInfo>::sse_decode(&mut deserializer);
             let api_ffmpeg_options =
@@ -77,15 +78,48 @@ fn wire__crate__api__simple__create_new_playable_impl(
             >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
-                transform_result_sse::<_, ()>((move || {
-                    let output_ok = Result::<_, ()>::Ok({
-                        crate::api::simple::create_new_playable(
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::simple::create_new_playable(
+                            api_session_id,
                             api_engine_handle,
                             api_video_info,
                             api_ffmpeg_options,
                             api_sink,
-                        );
-                    })?;
+                        )?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__create_new_session_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "create_new_session",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::simple::create_new_session())?;
                     Ok(output_ok)
                 })())
             }
@@ -231,6 +265,41 @@ fn wire__crate__api__simple__init_app_impl(
         },
     )
 }
+fn wire__crate__api__simple__mark_session_alive_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "mark_session_alive",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::simple::mark_session_alive(api_session_id);
+                    })?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -352,25 +421,19 @@ impl SseDecode for crate::dart_types::StreamState {
         let mut tag_ = <i32>::sse_decode(deserializer);
         match tag_ {
             0 => {
-                let mut var_sessionId = <i64>::sse_decode(deserializer);
-                return crate::dart_types::StreamState::Init {
-                    session_id: var_sessionId,
-                };
-            }
-            1 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
                 return crate::dart_types::StreamState::Error(var_field0);
             }
-            2 => {
+            1 => {
                 return crate::dart_types::StreamState::Loading;
             }
-            3 => {
+            2 => {
                 let mut var_textureId = <i64>::sse_decode(deserializer);
                 return crate::dart_types::StreamState::Playing {
                     texture_id: var_textureId,
                 };
             }
-            4 => {
+            3 => {
                 return crate::dart_types::StreamState::Stopped;
             }
             _ => {
@@ -437,19 +500,21 @@ fn pde_ffi_dispatcher_primary_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__api__simple__create_new_playable_impl(port, ptr, rust_vec_len, data_len),
-        2 => {
+        2 => wire__crate__api__simple__create_new_session_impl(port, ptr, rust_vec_len, data_len),
+        3 => {
             wire__crate__api__simple__destroy_engine_streams_impl(port, ptr, rust_vec_len, data_len)
         }
-        3 => {
+        4 => {
             wire__crate__api__simple__destroy_stream_session_impl(port, ptr, rust_vec_len, data_len)
         }
-        4 => wire__crate__api__simple__flutter_realtime_player_init_impl(
+        5 => wire__crate__api__simple__flutter_realtime_player_init_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        5 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__simple__mark_session_alive_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -472,17 +537,14 @@ fn pde_ffi_dispatcher_sync_impl(
 impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamState {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
-            crate::dart_types::StreamState::Init { session_id } => {
-                [0.into_dart(), session_id.into_into_dart().into_dart()].into_dart()
-            }
             crate::dart_types::StreamState::Error(field0) => {
-                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::dart_types::StreamState::Loading => [2.into_dart()].into_dart(),
+            crate::dart_types::StreamState::Loading => [1.into_dart()].into_dart(),
             crate::dart_types::StreamState::Playing { texture_id } => {
-                [3.into_dart(), texture_id.into_into_dart().into_dart()].into_dart()
+                [2.into_dart(), texture_id.into_into_dart().into_dart()].into_dart()
             }
-            crate::dart_types::StreamState::Stopped => [4.into_dart()].into_dart(),
+            crate::dart_types::StreamState::Stopped => [3.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -645,23 +707,19 @@ impl SseEncode for crate::dart_types::StreamState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         match self {
-            crate::dart_types::StreamState::Init { session_id } => {
-                <i32>::sse_encode(0, serializer);
-                <i64>::sse_encode(session_id, serializer);
-            }
             crate::dart_types::StreamState::Error(field0) => {
-                <i32>::sse_encode(1, serializer);
+                <i32>::sse_encode(0, serializer);
                 <String>::sse_encode(field0, serializer);
             }
             crate::dart_types::StreamState::Loading => {
-                <i32>::sse_encode(2, serializer);
+                <i32>::sse_encode(1, serializer);
             }
             crate::dart_types::StreamState::Playing { texture_id } => {
-                <i32>::sse_encode(3, serializer);
+                <i32>::sse_encode(2, serializer);
                 <i64>::sse_encode(texture_id, serializer);
             }
             crate::dart_types::StreamState::Stopped => {
-                <i32>::sse_encode(4, serializer);
+                <i32>::sse_encode(3, serializer);
             }
             _ => {
                 unimplemented!("");

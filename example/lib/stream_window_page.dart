@@ -13,7 +13,7 @@ class StreamWindowPage extends StatelessWidget {
         child: SizedBox(
           width: double.infinity,
           height: 300,
-          child: VideoPlayer.fromConfig(url: url),
+          child: VideoPlayer.fromConfig(url: url, mute: false),
         ),
       ),
     );

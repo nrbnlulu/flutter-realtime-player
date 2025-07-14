@@ -63,7 +63,11 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
 
   void _toggleStream(int index) {
     setState(() {
-      _streams[index].isStreaming = !_streams[index].isStreaming;
+      if (_streams[index].isStreaming) {
+        _streams[index].isStreaming = false;
+      } else {
+        _streams[index].isStreaming = true;
+      }
     });
   }
 
@@ -119,6 +123,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     final Map<String, String> options = {};
     for (final entry in controllers) {
       final key = entry.key.text.trim();
+
       final value = entry.value.text.trim();
       if (key.isNotEmpty) {
         options[key] = value;
@@ -343,6 +348,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                   height: 240,
                   child: VideoPlayer.fromConfig(
                     url: stream.urlController.text,
+
                     ffmpegOptions: widget.collectFfmpegOptions(
                       stream.ffmpegOptionControllers,
                     ),

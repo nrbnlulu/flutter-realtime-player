@@ -16,13 +16,14 @@ irondash_run_loop = "*"
 irondash_engine_context = "*"
 irondash_dart_ffi = "*"
 
-log = "0.4"
 anyhow = "1.0.81"
 lazy_static = "1.5.0"
 
 
 thread_local = "1.1.8"
 ffmpeg = { package="rffmpeg", git = "https://github.com/nrbnlulu/rffmpeg", branch = "master", default-features = false, features = ["codec", "filter", "format", "software-resampling", "software-scaling"] }
+
+log = "0.4"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 

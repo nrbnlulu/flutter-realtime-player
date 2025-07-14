@@ -16,16 +16,29 @@ Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
       ffiPtr: ffiPtr,
     );
 
-/// returns a texture id, this id is also used to identify the session
+/// updates the counter and returns a session id
+/// note that this doesn't create any resources apart from raising the counter
+Future<PlatformInt64> createNewSession() =>
+    RustLib.instance.api.crateApiSimpleCreateNewSession();
+
+/// returns a session id that represents a playing session in rust
 Stream<StreamState> createNewPlayable({
+  required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
   required VideoInfo videoInfo,
   Map<String, String>? ffmpegOptions,
 }) => RustLib.instance.api.crateApiSimpleCreateNewPlayable(
+  sessionId: sessionId,
   engineHandle: engineHandle,
   videoInfo: videoInfo,
   ffmpegOptions: ffmpegOptions,
 );
+
+/// marks the session as required by the ui
+/// if the ui won't call this every 2 seconds
+/// this session will terminate itself.
+Future<void> markSessionAlive({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleMarkSessionAlive(sessionId: sessionId);
 
 Future<void> destroyEngineStreams({required PlatformInt64 engineId}) =>
     RustLib.instance.api.crateApiSimpleDestroyEngineStreams(engineId: engineId);

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, thread};
 
 use log::{debug, trace};
 
@@ -22,6 +22,7 @@ pub fn flutter_realtime_player_init(ffi_ptr: i64) {
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
 
     fluttersink::init().log_err();
+    thread::spawn(|| crate::core::fluttersink::stream_alive_tester_task());
     debug!("Done initializing flutter gstreamer");
     *is_initialized = true;
 }
@@ -29,37 +30,42 @@ pub fn flutter_realtime_player_init(ffi_ptr: i64) {
 lazy_static::lazy_static! {
     static ref SESSION_COUNTER: std::sync::Mutex<i64> = std::sync::Mutex::new(0);
 }
+/// updates the counter and returns a session id
+/// note that this doesn't create any resources apart from raising the counter
+pub fn create_new_session() -> i64 {
+    let mut session_counter = SESSION_COUNTER.lock().unwrap();
+    *session_counter += 1;
+    *session_counter
+}
 
-/// returns a texture id, this id is also used to identify the session
+/// returns a session id that represents a playing session in rust
 pub fn create_new_playable(
+    session_id: i64,
     engine_handle: i64,
     video_info: VideoInfo,
     ffmpeg_options: Option<HashMap<String, String>>,
     sink: StreamSink<StreamState>,
-) {
-    let mut session_counter = SESSION_COUNTER.lock().unwrap();
-    *session_counter += 1;
-    let session_id = *session_counter;
-    sink.add(StreamState::Init {
-        session_id: session_id,
-    })
-    .log_err();
+) -> anyhow::Result<()> {
     trace!(
-        "get_texture was called with engine_handle: {}, video_info: {:?}",
+        "get_texture was called with engine_handle: {}, video_info: {:?}, session_id: {}",
         engine_handle,
-        video_info
+        video_info,
+        session_id
     );
-    let _ = crate::core::fluttersink::create_new_playable(
+    crate::core::fluttersink::create_new_playable(
         session_id,
         engine_handle,
         video_info,
         sink.clone(),
         ffmpeg_options,
-    )
-    .inspect_err(|e| {
-        log::debug!("Failed to create new playable: {:?}", e);
-        sink.add(StreamState::Error(e.to_string())).log_err();
-    });
+    )?;
+    Ok(())
+}
+/// marks the session as required by the ui
+/// if the ui won't call this every 2 seconds
+/// this session will terminate itself.
+pub fn mark_session_alive(session_id: i64) {
+    let _ = crate::core::fluttersink::mark_session_alive(session_id);
 }
 
 pub fn destroy_engine_streams(engine_id: i64) {

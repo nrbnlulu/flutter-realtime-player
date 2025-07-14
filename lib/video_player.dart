@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
@@ -10,28 +11,37 @@ import 'rust/core/types.dart';
 class VideoController {
   final String url;
   final bool mute;
-  int? sessionId;
   Map<String, String>? ffmpegOptions;
-  Stream<StreamState>? _stream;
 
-  Stream<StreamState>? get stream => _stream;
+  final int sessionId;
+  Stream<StreamState> stateStream;
+  bool _running = false;
 
-  VideoController({required this.url, this.mute = true, this.ffmpegOptions});
+  VideoController({
+    required this.url,
+    required this.sessionId,
+    required this.stateStream,
+    this.mute = true,
+    this.ffmpegOptions,
+  });
 
   Future<void> dispose() async {
-    if (sessionId != null) {
-      await rlib.destroyStreamSession(sessionId: sessionId!);
-    }
+    _running = false;
+    await rlib.destroyStreamSession(sessionId: sessionId);
   }
 
-  Future<(Stream<StreamState>?, String?)> init() async {
-    Stream<StreamState>? stream;
-    String? error;
-
+  static Future<(VideoController?, String?)> create({
+    required String url,
+    bool mute = true,
+    Map<String, String>? ffmpegOptions,
+  }) async {
     final handle = await EngineContext.instance.getEngineHandle();
+    final sessionId = await rlib.createNewSession();
+
     // play demo video
     try {
-      stream = rlib.createNewPlayable(
+      final stream = rlib.createNewPlayable(
+        sessionId: sessionId,
         engineHandle: handle,
         ffmpegOptions: ffmpegOptions,
         videoInfo: VideoInfo(
@@ -40,11 +50,26 @@ class VideoController {
           mute: mute,
         ),
       );
-      _stream = stream;
+      final ret = VideoController(
+        sessionId: sessionId,
+        stateStream: stream,
+        url: url,
+        ffmpegOptions: ffmpegOptions,
+        mute: mute,
+      );
+      ret._running = true;
+      // start ping task
+      Future.microtask(() async {
+        while (ret._running) {
+          // ping rust side to annonce we still want the stream.
+          rlib.markSessionAlive(sessionId: sessionId);
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      });
+      return (ret, null);
     } catch (e) {
-      error = e.toString();
+      return (null, e.toString());
     }
-    return (stream, error);
   }
 }
 
@@ -64,21 +89,33 @@ class VideoPlayer extends StatefulWidget {
     return VideoPlayer._(key: key, controller: controller, child: child);
   }
 
-  factory VideoPlayer.fromConfig({
+  static Widget fromConfig({
     GlobalKey? key,
     required String url,
     Map<String, String>? ffmpegOptions,
     bool mute = true,
     Widget? child,
   }) {
-    return VideoPlayer._(
-      key: key,
-      controller: VideoController(
+    return FutureBuilder(
+      future: VideoController.create(
         url: url,
         mute: mute,
         ffmpegOptions: ffmpegOptions,
       ),
-      child: child,
+      builder: (ctx, res) {
+        if (res.hasError) {
+          return Text(res.error.toString());
+        }
+        final (controller, err) = res.data!;
+        if (err != null) {
+          return Text(err);
+        }
+        return VideoPlayer.fromController(
+          key: key,
+          controller: controller!,
+          child: child,
+        );
+      },
     );
   }
 
@@ -88,31 +125,17 @@ class VideoPlayer extends StatefulWidget {
 
 class _VideoPlayerState extends State<VideoPlayer> {
   StreamState? currentState;
-  late Stream<StreamState> streamState;
+  late Stream<StreamState> rustStateStream;
   StreamSubscription<StreamState>? streamSubscription;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() async {
-      if (widget.controller.stream case final initiatedStream?) {
-        streamState = initiatedStream;
-      } else {
-        streamState = rlib.createNewPlayable(
-          engineHandle: await EngineContext.instance.getEngineHandle(),
-          videoInfo: VideoInfo(
-            uri: widget.controller.url,
-            dimensions: const VideoDimensions(width: 640, height: 360),
-            mute: widget.controller.mute,
-          ),
-        );
-      }
 
-      streamSubscription = streamState.listen(
-        (state) => setState(() {
-          currentState = state;
-        }),
-      );
+    streamSubscription = widget.controller.stateStream.listen((state) {
+      setState(() {
+        currentState = state;
+      });
     });
   }
 
@@ -133,11 +156,8 @@ class _VideoPlayerState extends State<VideoPlayer> {
       return loadingWidget('initializing...');
     }
     switch (currentState!) {
-      case StreamState_Init(sessionId: final sessionId):
-        widget.controller.sessionId = sessionId;
-        return loadingWidget('initializing stream...');
       case StreamState_Loading():
-        return loadingWidget('loading video...');
+        return loadingWidget('initializing stream...');
       case StreamState_Error(field0: final message):
         return Center(
           child: Text(
@@ -165,15 +185,19 @@ class _VideoPlayerState extends State<VideoPlayer> {
 
     Future.microtask(() async {
       streamSubscription?.cancel();
-      if (widget.controller.sessionId != null) {
-        try {
-          await rlib.destroyStreamSession(
-            sessionId: widget.controller.sessionId!,
+      try {
+        if (kDebugMode) {
+          debugPrint(
+            'disposing stream session(${widget.controller.sessionId})',
           );
-        } catch (e) {
-          // Optionally handle the error, e.g., log it
         }
-        widget.controller.sessionId = null;
+        await rlib.destroyStreamSession(sessionId: widget.controller.sessionId);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint(
+            'Error disposing session(${widget.controller.sessionId}): $e',
+          );
+        }
       }
     });
   }
