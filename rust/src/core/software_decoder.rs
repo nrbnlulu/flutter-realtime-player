@@ -16,21 +16,7 @@ use crate::{core::types::DartUpdateStream, dart_types::StreamState, utils::LogEr
 
 use super::types;
 
-struct PixelBuffer {
-    ptr: *mut u8,
-    size: usize,
-}
-impl PixelBuffer {
-    fn new(size: usize) -> Self {
-        // align 1 used for u8 memory allocations.
-        let ptr = unsafe { alloc::alloc(Layout::from_size_align(size, 1).unwrap()) };
-        Self { ptr, size }
-    }
-
-    fn mut_slice(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.size) }
-    }
-}
+// for raw pixel buffer implementation see https://github.com/nrbnlulu/flutter-realtime-player/blob/fb7d9bd87719b462e7b9e6b32be6e353ba76bcba/rust/src/core/software_decoder.rs#L14
 
 #[derive(Clone)]
 pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video);
