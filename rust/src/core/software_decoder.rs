@@ -244,7 +244,12 @@ impl SoftwareDecoder {
                 );
                 e
             })?;
-        let frame_rate = input.avg_frame_rate().numerator();
+        let avg_frame_rate = input.avg_frame_rate();
+        let frame_rate = if avg_frame_rate.denominator() != 0 {
+            avg_frame_rate.numerator() as f64 / avg_frame_rate.denominator() as f64
+        } else {
+            0.0
+        };
         let context = DecodingContext {
             ictx,
             video_stream_index,
