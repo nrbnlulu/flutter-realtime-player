@@ -49,7 +49,7 @@ class VideoController {
           dimensions: const VideoDimensions(width: 640, height: 360),
           mute: mute,
         ),
-      );
+      ).asBroadcastStream();
       final ret = VideoController(
         sessionId: sessionId,
         stateStream: stream,
@@ -61,7 +61,7 @@ class VideoController {
       // start ping task
       Future.microtask(() async {
         while (ret._running) {
-          // ping rust side to annonce we still want the stream.
+          // ping rust side to announce we still want the stream.
           rlib.markSessionAlive(sessionId: sessionId);
           await Future.delayed(const Duration(seconds: 1));
         }
