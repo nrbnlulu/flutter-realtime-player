@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:irondash_engine_context/irondash_engine_context.dart';
-
+import "package:rxdart/rxdart.dart" as rx;
 import 'rust/core/types.dart';
 
 class VideoController {
@@ -14,20 +14,23 @@ class VideoController {
   Map<String, String>? ffmpegOptions;
 
   final int sessionId;
-  Stream<StreamState> stateStream;
+  final rx.BehaviorSubject<StreamState> stateBroadcast;
+  final StreamSubscription<StreamState> _originalSub;
   bool _running = false;
 
-  VideoController({
+  VideoController(
+    StreamSubscription<StreamState> originalSub, {
     required this.url,
     required this.sessionId,
-    required this.stateStream,
+    required this.stateBroadcast,
     this.mute = true,
     this.ffmpegOptions,
-  });
+  }) : _originalSub = originalSub;
 
   Future<void> dispose() async {
     _running = false;
     await rlib.destroyStreamSession(sessionId: sessionId);
+    _originalSub.cancel();
   }
 
   static Future<(VideoController?, String?)> create({
@@ -49,10 +52,17 @@ class VideoController {
           dimensions: const VideoDimensions(width: 640, height: 360),
           mute: mute,
         ),
-      ).asBroadcastStream();
+      );
+      final bs = rx.BehaviorSubject<StreamState>();
+      final origSub = stream.listen(
+        bs.add,
+        onError: bs.addError,
+        onDone: () => bs.close(),
+      );
       final ret = VideoController(
+        origSub,
         sessionId: sessionId,
-        stateStream: stream,
+        stateBroadcast: bs,
         url: url,
         ffmpegOptions: ffmpegOptions,
         mute: mute,
@@ -132,7 +142,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
   void initState() {
     super.initState();
 
-    streamSubscription = widget.controller.stateStream.listen((state) {
+    streamSubscription = widget.controller.stateBroadcast.listen((state) {
       setState(() {
         currentState = state;
       });
