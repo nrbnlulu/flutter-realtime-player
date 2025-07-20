@@ -88,10 +88,16 @@ class VideoController {
 class VideoPlayer extends StatefulWidget {
   final VideoController controller;
   final Widget? child;
+
   /// whether to dispose the stream when the widget disposes?
-  final bool autoDispose ;
-  
-  const VideoPlayer._({super.key, required this.controller, this.child, this.autoDispose = true});
+  final bool autoDispose;
+
+  const VideoPlayer._({
+    super.key,
+    required this.controller,
+    this.child,
+    this.autoDispose = true,
+  });
 
   factory VideoPlayer.fromController({
     GlobalKey? key,
@@ -99,7 +105,12 @@ class VideoPlayer extends StatefulWidget {
     bool autoDispose = true,
     Widget? child,
   }) {
-    return VideoPlayer._(key: key, controller: controller, autoDispose: autoDispose, child: child);
+    return VideoPlayer._(
+      key: key,
+      controller: controller,
+      autoDispose: autoDispose,
+      child: child,
+    );
   }
 
   static Widget fromConfig({
@@ -197,23 +208,23 @@ class _VideoPlayerState extends State<VideoPlayer> {
   @override
   void dispose() {
     super.dispose();
-    
+
     Future.microtask(() async {
       streamSubscription?.cancel();
-      try {
-        if (kDebugMode) {
-          debugPrint(
-            'disposing stream session(${widget.controller.sessionId})',
-          );
-        }
-        if (widget.autoDispose){
-           await widget.controller.dispose();
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint(
-            'Error disposing session(${widget.controller.sessionId}): $e',
-          );
+      if (widget.autoDispose) {
+        try {
+          if (kDebugMode) {
+            debugPrint(
+              'disposing stream session(${widget.controller.sessionId})',
+            );
+          }
+          await widget.controller.dispose();
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint(
+              'Error disposing session(${widget.controller.sessionId}): $e',
+            );
+          }
         }
       }
     });
