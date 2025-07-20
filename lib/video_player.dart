@@ -53,7 +53,7 @@ class VideoController {
           mute: mute,
         ),
       );
-      final bs = rx.BehaviorSubject<StreamState>();
+      final bs = rx.BehaviorSubject<StreamState>.seeded(StreamState.loading());
       final origSub = stream.listen(
         bs.add,
         onError: bs.addError,
@@ -88,15 +88,18 @@ class VideoController {
 class VideoPlayer extends StatefulWidget {
   final VideoController controller;
   final Widget? child;
-
-  const VideoPlayer._({super.key, required this.controller, this.child});
+  /// whether to dispose the stream when the widget disposes?
+  final bool autoDispose ;
+  
+  const VideoPlayer._({super.key, required this.controller, this.child, this.autoDispose = true});
 
   factory VideoPlayer.fromController({
     GlobalKey? key,
     required VideoController controller,
+    bool autoDispose = true,
     Widget? child,
   }) {
-    return VideoPlayer._(key: key, controller: controller, child: child);
+    return VideoPlayer._(key: key, controller: controller, autoDispose: autoDispose, child: child);
   }
 
   static Widget fromConfig({
@@ -104,6 +107,7 @@ class VideoPlayer extends StatefulWidget {
     required String url,
     Map<String, String>? ffmpegOptions,
     bool mute = true,
+    bool autoDispose = true,
     Widget? child,
   }) {
     return FutureBuilder(
@@ -123,6 +127,7 @@ class VideoPlayer extends StatefulWidget {
         return VideoPlayer.fromController(
           key: key,
           controller: controller!,
+          autoDispose: autoDispose,
           child: child,
         );
       },
@@ -192,7 +197,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
   @override
   void dispose() {
     super.dispose();
-
+    
     Future.microtask(() async {
       streamSubscription?.cancel();
       try {
@@ -201,7 +206,9 @@ class _VideoPlayerState extends State<VideoPlayer> {
             'disposing stream session(${widget.controller.sessionId})',
           );
         }
-        await rlib.destroyStreamSession(sessionId: widget.controller.sessionId);
+        if (widget.autoDispose){
+           await widget.controller.dispose();
+        }
       } catch (e) {
         if (kDebugMode) {
           debugPrint(
