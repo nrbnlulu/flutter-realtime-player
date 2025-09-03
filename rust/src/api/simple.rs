@@ -22,7 +22,7 @@ pub fn flutter_realtime_player_init(ffi_ptr: i64) {
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
 
     fluttersink::init().log_err();
-    thread::spawn(|| crate::core::fluttersink::stream_alive_tester_task());
+    thread::spawn(crate::core::fluttersink::stream_alive_tester_task);
     debug!("Done initializing flutter gstreamer");
     *is_initialized = true;
 }
@@ -65,7 +65,7 @@ pub fn create_new_playable(
 /// if the ui won't call this every 2 seconds
 /// this session will terminate itself.
 pub fn mark_session_alive(session_id: i64) {
-    let _ = crate::core::fluttersink::mark_session_alive(session_id);
+    crate::core::fluttersink::mark_session_alive(session_id);
 }
 
 pub fn destroy_engine_streams(engine_id: i64) {

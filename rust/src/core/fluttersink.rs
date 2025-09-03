@@ -38,7 +38,7 @@ pub fn stream_alive_tester_task() {
             for (session_id, ctx) in session_cache.iter() {
                 if now.duration_since(ctx.last_alive_mark).unwrap().as_millis() > 5000 {
                     ctx.decoder.destroy_stream();
-                    closed_sessions.push(session_id.clone());
+                    closed_sessions.push(*session_id);
                 }
             }
         }
