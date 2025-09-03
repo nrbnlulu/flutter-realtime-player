@@ -11,6 +11,7 @@ import 'rust/core/types.dart';
 class VideoController {
   final String url;
   final bool mute;
+  final bool autoRestart;
   Map<String, String>? ffmpegOptions;
 
   final int sessionId;
@@ -24,6 +25,7 @@ class VideoController {
     required this.sessionId,
     required this.stateBroadcast,
     this.mute = true,
+    this.autoRestart = false,
     this.ffmpegOptions,
   }) : _originalSub = originalSub;
 
@@ -36,6 +38,7 @@ class VideoController {
   static Future<(VideoController?, String?)> create({
     required String url,
     bool mute = true,
+    bool autoRestart = false,
     Map<String, String>? ffmpegOptions,
   }) async {
     final handle = await EngineContext.instance.getEngineHandle();
@@ -51,6 +54,7 @@ class VideoController {
           uri: url,
           dimensions: const VideoDimensions(width: 640, height: 360),
           mute: mute,
+          autoRestart: autoRestart,
         ),
       );
       final bs = rx.BehaviorSubject<StreamState>.seeded(StreamState.loading());
@@ -64,6 +68,7 @@ class VideoController {
         sessionId: sessionId,
         stateBroadcast: bs,
         url: url,
+        autoRestart: autoRestart,
         ffmpegOptions: ffmpegOptions,
         mute: mute,
       );
@@ -118,6 +123,7 @@ class VideoPlayer extends StatefulWidget {
     required String url,
     Map<String, String>? ffmpegOptions,
     bool mute = true,
+    bool autoRestart = false,
     bool autoDispose = true,
     Widget? child,
   }) {
@@ -125,6 +131,7 @@ class VideoPlayer extends StatefulWidget {
       future: VideoController.create(
         url: url,
         mute: mute,
+        autoRestart: autoRestart,
         ffmpegOptions: ffmpegOptions,
       ),
       builder: (ctx, res) {

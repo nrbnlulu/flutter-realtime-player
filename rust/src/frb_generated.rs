@@ -481,11 +481,13 @@ impl SseDecode for crate::core::types::VideoInfo {
         let mut var_dimensions = <crate::core::types::VideoDimensions>::sse_decode(deserializer);
         let mut var_framerate = <Option<i32>>::sse_decode(deserializer);
         let mut var_mute = <bool>::sse_decode(deserializer);
+        let mut var_autoRestart = <bool>::sse_decode(deserializer);
         return crate::core::types::VideoInfo {
             uri: var_uri,
             dimensions: var_dimensions,
             framerate: var_framerate,
             mute: var_mute,
+            auto_restart: var_autoRestart,
         };
     }
 }
@@ -591,6 +593,7 @@ impl flutter_rust_bridge::IntoDart for crate::core::types::VideoInfo {
             self.dimensions.into_into_dart().into_dart(),
             self.framerate.into_into_dart().into_dart(),
             self.mute.into_into_dart().into_dart(),
+            self.auto_restart.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -762,6 +765,7 @@ impl SseEncode for crate::core::types::VideoInfo {
         <crate::core::types::VideoDimensions>::sse_encode(self.dimensions, serializer);
         <Option<i32>>::sse_encode(self.framerate, serializer);
         <bool>::sse_encode(self.mute, serializer);
+        <bool>::sse_encode(self.auto_restart, serializer);
     }
 }
 

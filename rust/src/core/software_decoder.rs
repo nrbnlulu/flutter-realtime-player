@@ -298,9 +298,15 @@ impl SoftwareDecoder {
             } else {
                 info!("stream({}) successfully initialized", &self.video_info.uri);
                 let res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
-                if matches!(res, StreamExitResult::LegalExit | StreamExitResult::EOF) {
-                    break; // no need to reinitialize
-                }
+                match res{
+                    StreamExitResult::LegalExit | StreamExitResult::EOF => {
+                        if self.video_info.auto_restart{
+                            continue;
+                        }
+                        break
+                    },
+                    _ => continue
+                };
             }
             thread::sleep(Duration::from_millis(2000));
         }

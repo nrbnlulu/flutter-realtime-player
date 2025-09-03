@@ -46,6 +46,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
         MapEntry(TextEditingController(), TextEditingController()),
       ],
       isStreaming: true,
+      autoRestart: false,
     ),
   ];
 
@@ -80,6 +81,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
             MapEntry(TextEditingController(), TextEditingController()),
           ],
           isStreaming: true,
+          autoRestart: false,
         ),
       );
     });
@@ -194,11 +196,13 @@ class _StreamConfig {
   final List<MapEntry<TextEditingController, TextEditingController>>
   ffmpegOptionControllers;
   bool isStreaming;
+  bool autoRestart;
 
   _StreamConfig({
     required this.urlController,
     required this.ffmpegOptionControllers,
     required this.isStreaming,
+    required this.autoRestart,
   });
 }
 
@@ -342,13 +346,23 @@ class _StreamGridItemState extends State<_StreamGridItem>
               ],
             ),
             const SizedBox(height: 8),
+            SwitchListTile(
+              title: const Text('Auto Restart'),
+              value: stream.autoRestart,
+              onChanged: (value) {
+                setState(() {
+                  stream.autoRestart = value;
+                });
+              },
+            ),
+            const SizedBox(height: 8),
             stream.isStreaming
                 ? SizedBox(
                   width: double.infinity,
                   height: 240,
                   child: VideoPlayer.fromConfig(
                     url: stream.urlController.text,
-
+                    autoRestart: stream.autoRestart,
                     ffmpegOptions: widget.collectFfmpegOptions(
                       stream.ffmpegOptionControllers,
                     ),
