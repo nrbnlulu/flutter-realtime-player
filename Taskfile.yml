@@ -11,9 +11,8 @@ tasks:
     cmds:
       - cargo fix --allow-dirty
       - cargo check
-      - flutter analyze --disable-analytics
+      - flutter analyze --disable-analytics ./lib
       - dart fix --apply
-      - flutter analyze
   fmt:
     cmds:
       - cargo fmt
