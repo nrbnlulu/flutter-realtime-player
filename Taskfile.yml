@@ -9,7 +9,8 @@ tasks:
       - flutter test --fail-fast --reporter=compact --coverage
   lint:
     cmds:
-      - cargo fix
+      - cargo fix --allow-dirty
+      - cargo check
       - flutter analyze --disable-analytics
       - dart fix --apply
       - flutter analyze
