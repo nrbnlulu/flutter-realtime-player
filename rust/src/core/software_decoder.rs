@@ -300,6 +300,8 @@ impl SoftwareDecoder {
                 match res {
                     StreamExitResult::LegalExit | StreamExitResult::EOF => {
                         if self.video_info.auto_restart {
+                            dart_update_stream.add(StreamState::Stopped).log_err();
+                            thread::sleep(Duration::from_millis(800));
                             continue;
                         }
                         break;
@@ -309,7 +311,7 @@ impl SoftwareDecoder {
             }
             thread::sleep(Duration::from_millis(2000));
         }
-        let _ = dart_update_stream.add(StreamState::Stopped);
+        dart_update_stream.add(StreamState::Stopped).log_err();
         Ok(())
     }
 
