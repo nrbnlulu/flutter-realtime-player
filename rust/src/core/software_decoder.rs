@@ -193,7 +193,7 @@ impl SoftwareDecoder {
             payload_holder: Arc::downgrade(&payload_holder),
             session_id,
             decoding_context: Mutex::new(None),
-            ffmpeg_options: ffmpeg_options,
+            ffmpeg_options,
         });
         (self_, payload_holder)
     }
@@ -237,12 +237,11 @@ impl SoftwareDecoder {
         let height = decoder.height();
 
         let scaler = Self::create_scaler_with_fallbacks(src_format, width, height, dst_format)
-            .map_err(|e| {
+            .inspect_err(|e| {
                 error!(
                     "Failed to create scaler for stream {}: {}",
                     &self.video_info.uri, e
                 );
-                e
             })?;
         let avg_frame_rate = input.avg_frame_rate();
         let frame_rate = if avg_frame_rate.denominator() != 0 {
@@ -298,13 +297,21 @@ impl SoftwareDecoder {
             } else {
                 info!("stream({}) successfully initialized", &self.video_info.uri);
                 let res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
-                if matches!(res, StreamExitResult::LegalExit | StreamExitResult::EOF) {
-                    break; // no need to reinitialize
-                }
+                match res {
+                    StreamExitResult::LegalExit | StreamExitResult::EOF => {
+                        if self.video_info.auto_restart {
+                            dart_update_stream.add(StreamState::Stopped).log_err();
+                            thread::sleep(Duration::from_millis(800));
+                            continue;
+                        }
+                        break;
+                    }
+                    _ => continue,
+                };
             }
             thread::sleep(Duration::from_millis(2000));
         }
-        let _ = dart_update_stream.add(StreamState::Stopped);
+        dart_update_stream.add(StreamState::Stopped).log_err();
         Ok(())
     }
 
@@ -349,7 +356,7 @@ impl SoftwareDecoder {
                         continue;
                     }
                     if stream.index() == decoding_context.video_stream_index {
-                        match decoding_context.decoder.send_packet(&mut packet) {
+                        match decoding_context.decoder.send_packet(&packet) {
                             Ok(_) => {
                                 self.on_new_sample(
                                     &mut decoding_context.decoder,
@@ -414,7 +421,7 @@ impl SoftwareDecoder {
         mark_frame_avb: &T,
     ) -> anyhow::Result<()>
     where
-        T: Fn() -> (),
+        T: Fn(),
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
         while decoder.receive_frame(&mut decoded).is_ok() {

@@ -29,17 +29,23 @@ class VideoInfo {
   final VideoDimensions dimensions;
   final int? framerate;
   final bool mute;
+  final bool autoRestart;
 
   const VideoInfo({
     required this.uri,
     required this.dimensions,
     this.framerate,
     required this.mute,
+    required this.autoRestart,
   });
 
   @override
   int get hashCode =>
-      uri.hashCode ^ dimensions.hashCode ^ framerate.hashCode ^ mute.hashCode;
+      uri.hashCode ^
+      dimensions.hashCode ^
+      framerate.hashCode ^
+      mute.hashCode ^
+      autoRestart.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -49,5 +55,6 @@ class VideoInfo {
           uri == other.uri &&
           dimensions == other.dimensions &&
           framerate == other.framerate &&
-          mute == other.mute;
+          mute == other.mute &&
+          autoRestart == other.autoRestart;
 }

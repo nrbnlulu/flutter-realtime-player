@@ -496,13 +496,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   VideoInfo dco_decode_video_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return VideoInfo(
       uri: dco_decode_String(arr[0]),
       dimensions: dco_decode_video_dimensions(arr[1]),
       framerate: dco_decode_opt_box_autoadd_i_32(arr[2]),
       mute: dco_decode_bool(arr[3]),
+      autoRestart: dco_decode_bool(arr[4]),
     );
   }
 
@@ -675,11 +676,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_dimensions = sse_decode_video_dimensions(deserializer);
     var var_framerate = sse_decode_opt_box_autoadd_i_32(deserializer);
     var var_mute = sse_decode_bool(deserializer);
+    var var_autoRestart = sse_decode_bool(deserializer);
     return VideoInfo(
       uri: var_uri,
       dimensions: var_dimensions,
       framerate: var_framerate,
       mute: var_mute,
+      autoRestart: var_autoRestart,
     );
   }
 
@@ -866,5 +869,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_video_dimensions(self.dimensions, serializer);
     sse_encode_opt_box_autoadd_i_32(self.framerate, serializer);
     sse_encode_bool(self.mute, serializer);
+    sse_encode_bool(self.autoRestart, serializer);
   }
 }

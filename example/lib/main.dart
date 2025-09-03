@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-
 import 'package:flutter_realtime_player/video_player.dart';
-
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
-import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'dart:convert';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +32,6 @@ class StreamControlWidget extends StatefulWidget {
 }
 
 class StreamControlWidgetState extends State<StreamControlWidget> {
-  // Instead of a single stream, manage a list of streams.
   final List<_StreamConfig> _streams = [
     _StreamConfig(
       urlController: TextEditingController(
@@ -45,7 +40,8 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       ffmpegOptionControllers: [
         MapEntry(TextEditingController(), TextEditingController()),
       ],
-      isStreaming: true,
+      isStreaming: false,
+      autoRestart: false,
     ),
   ];
 
@@ -63,11 +59,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
 
   void _toggleStream(int index) {
     setState(() {
-      if (_streams[index].isStreaming) {
-        _streams[index].isStreaming = false;
-      } else {
-        _streams[index].isStreaming = true;
-      }
+      _streams[index].isStreaming = !_streams[index].isStreaming;
     });
   }
 
@@ -79,7 +71,8 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
           ffmpegOptionControllers: [
             MapEntry(TextEditingController(), TextEditingController()),
           ],
-          isStreaming: true,
+          isStreaming: false,
+          autoRestart: false,
         ),
       );
     });
@@ -123,25 +116,12 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
     final Map<String, String> options = {};
     for (final entry in controllers) {
       final key = entry.key.text.trim();
-
       final value = entry.value.text.trim();
       if (key.isNotEmpty) {
         options[key] = value;
       }
     }
     return options;
-  }
-
-  Future<void> _openInNewWindow(int index) async {
-    final url = _streams[index].urlController.text;
-    final window = await DesktopMultiWindow.createWindow(
-      jsonEncode({'url': url}),
-    );
-
-    window
-      ..setFrame(const Offset(100, 100) & const Size(800, 600))
-      ..setTitle('Stream Window')
-      ..show();
   }
 
   @override
@@ -152,13 +132,13 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
           child: GridView.builder(
             padding: const EdgeInsets.all(8),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // Adjust as needed
+              crossAxisCount: 2,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
               childAspectRatio: 1.5,
             ),
             itemCount: _streams.length,
-            addAutomaticKeepAlives: true, // <-- ensure keep-alive
+            addAutomaticKeepAlives: true,
             itemBuilder: (context, streamIdx) {
               final stream = _streams[streamIdx];
               return _StreamGridItem(
@@ -166,7 +146,6 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
                 stream: stream,
                 streamIdx: streamIdx,
                 toggleStream: _toggleStream,
-                openInNewWindow: _openInNewWindow,
                 removeStream: _removeStream,
                 addFfmpegOptionField: _addFfmpegOptionField,
                 removeFfmpegOptionField: _removeFfmpegOptionField,
@@ -188,17 +167,18 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
   }
 }
 
-// Helper class to manage each stream's state
 class _StreamConfig {
   final TextEditingController urlController;
   final List<MapEntry<TextEditingController, TextEditingController>>
   ffmpegOptionControllers;
   bool isStreaming;
+  bool autoRestart;
 
   _StreamConfig({
     required this.urlController,
     required this.ffmpegOptionControllers,
     required this.isStreaming,
+    required this.autoRestart,
   });
 }
 
@@ -206,7 +186,6 @@ class _StreamGridItem extends StatefulWidget {
   final _StreamConfig stream;
   final int streamIdx;
   final void Function(int) toggleStream;
-  final Future<void> Function(int) openInNewWindow;
   final void Function(int) removeStream;
   final void Function(int) addFfmpegOptionField;
   final void Function(int, int) removeFfmpegOptionField;
@@ -216,16 +195,15 @@ class _StreamGridItem extends StatefulWidget {
   collectFfmpegOptions;
 
   const _StreamGridItem({
-    Key? key,
+    super.key,
     required this.stream,
     required this.streamIdx,
     required this.toggleStream,
-    required this.openInNewWindow,
     required this.removeStream,
     required this.addFfmpegOptionField,
     required this.removeFfmpegOptionField,
     required this.collectFfmpegOptions,
-  }) : super(key: key);
+  });
 
   @override
   State<_StreamGridItem> createState() => _StreamGridItemState();
@@ -264,7 +242,6 @@ class _StreamGridItemState extends State<_StreamGridItem>
               ],
             ),
             const SizedBox(height: 8),
-            // FFmpeg options editor
             SizedBox(
               height: 120,
               child: SingleChildScrollView(
@@ -334,12 +311,17 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     stream.isStreaming ? 'Stop Stream' : 'Start Stream',
                   ),
                 ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: () => widget.openInNewWindow(widget.streamIdx),
-                  child: const Text('Open in New Window'),
-                ),
               ],
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              title: const Text('Auto Restart'),
+              value: stream.autoRestart,
+              onChanged: (value) {
+                setState(() {
+                  stream.autoRestart = value;
+                });
+              },
             ),
             const SizedBox(height: 8),
             stream.isStreaming
@@ -348,7 +330,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                   height: 240,
                   child: VideoPlayer.fromConfig(
                     url: stream.urlController.text,
-
+                    autoRestart: stream.autoRestart,
                     ffmpegOptions: widget.collectFfmpegOptions(
                       stream.ffmpegOptionControllers,
                     ),

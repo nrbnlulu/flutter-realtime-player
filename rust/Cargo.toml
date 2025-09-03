@@ -68,3 +68,6 @@ cfg_aliases = "0.2.1"
 
 [features]
 wayland = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

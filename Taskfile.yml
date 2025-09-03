@@ -1,0 +1,19 @@
+version: "3"
+
+tasks:
+  codegen:
+    cmds:
+      - dart run build_runner build --delete-conflicting-outputs
+  test:
+    cmds:
+      - flutter test --fail-fast --reporter=compact --coverage
+  lint:
+    cmds:
+      - cargo fix --allow-dirty
+      - cargo check
+      - flutter analyze --disable-analytics ./lib
+      - dart fix --apply
+  fmt:
+    cmds:
+      - cargo fmt
+      - dart format ./lib ./example 
