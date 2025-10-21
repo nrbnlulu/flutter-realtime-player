@@ -34,9 +34,7 @@ class StreamControlWidget extends StatefulWidget {
 class StreamControlWidgetState extends State<StreamControlWidget> {
   final List<_StreamConfig> _streams = [
     _StreamConfig(
-      urlController: TextEditingController(
-        text: "rtsp:://your_stream_url_here",
-      ),
+      urlController: TextEditingController(text: "rtsp://your_stream_url_here"),
       ffmpegOptionControllers: [
         MapEntry(TextEditingController(), TextEditingController()),
       ],
