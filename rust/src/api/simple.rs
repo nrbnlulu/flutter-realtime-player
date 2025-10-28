@@ -1,4 +1,4 @@
-use std::{collections::HashMap, thread};
+use std::collections::HashMap;
 
 use log::{debug, trace};
 
@@ -22,7 +22,7 @@ pub fn flutter_realtime_player_init(ffi_ptr: i64) {
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
 
     fluttersink::init().log_err();
-    thread::spawn(crate::core::fluttersink::stream_alive_tester_task);
+    tokio::spawn(crate::core::fluttersink::stream_alive_tester_task());
     debug!("Done initializing flutter gstreamer");
     *is_initialized = true;
 }

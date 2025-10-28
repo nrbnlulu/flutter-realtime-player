@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    thread,
 };
 
 use log::{debug, info};
@@ -28,7 +27,7 @@ struct SessionContext {
 lazy_static::lazy_static! {
 static ref SESSION_CACHE: Mutex<HashMap<i64, SessionContext>> = Mutex::new(HashMap::new());
 }
-pub fn stream_alive_tester_task() {
+pub async fn stream_alive_tester_task() {
     loop {
         let mut closed_sessions = Vec::new();
 
@@ -55,7 +54,7 @@ pub fn stream_alive_tester_task() {
                 }
             });
         }
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }
 
@@ -87,8 +86,10 @@ pub fn create_new_playable(
         },
     );
 
-    thread::spawn(move || {
-        let _ = decoding_manager.stream(sendable_texture, update_stream, texture_id);
+    tokio::spawn(async move {
+        let _ = decoding_manager
+            .stream(sendable_texture, update_stream, texture_id)
+            .await;
     });
 
     Ok(())
@@ -133,7 +134,7 @@ pub fn destroy_stream_session(session_id: i64) {
                 "Waiting for all references to be dropped for session id: {}. attempt({})",
                 session_id, retry_count
             );
-            thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(std::time::Duration::from_millis(500));
             retry_count += 1;
         }
         if retry_count == MAX_RETRIES {

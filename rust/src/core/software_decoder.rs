@@ -4,7 +4,6 @@ use std::{
     collections::HashMap,
     fmt, mem,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
-    thread,
     time::Duration,
 };
 
@@ -269,7 +268,7 @@ impl SoftwareDecoder {
     fn asked_for_termination(&self) -> bool {
         self.kill_sig.load(std::sync::atomic::Ordering::Relaxed)
     }
-    pub fn stream(
+    pub async fn stream(
         &self,
         sendable_texture: SharedSendableTexture,
         dart_update_stream: DartUpdateStream,
@@ -301,7 +300,7 @@ impl SoftwareDecoder {
                     StreamExitResult::LegalExit | StreamExitResult::EOF => {
                         if self.video_info.auto_restart {
                             dart_update_stream.add(StreamState::Stopped).log_err();
-                            thread::sleep(Duration::from_millis(800));
+                            tokio::time::sleep(Duration::from_millis(800)).await;
                             continue;
                         }
                         break;
@@ -309,7 +308,7 @@ impl SoftwareDecoder {
                     _ => continue,
                 };
             }
-            thread::sleep(Duration::from_millis(2000));
+            tokio::time::sleep(Duration::from_millis(2000)).await;
         }
         dart_update_stream.add(StreamState::Stopped).log_err();
         Ok(())
