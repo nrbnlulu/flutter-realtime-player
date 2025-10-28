@@ -14,12 +14,8 @@ dependencies:
   flutter_rust_bridge: ^2.11.1
   plugin_platform_interface: ^2.0.2
   irondash_engine_context:
-  freezed_annotation: ^3.0.0
-  rxdart: ^0.28.0
-        # git:
-        #   url: "https://github.com/nrbnlulu/irondash.git"
-        #   ref: dont-unregister-on-drop
-        #   path: engine_context/dart
+  freezed_annotation: '>=3.0.0'
+  rxdart: '>=0.28.0'
 
       
 dev_dependencies:
@@ -30,7 +26,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   integration_test:
     sdk: flutter
-  freezed: ^3.0.6
+  freezed: '>=3.0.0'
   build_runner: ^2.4.15
 
 # For information on the generic Dart part of this file, see the
