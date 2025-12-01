@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_realtime_player/rust/core/types.dart'
+    show VideoDimensions;
 import 'package:flutter_realtime_player/video_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
@@ -222,6 +224,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Column(
+          spacing: 6,
           children: [
             Row(
               children: [
@@ -241,9 +244,8 @@ class _StreamGridItemState extends State<_StreamGridItem>
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 120,
+            Flexible(
+              flex: 1,
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,7 +269,6 @@ class _StreamGridItemState extends State<_StreamGridItem>
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
                           Expanded(
                             child: TextField(
                               controller: controllers.value,
@@ -301,7 +302,6 @@ class _StreamGridItemState extends State<_StreamGridItem>
                 ),
               ),
             ),
-            const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -311,27 +311,30 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     stream.isStreaming ? 'Stop Stream' : 'Start Stream',
                   ),
                 ),
+                Tooltip(
+                  message: "auto restart",
+                  child: Switch(
+                    value: stream.autoRestart,
+                    onChanged: (value) {
+                      setState(() {
+                        stream.autoRestart = value;
+                      });
+                    },
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              title: const Text('Auto Restart'),
-              value: stream.autoRestart,
-              onChanged: (value) {
-                setState(() {
-                  stream.autoRestart = value;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
             stream.isStreaming
-                ? _VideoPlayerWithControls(
+                ? Flexible(
+                  flex: 6,
+                  child: _VideoPlayerWithControls(
                     url: stream.urlController.text,
                     autoRestart: stream.autoRestart,
                     ffmpegOptions: widget.collectFfmpegOptions(
                       stream.ffmpegOptionControllers,
                     ),
-                  )
+                  ),
+                )
                 : const Text('Stream is stopped'),
           ],
         ),
@@ -339,8 +342,6 @@ class _StreamGridItemState extends State<_StreamGridItem>
     );
   }
 }
-
-
 
 class _VideoPlayerWithControls extends StatefulWidget {
   final String url;
@@ -354,13 +355,15 @@ class _VideoPlayerWithControls extends StatefulWidget {
   });
 
   @override
-  State<_VideoPlayerWithControls> createState() => _VideoPlayerWithControlsState();
+  State<_VideoPlayerWithControls> createState() =>
+      _VideoPlayerWithControlsState();
 }
 
 class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   VideoController? _controller;
   bool _isLoading = true;
-  Duration _duration = Duration.zero; // We don't have duration for this simple player
+  final Duration _duration =
+      Duration.zero; // We don't have duration for this simple player
   Duration _position = Duration.zero;
   Timer? _positionTimer;
 
@@ -371,12 +374,18 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   }
 
   Future<void> _initializeVideo() async {
+    final dimensions = const VideoDimensions(
+      width: 356,
+      height: 200,
+    ); // 16:9 aspect ratio for 200 height
+
     final result = await VideoController.create(
       url: widget.url,
+      dimensions: dimensions,
       autoRestart: widget.autoRestart,
       ffmpegOptions: widget.ffmpegOptions,
     );
-    
+
     setState(() {
       _controller = result.$1;
       _isLoading = false;
@@ -384,7 +393,9 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
 
     if (_controller != null) {
       // Start periodic position updates
-      _positionTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      _positionTimer = Timer.periodic(const Duration(seconds: 1), (
+        timer,
+      ) async {
         try {
           final position = await _controller!.getCurrentPosition();
           final state = _controller!.stateBroadcast.value;
@@ -402,9 +413,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
 
   Future<void> _seekToPosition(double value) async {
     if (_controller != null) {
-      final newPosition = Duration(
-        milliseconds: (value * 1000).round(),
-      );
+      final newPosition = Duration(milliseconds: (value * 1000).round());
       await _controller!.seekTo(newPosition);
       setState(() {
         _position = newPosition;
@@ -431,26 +440,27 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
 
     return Column(
       children: [
-        SizedBox(
-          width: double.infinity,
-          height: 200, // Reduced to make space for controls
+        Flexible(
+          flex: 6,
           child: VideoPlayer.fromController(
             controller: _controller!,
             autoDispose: false, // Don't auto dispose since we're managing it
           ),
         ),
+
         // Video controls
-        Padding(
-          padding: const EdgeInsets.all(8.0),
+        Flexible(
+          flex: 3,
           child: Column(
             children: [
               // Position slider
               Slider(
                 value: _position.inMilliseconds.toDouble(),
                 min: 0.0,
-                max: _duration.inMilliseconds.toDouble().isNaN 
-                    ? 100.0 
-                    : _duration.inMilliseconds.toDouble(),
+                max:
+                    _duration.inMilliseconds.toDouble().isNaN
+                        ? 100.0
+                        : _duration.inMilliseconds.toDouble(),
                 onChanged: _seekToPosition,
                 label: '${_position.inSeconds}s',
               ),
@@ -476,7 +486,9 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                         if (newPosition.isNegative) {
                           await _seekToPosition(0.0);
                         } else {
-                          await _seekToPosition(newPosition.inMilliseconds.toDouble());
+                          await _seekToPosition(
+                            newPosition.inMilliseconds.toDouble(),
+                          );
                         }
                       }
                     },
@@ -488,7 +500,9 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                         final newPosition = Duration(
                           milliseconds: _position.inMilliseconds + 10000,
                         );
-                        await _seekToPosition(newPosition.inMilliseconds.toDouble());
+                        await _seekToPosition(
+                          newPosition.inMilliseconds.toDouble(),
+                        );
                       }
                     },
                   ),

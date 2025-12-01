@@ -77,6 +77,9 @@ pub fn create_new_playable(
             Ok((texture.into_sendable_texture(), texture_id))
         })?;
 
+    // Set the sendable texture reference in the decoder for immediate updates during resize
+    decoding_manager.set_sendable_texture(Arc::downgrade(&sendable_texture));
+
     SESSION_CACHE.lock().unwrap().insert(
         session_id,
         SessionContext {
@@ -162,6 +165,15 @@ pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
     let session_cache = SESSION_CACHE.lock().unwrap();
     if let Some(ctx) = session_cache.get(&session_id) {
         ctx.decoder.get_current_time()
+    } else {
+        Err(anyhow::anyhow!("Session not found: {}", session_id))
+    }
+}
+
+pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
+    let session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some(ctx) = session_cache.get(&session_id) {
+        ctx.decoder.resize_stream(width, height)
     } else {
         Err(anyhow::anyhow!("Session not found: {}", session_id))
     }

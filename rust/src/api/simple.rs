@@ -88,3 +88,7 @@ pub fn seek_to_time(session_id: i64, time_seconds: f64) -> anyhow::Result<()> {
 pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
     crate::core::fluttersink::get_current_time(session_id)
 }
+
+pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
+    crate::core::fluttersink::resize_stream_session(session_id, width, height)
+}

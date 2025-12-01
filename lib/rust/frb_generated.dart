@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -937103690;
+  int get rustContentHash => 987886303;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -108,6 +108,12 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiSimpleMarkSessionAlive({
     required PlatformInt64 sessionId,
+  });
+
+  Future<void> crateApiSimpleResizeStreamSession({
+    required PlatformInt64 sessionId,
+    required int width,
+    required int height,
   });
 
   Future<void> crateApiSimpleSeekToTime({
@@ -394,6 +400,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiSimpleResizeStreamSession({
+    required PlatformInt64 sessionId,
+    required int width,
+    required int height,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(sessionId, serializer);
+          sse_encode_u_32(width, serializer);
+          sse_encode_u_32(height, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSimpleResizeStreamSessionConstMeta,
+        argValues: [sessionId, width, height],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleResizeStreamSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "resize_stream_session",
+        argNames: ["sessionId", "width", "height"],
+      );
+
+  @override
   Future<void> crateApiSimpleSeekToTime({
     required PlatformInt64 sessionId,
     required double timeSeconds,
@@ -407,7 +450,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 10,
             port: port_,
           );
         },
