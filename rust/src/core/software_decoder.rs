@@ -5,7 +5,7 @@ use std::{
     fmt, mem,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
@@ -137,6 +137,50 @@ impl fmt::Debug for DecodingContext {
     }
 }
 
+struct FrameSynchronizer {
+    start_system_time: Instant,
+    start_stream_time: f64,
+    frames_processed: u64, 
+}
+
+impl FrameSynchronizer {
+    fn new(current_pts_seconds: f64) -> Self {
+        Self {
+            start_system_time: Instant::now(),
+            start_stream_time: current_pts_seconds,
+            frames_processed: 0, // Initialize to 0
+        }
+    }
+
+    /// Returns the duration the thread should sleep
+    fn get_sleep_duration(&mut self, pts_seconds: f64, framerate: f64) -> Option<Duration> {
+        self.frames_processed += 1;
+
+        // FALLBACK: If PTS is 0.0 but we have processed multiple frames,
+        // ignore PTS and calculate time based on framerate.
+        let mut effective_time = pts_seconds;
+
+        // If pts is stuck at 0 (or very close to start) and we are moving forward...
+        if effective_time <= 0.001 && self.frames_processed > 1 {
+            if framerate > 0.0 {
+                // Calculate: Frame 10 at 30fps = 0.33s
+                effective_time = (self.frames_processed as f64) / framerate;
+            }
+        }
+
+        let stream_elapsed = effective_time - self.start_stream_time;
+        let system_elapsed = self.start_system_time.elapsed().as_secs_f64();
+
+        if stream_elapsed > system_elapsed {
+            let diff = stream_elapsed - system_elapsed;
+            if diff > 0.001 {
+                return Some(Duration::from_secs_f64(diff));
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug)]
 pub enum StreamExitResult {
     LegalExit,
@@ -153,10 +197,11 @@ pub struct SoftwareDecoder {
     ffmpeg_options: Option<HashMap<String, String>>,
     current_time: Arc<Mutex<f64>>, // Track current playback time in seconds
     seek_request: Arc<Mutex<Option<i64>>>, // Pending seek timestamp in microseconds (AV_TIME_BASE)
-    seekable: Arc<Mutex<bool>>,    // Whether the stream is seekable
+    seekable: Arc<AtomicBool>,     // Whether the stream is seekable
     output_dimensions: Arc<Mutex<types::VideoDimensions>>, // Track current output dimensions for dynamic resize
     sendable_texture:
         Arc<Mutex<Option<Weak<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>>>>,
+    synchronizer: Mutex<Option<FrameSynchronizer>>, // For frame timing synchronization in non-live streams
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
@@ -247,9 +292,10 @@ impl SoftwareDecoder {
             ffmpeg_options,
             current_time: Arc::new(Mutex::new(0.0)),
             seek_request: Arc::new(Mutex::new(None)),
-            seekable: Arc::new(Mutex::new(false)),
+            seekable: Arc::new(AtomicBool::new(false)),
             output_dimensions: Arc::new(Mutex::new(video_info.dimensions.clone())),
             sendable_texture: Arc::new(Mutex::new(None)),
+            synchronizer: Mutex::new(None),
         });
         (self_, payload_holder)
     }
@@ -268,7 +314,7 @@ impl SoftwareDecoder {
             return; // Invalid seek
         }
 
-        let seekable = *self.seekable.lock().unwrap();
+        let seekable = self.seekable.load(std::sync::atomic::Ordering::Relaxed);
         if !seekable {
             warn!("Seek requested but stream is not seekable");
             return;
@@ -403,8 +449,8 @@ impl SoftwareDecoder {
         info!("Stream duration: {}, seekable: {}", duration, is_seekable);
         let mut decoding_context = self.decoding_context.lock().unwrap();
         decoding_context.replace(context);
-        let mut seekable = self.seekable.lock().unwrap();
-        *seekable = is_seekable;
+        self.seekable
+            .store(is_seekable, std::sync::atomic::Ordering::Relaxed);
         trace!("ffmpeg session started for {}", &self.video_info.uri);
 
         Ok(())
@@ -520,6 +566,9 @@ impl SoftwareDecoder {
                             }
                             // Update current_time based on the seek target
                             *self.current_time.lock().unwrap() = (ts as f64) / 1_000_000.0;
+
+                            // Reset the synchronizer to re-anchor timing after seek
+                            *self.synchronizer.lock().unwrap() = None;
                         }
                         Err(e) => {
                             error!("Seek failed to timestamp {}: {}", ts, e);
@@ -549,8 +598,13 @@ impl SoftwareDecoder {
                     if stream.index() == ctx.video_stream_index {
                         match ctx.decoder.send_packet(&packet) {
                             Ok(_) => {
-                                self.on_new_sample(&mut ctx.decoder, &mut ctx.scaler, &cb)
-                                    .log_err();
+                                self.on_new_sample(
+                                    &mut ctx.decoder,
+                                    &mut ctx.scaler,
+                                    ctx.framerate as f64,
+                                    &cb,
+                                )
+                                .log_err();
                                 if first_frame {
                                     first_frame = false;
                                     trace!(
@@ -559,7 +613,9 @@ impl SoftwareDecoder {
                                     );
                                     let _ = dart_update_stream.add(StreamState::Playing {
                                         texture_id,
-                                        seekable: *self.seekable.lock().unwrap(),
+                                        seekable: self
+                                            .seekable
+                                            .load(std::sync::atomic::Ordering::Relaxed),
                                     });
                                 }
                             }
@@ -610,6 +666,7 @@ impl SoftwareDecoder {
         &self,
         decoder: &mut ffmpeg::decoder::Video,
         scaler: &mut ffmpeg::software::scaling::Context,
+        framerate: f64, // <--- ADD THIS ARGUMENT
         mark_frame_avb: &T,
     ) -> anyhow::Result<()>
     where
@@ -617,19 +674,48 @@ impl SoftwareDecoder {
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
         while decoder.receive_frame(&mut decoded).is_ok() {
-            // Update current time from frame PTS (convert from time_base to seconds)
-            if let Some(pts) = decoded.pts() {
-                let time_base = decoder.time_base();
-                let time_seconds =
-                    pts as f64 * (time_base.numerator() as f64 / time_base.denominator() as f64);
+            let time_base = decoder.time_base();
+            let time_base_seconds = time_base.numerator() as f64 / time_base.denominator() as f64;
 
-                // Only update current time if there's no pending seek (to avoid overwriting seek target)
-                let mut current_time = self.current_time.lock().unwrap();
+            let pts_seconds: Option<f64> = decoded
+                .pts()
+                .or(decoded.timestamp())
+                .map(|pts| pts as f64 * time_base_seconds);
+
+            // Default to 0.0 if None
+            let current_pts = pts_seconds.unwrap_or(0.0);
+
+            // Update shared current time
+            if let Some(ts) = pts_seconds {
                 let pending_seek = self.seek_request.lock().unwrap().is_some();
                 if !pending_seek {
-                    *current_time = time_seconds;
+                    *self.current_time.lock().unwrap() = ts;
                 }
             }
+
+            // ---------------------------------------------------------
+            // SYNCHRONIZATION LOGIC
+            // ---------------------------------------------------------
+            {
+                // Scoped to drop lock immediately after use
+                let mut sync_guard = self.synchronizer.lock().unwrap();
+
+                if sync_guard.is_none() {
+                    *sync_guard = Some(FrameSynchronizer::new(current_pts));
+                }
+
+                if let Some(ref mut sync) = *sync_guard {
+                    // Pass framerate to helper.
+                    // If current_pts is 0.0, the helper will use the frame counter.
+                    // Use a safe default for framerate (e.g., 30.0) if the stream reports 0.0
+                    let safe_fps = if framerate <= 0.0 { 30.0 } else { framerate };
+
+                    if let Some(sleep_duration) = sync.get_sleep_duration(current_pts, safe_fps) {
+                        thread::sleep(sleep_duration);
+                    }
+                }
+            }
+            // ---------------------------------------------------------
 
             let mut rgb_frame = ffmpeg::util::frame::Video::empty();
             scaler.run(&decoded, &mut rgb_frame)?;

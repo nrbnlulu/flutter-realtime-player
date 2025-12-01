@@ -121,24 +121,18 @@ class VideoController {
 // ignore: implementation_imports
 
 class VideoPlayer extends StatefulWidget {
-  final VideoController? controller; // Changed to nullable
+  final VideoController controller;
   final Widget? child;
-  final String? url; // Added url parameter
-  final Map<String, String>? ffmpegOptions;
-  final bool mute;
-  final bool autoRestart;
+
+  /// whether to dispose the stream when the widget disposes?
   final bool autoDispose;
 
   const VideoPlayer._({
     super.key,
-    this.controller,
-    this.url, // This will be null if controller is provided
+    required this.controller,
     this.child,
     this.autoDispose = true,
-  }) : assert(
-         controller != null || url != null,
-         'Either controller or url must be provided',
-       );
+  });
 
   factory VideoPlayer.fromController({
     GlobalKey? key,

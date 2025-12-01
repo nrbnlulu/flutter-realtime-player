@@ -385,6 +385,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
       autoRestart: widget.autoRestart,
       ffmpegOptions: widget.ffmpegOptions,
     );
+    
 
     setState(() {
       _controller = result.$1;
@@ -432,6 +433,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
+      
     }
 
     if (_controller == null) {
