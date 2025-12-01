@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/video_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
+import 'dart:async';
+import 'package:flutter_realtime_player/rust/dart_types.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -323,21 +325,179 @@ class _StreamGridItemState extends State<_StreamGridItem>
             ),
             const SizedBox(height: 8),
             stream.isStreaming
-                ? SizedBox(
-                  width: double.infinity,
-                  height: 240,
-                  child: VideoPlayer.fromConfig(
+                ? _VideoPlayerWithControls(
                     url: stream.urlController.text,
                     autoRestart: stream.autoRestart,
                     ffmpegOptions: widget.collectFfmpegOptions(
                       stream.ffmpegOptionControllers,
                     ),
-                  ),
-                )
+                  )
                 : const Text('Stream is stopped'),
           ],
         ),
       ),
+    );
+  }
+}
+
+
+
+class _VideoPlayerWithControls extends StatefulWidget {
+  final String url;
+  final bool autoRestart;
+  final Map<String, String>? ffmpegOptions;
+
+  const _VideoPlayerWithControls({
+    required this.url,
+    required this.autoRestart,
+    this.ffmpegOptions,
+  });
+
+  @override
+  State<_VideoPlayerWithControls> createState() => _VideoPlayerWithControlsState();
+}
+
+class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
+  VideoController? _controller;
+  bool _isLoading = true;
+  Duration _duration = Duration.zero; // We don't have duration for this simple player
+  Duration _position = Duration.zero;
+  Timer? _positionTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    final result = await VideoController.create(
+      url: widget.url,
+      autoRestart: widget.autoRestart,
+      ffmpegOptions: widget.ffmpegOptions,
+    );
+    
+    setState(() {
+      _controller = result.$1;
+      _isLoading = false;
+    });
+
+    if (_controller != null) {
+      // Start periodic position updates
+      _positionTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+        try {
+          final position = await _controller!.getCurrentPosition();
+          final state = _controller!.stateBroadcast.value;
+          if (state is StreamState_Playing) {
+            setState(() {
+              _position = position;
+            });
+          }
+        } catch (e) {
+          // Handle potential errors
+        }
+      });
+    }
+  }
+
+  Future<void> _seekToPosition(double value) async {
+    if (_controller != null) {
+      final newPosition = Duration(
+        milliseconds: (value * 1000).round(),
+      );
+      await _controller!.seekTo(newPosition);
+      setState(() {
+        _position = newPosition;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionTimer?.cancel();
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_controller == null) {
+      return const Center(child: Text('Failed to load video'));
+    }
+
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 200, // Reduced to make space for controls
+          child: VideoPlayer.fromController(
+            controller: _controller!,
+            autoDispose: false, // Don't auto dispose since we're managing it
+          ),
+        ),
+        // Video controls
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            children: [
+              // Position slider
+              Slider(
+                value: _position.inMilliseconds.toDouble(),
+                min: 0.0,
+                max: _duration.inMilliseconds.toDouble().isNaN 
+                    ? 100.0 
+                    : _duration.inMilliseconds.toDouble(),
+                onChanged: _seekToPosition,
+                label: '${_position.inSeconds}s',
+              ),
+              // Time display
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_position.toString().split('.')[0]),
+                  Text(_duration.toString().split('.')[0]),
+                ],
+              ),
+              // Seek buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.replay_10),
+                    onPressed: () async {
+                      if (_controller != null) {
+                        final newPosition = Duration(
+                          milliseconds: _position.inMilliseconds - 10000,
+                        );
+                        if (newPosition.isNegative) {
+                          await _seekToPosition(0.0);
+                        } else {
+                          await _seekToPosition(newPosition.inMilliseconds.toDouble());
+                        }
+                      }
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.forward_10),
+                    onPressed: () async {
+                      if (_controller != null) {
+                        final newPosition = Duration(
+                          milliseconds: _position.inMilliseconds + 10000,
+                        );
+                        await _seekToPosition(newPosition.inMilliseconds.toDouble());
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

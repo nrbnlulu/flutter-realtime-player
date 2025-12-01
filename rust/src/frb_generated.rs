@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 603167255;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -937103690;
 
 // Section: executor
 
@@ -231,6 +231,41 @@ fn wire__crate__api__simple__flutter_realtime_player_init_impl(
         },
     )
 }
+fn wire__crate__api__simple__get_current_time_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_current_time",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::simple::get_current_time(api_session_id)?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__simple__init_app_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -300,6 +335,43 @@ fn wire__crate__api__simple__mark_session_alive_impl(
         },
     )
 }
+fn wire__crate__api__simple__seek_to_time_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "seek_to_time",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <i64>::sse_decode(&mut deserializer);
+            let api_time_seconds = <f64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok =
+                            crate::api::simple::seek_to_time(api_session_id, api_time_seconds)?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -341,6 +413,13 @@ impl SseDecode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u8().unwrap() != 0
+    }
+}
+
+impl SseDecode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_f64::<NativeEndian>().unwrap()
     }
 }
 
@@ -429,8 +508,10 @@ impl SseDecode for crate::dart_types::StreamState {
             }
             2 => {
                 let mut var_textureId = <i64>::sse_decode(deserializer);
+                let mut var_seekable = <bool>::sse_decode(deserializer);
                 return crate::dart_types::StreamState::Playing {
                     texture_id: var_textureId,
+                    seekable: var_seekable,
                 };
             }
             3 => {
@@ -515,8 +596,10 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        6 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__simple__mark_session_alive_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__simple__get_current_time_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__simple__mark_session_alive_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__simple__seek_to_time_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -543,9 +626,15 @@ impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamState {
                 [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             crate::dart_types::StreamState::Loading => [1.into_dart()].into_dart(),
-            crate::dart_types::StreamState::Playing { texture_id } => {
-                [2.into_dart(), texture_id.into_into_dart().into_dart()].into_dart()
-            }
+            crate::dart_types::StreamState::Playing {
+                texture_id,
+                seekable,
+            } => [
+                2.into_dart(),
+                texture_id.into_into_dart().into_dart(),
+                seekable.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             crate::dart_types::StreamState::Stopped => [3.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
@@ -644,6 +733,13 @@ impl SseEncode for bool {
     }
 }
 
+impl SseEncode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -717,9 +813,13 @@ impl SseEncode for crate::dart_types::StreamState {
             crate::dart_types::StreamState::Loading => {
                 <i32>::sse_encode(1, serializer);
             }
-            crate::dart_types::StreamState::Playing { texture_id } => {
+            crate::dart_types::StreamState::Playing {
+                texture_id,
+                seekable,
+            } => {
                 <i32>::sse_encode(2, serializer);
                 <i64>::sse_encode(texture_id, serializer);
+                <bool>::sse_encode(seekable, serializer);
             }
             crate::dart_types::StreamState::Stopped => {
                 <i32>::sse_encode(3, serializer);

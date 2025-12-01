@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 603167255;
+  int get rustContentHash => -937103690;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -100,10 +100,19 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 ffiPtr,
   });
 
+  Future<double> crateApiSimpleGetCurrentTime({
+    required PlatformInt64 sessionId,
+  });
+
   Future<void> crateApiSimpleInitApp();
 
   Future<void> crateApiSimpleMarkSessionAlive({
     required PlatformInt64 sessionId,
+  });
+
+  Future<void> crateApiSimpleSeekToTime({
+    required PlatformInt64 sessionId,
+    required double timeSeconds,
   });
 }
 
@@ -292,6 +301,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<double> crateApiSimpleGetCurrentTime({
+    required PlatformInt64 sessionId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(sessionId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_f_64,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSimpleGetCurrentTimeConstMeta,
+        argValues: [sessionId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleGetCurrentTimeConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_current_time",
+        argNames: ["sessionId"],
+      );
+
+  @override
   Future<void> crateApiSimpleInitApp() {
     return handler.executeNormal(
       NormalTask(
@@ -300,7 +342,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -330,7 +372,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -350,6 +392,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "mark_session_alive",
         argNames: ["sessionId"],
       );
+
+  @override
+  Future<void> crateApiSimpleSeekToTime({
+    required PlatformInt64 sessionId,
+    required double timeSeconds,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(sessionId, serializer);
+          sse_encode_f_64(timeSeconds, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSimpleSeekToTimeConstMeta,
+        argValues: [sessionId, timeSeconds],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleSeekToTimeConstMeta => const TaskConstMeta(
+    debugName: "seek_to_time",
+    argNames: ["sessionId", "timeSeconds"],
+  );
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -397,6 +473,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   VideoInfo dco_decode_box_autoadd_video_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_video_info(raw);
+  }
+
+  @protected
+  double dco_decode_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
   }
 
   @protected
@@ -454,7 +536,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 1:
         return StreamState_Loading();
       case 2:
-        return StreamState_Playing(textureId: dco_decode_i_64(raw[1]));
+        return StreamState_Playing(
+          textureId: dco_decode_i_64(raw[1]),
+          seekable: dco_decode_bool(raw[2]),
+        );
       case 3:
         return StreamState_Stopped();
       default:
@@ -557,6 +642,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat64();
+  }
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
@@ -636,7 +727,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return StreamState_Loading();
       case 2:
         var var_textureId = sse_decode_i_64(deserializer);
-        return StreamState_Playing(textureId: var_textureId);
+        var var_seekable = sse_decode_bool(deserializer);
+        return StreamState_Playing(
+          textureId: var_textureId,
+          seekable: var_seekable,
+        );
       case 3:
         return StreamState_Stopped();
       default:
@@ -752,6 +847,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat64(self);
+  }
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
@@ -827,9 +928,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(field0, serializer);
       case StreamState_Loading():
         sse_encode_i_32(1, serializer);
-      case StreamState_Playing(textureId: final textureId):
+      case StreamState_Playing(
+        textureId: final textureId,
+        seekable: final seekable,
+      ):
         sse_encode_i_32(2, serializer);
         sse_encode_i_64(textureId, serializer);
+        sse_encode_bool(seekable, serializer);
       case StreamState_Stopped():
         sse_encode_i_32(3, serializer);
     }

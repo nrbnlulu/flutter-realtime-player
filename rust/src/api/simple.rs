@@ -80,3 +80,11 @@ pub fn destroy_stream_session(session_id: i64) {
     trace!("destroy_stream_session was called");
     crate::core::fluttersink::destroy_stream_session(session_id)
 }
+
+pub fn seek_to_time(session_id: i64, time_seconds: f64) -> anyhow::Result<()> {
+    crate::core::fluttersink::seek_to_time(session_id, time_seconds)
+}
+
+pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
+    crate::core::fluttersink::get_current_time(session_id)
+}

@@ -14,7 +14,9 @@ sealed class StreamState with _$StreamState {
 
   const factory StreamState.error(String field0) = StreamState_Error;
   const factory StreamState.loading() = StreamState_Loading;
-  const factory StreamState.playing({required PlatformInt64 textureId}) =
-      StreamState_Playing;
+  const factory StreamState.playing({
+    required PlatformInt64 textureId,
+    required bool seekable,
+  }) = StreamState_Playing;
   const factory StreamState.stopped() = StreamState_Stopped;
 }

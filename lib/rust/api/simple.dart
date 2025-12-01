@@ -47,3 +47,14 @@ Future<void> destroyStreamSession({required PlatformInt64 sessionId}) => RustLib
     .instance
     .api
     .crateApiSimpleDestroyStreamSession(sessionId: sessionId);
+
+Future<void> seekToTime({
+  required PlatformInt64 sessionId,
+  required double timeSeconds,
+}) => RustLib.instance.api.crateApiSimpleSeekToTime(
+  sessionId: sessionId,
+  timeSeconds: timeSeconds,
+);
+
+Future<double> getCurrentTime({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleGetCurrentTime(sessionId: sessionId);

@@ -144,10 +144,11 @@ String toString() {
 
 
 class StreamState_Playing extends StreamState {
-  const StreamState_Playing({required this.textureId}): super._();
+  const StreamState_Playing({required this.textureId, required this.seekable}): super._();
   
 
  final  PlatformInt64 textureId;
+ final  bool seekable;
 
 /// Create a copy of StreamState
 /// with the given fields replaced by the non-null parameter values.
@@ -159,16 +160,16 @@ $StreamState_PlayingCopyWith<StreamState_Playing> get copyWith => _$StreamState_
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamState_Playing&&(identical(other.textureId, textureId) || other.textureId == textureId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamState_Playing&&(identical(other.textureId, textureId) || other.textureId == textureId)&&(identical(other.seekable, seekable) || other.seekable == seekable));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,textureId);
+int get hashCode => Object.hash(runtimeType,textureId,seekable);
 
 @override
 String toString() {
-  return 'StreamState.playing(textureId: $textureId)';
+  return 'StreamState.playing(textureId: $textureId, seekable: $seekable)';
 }
 
 
@@ -179,7 +180,7 @@ abstract mixin class $StreamState_PlayingCopyWith<$Res> implements $StreamStateC
   factory $StreamState_PlayingCopyWith(StreamState_Playing value, $Res Function(StreamState_Playing) _then) = _$StreamState_PlayingCopyWithImpl;
 @useResult
 $Res call({
- PlatformInt64 textureId
+ PlatformInt64 textureId, bool seekable
 });
 
 
@@ -196,10 +197,11 @@ class _$StreamState_PlayingCopyWithImpl<$Res>
 
 /// Create a copy of StreamState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? textureId = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? textureId = null,Object? seekable = null,}) {
   return _then(StreamState_Playing(
 textureId: null == textureId ? _self.textureId : textureId // ignore: cast_nullable_to_non_nullable
-as PlatformInt64,
+as PlatformInt64,seekable: null == seekable ? _self.seekable : seekable // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 

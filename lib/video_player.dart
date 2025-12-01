@@ -86,6 +86,17 @@ class VideoController {
       return (null, e.toString());
     }
   }
+
+  /// Seek to a specific time in seconds within the video
+  Future<void> seekTo(Duration position) async {
+    await rlib.seekToTime(sessionId: sessionId, timeSeconds: position.inMilliseconds / 1000.0);
+  }
+
+  /// Get the current playback time of the video
+  Future<Duration> getCurrentPosition() async {
+    final timeSeconds = await rlib.getCurrentTime(sessionId: sessionId);
+    return Duration(milliseconds: (timeSeconds * 1000).round());
+  }
 }
 
 // ignore: implementation_imports

@@ -107,6 +107,9 @@ pub struct SoftwareDecoder {
     session_id: i64,
     decoding_context: Mutex<Option<DecodingContext>>,
     ffmpeg_options: Option<HashMap<String, String>>,
+    current_time: Arc<Mutex<f64>>, // Track current playback time in seconds
+    seek_request: Arc<Mutex<Option<i64>>>, // Pending seek timestamp in microseconds (AV_TIME_BASE)
+    seekable: Arc<Mutex<bool>>,    // Whether the stream is seekable
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
@@ -194,8 +197,75 @@ impl SoftwareDecoder {
             session_id,
             decoding_context: Mutex::new(None),
             ffmpeg_options,
+            current_time: Arc::new(Mutex::new(0.0)),
+            seek_request: Arc::new(Mutex::new(None)),
+            seekable: Arc::new(Mutex::new(false)),
         });
         (self_, payload_holder)
+    }
+
+    pub fn seek_to(&self, time_seconds: f64) {
+        if time_seconds < 0.0 {
+            warn!("Seek requested to negative time: {}", time_seconds);
+            return; // Invalid seek
+        }
+
+        let seekable = *self.seekable.lock().unwrap();
+        if !seekable {
+            warn!("Seek requested but stream is not seekable");
+            return;
+        }
+
+        // Check if we're already at the requested time to avoid unnecessary seeks
+        let current_time = *self.current_time.lock().unwrap();
+
+        // Check if the stream has a duration limit and validate the seek time
+        let decoding_context = self.decoding_context.lock().unwrap();
+        if let Some(ref context) = *decoding_context {
+            let duration = context.ictx.duration();
+            if duration > 0 {
+                let duration_seconds = duration as f64 / 1_000_000.0; // Convert from AV_TIME_BASE
+                if time_seconds > duration_seconds {
+                    warn!(
+                        "Seek requested beyond stream duration ({} > {})",
+                        time_seconds, duration_seconds
+                    );
+                    // Seek to end instead of failing
+                    let clamped_time = duration_seconds.max(0.0);
+                    if (current_time - clamped_time).abs() < 0.1 {
+                        info!("Already at end time ({}), skipping seek", clamped_time);
+                        return;
+                    }
+                    let ts = (clamped_time * 1_000_000.0) as i64;
+                    let mut seek = self.seek_request.lock().unwrap();
+                    *seek = Some(ts);
+                    info!("Seek clamped to end ({} seconds, {} us)", clamped_time, ts);
+                    return;
+                }
+            }
+        }
+        drop(decoding_context); // Release the lock early
+
+        if (current_time - time_seconds).abs() < 0.1 {
+            // Within 0.1 second tolerance
+            info!(
+                "Already at requested time ({}), skipping seek",
+                time_seconds
+            );
+            return;
+        }
+
+        let ts = (time_seconds * 1_000_000.0) as i64; // Convert to microseconds (AV_TIME_BASE)
+        let mut seek = self.seek_request.lock().unwrap();
+        *seek = Some(ts);
+        info!(
+            "Seek requested to {} seconds ({} us), current time: {}",
+            time_seconds, ts, current_time
+        );
+    }
+    pub fn get_current_time(&self) -> anyhow::Result<f64> {
+        let current_time = self.current_time.lock().unwrap();
+        Ok(*current_time)
     }
 
     pub fn initialize_stream(&self) -> Result<(), ffmpeg::Error> {
@@ -206,7 +276,7 @@ impl SoftwareDecoder {
                 option_dict.set(key, value);
             }
         }
-        let ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
+        let mut ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
         let input = ictx
             .streams()
             .best(ffmpeg::media::Type::Video)
@@ -260,12 +330,18 @@ impl SoftwareDecoder {
             "created context {:?} for url: {}",
             context, &self.video_info.uri
         );
+        let duration = context.ictx.duration();
+        let is_seekable = duration > 0;
+        info!("Stream duration: {}, seekable: {}", duration, is_seekable);
         let mut decoding_context = self.decoding_context.lock().unwrap();
         decoding_context.replace(context);
+        let mut seekable = self.seekable.lock().unwrap();
+        *seekable = is_seekable;
         trace!("ffmpeg session started for {}", &self.video_info.uri);
 
         Ok(())
     }
+    
     fn asked_for_termination(&self) -> bool {
         self.kill_sig.load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -340,6 +416,38 @@ impl SoftwareDecoder {
                 self.terminate(&mut decoding_context.decoder).log_err();
                 return StreamExitResult::LegalExit;
             }
+
+            // Check for seek request before reading packet
+            {
+                let mut seek = self.seek_request.lock().unwrap();
+                if let Some(ts) = seek.take() {
+                    info!("Performing seek to {} us", ts);
+                    // Seek the input context (wide range for any direction)
+                    match decoding_context.ictx.seek(ts, 0..5) {
+                        Ok(_) => {
+                            info!("Seek successful to timestamp: {}", ts);
+                            // Flush decoder to clear buffered frames
+                            decoding_context.decoder.flush();
+                            // Clear payload holder to avoid stale frames
+                            if let Some(holder) = self.payload_holder.upgrade() {
+                                holder.current_frame.lock().unwrap().take();
+                                holder.previous_frame.lock().unwrap().take();
+                            }
+                            // Update current_time based on the seek target
+                            *self.current_time.lock().unwrap() = (ts as f64) / 1_000_000.0;
+                        }
+                        Err(e) => {
+                            error!("Seek failed to timestamp {}: {}", ts, e);
+                            dart_update_stream
+                                .add(StreamState::Error(format!("Seek failed: {}", e)))
+                                .log_err();
+                            // Reset the seek request since it failed
+                            *seek = None;
+                        }
+                    }
+                }
+            }
+
             let mut packet = ffmpeg::Packet::empty();
             match packet.read(&mut decoding_context.ictx) {
                 Ok(_) => unsafe {
@@ -370,8 +478,10 @@ impl SoftwareDecoder {
                                         "First frame received for stream {}, marking as playing",
                                         &self.video_info.uri
                                     );
-                                    let _ =
-                                        dart_update_stream.add(StreamState::Playing { texture_id });
+                                    let _ = dart_update_stream.add(StreamState::Playing {
+                                        texture_id,
+                                        seekable: *self.seekable.lock().unwrap(),
+                                    });
                                 }
                             }
                             Err(err) => {
@@ -425,6 +535,20 @@ impl SoftwareDecoder {
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
         while decoder.receive_frame(&mut decoded).is_ok() {
+            // Update current time from frame PTS (convert from time_base to seconds)
+            if let Some(pts) = decoded.pts() {
+                let time_base = decoder.time_base();
+                let time_seconds =
+                    pts as f64 * (time_base.numerator() as f64 / time_base.denominator() as f64);
+
+                // Only update current time if there's no pending seek (to avoid overwriting seek target)
+                let mut current_time = self.current_time.lock().unwrap();
+                let pending_seek = self.seek_request.lock().unwrap().is_some();
+                if !pending_seek {
+                    *current_time = time_seconds;
+                }
+            }
+
             let mut rgb_frame = ffmpeg::util::frame::Video::empty();
             scaler.run(&decoded, &mut rgb_frame)?;
             match self.payload_holder.upgrade() {
@@ -446,5 +570,7 @@ impl SoftwareDecoder {
     pub fn destroy_stream(&self) {
         self.kill_sig
             .store(true, std::sync::atomic::Ordering::Relaxed);
+        let mut seek = self.seek_request.lock().unwrap();
+        *seek = None;
     }
 }

@@ -19,14 +19,14 @@ pub fn init() -> anyhow::Result<()> {
     Ok(())
 }
 
-struct SessionContext {
+pub struct SessionContext {
     pub decoder: Arc<SoftwareDecoder>,
     pub engine_handle: i64,
     pub sendable_texture: SharedSendableTexture,
     pub last_alive_mark: std::time::SystemTime,
 }
 lazy_static::lazy_static! {
-static ref SESSION_CACHE: Mutex<HashMap<i64, SessionContext>> = Mutex::new(HashMap::new());
+pub static ref SESSION_CACHE: Mutex<HashMap<i64, SessionContext>> = Mutex::new(HashMap::new());
 }
 pub fn stream_alive_tester_task() {
     loop {
@@ -145,5 +145,24 @@ pub fn destroy_stream_session(session_id: i64) {
         });
     } else {
         info!("No stream session found for session id: {}", session_id);
+    }
+}
+
+pub fn seek_to_time(session_id: i64, time_seconds: f64) -> anyhow::Result<()> {
+    let session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some(ctx) = session_cache.get(&session_id) {
+        ctx.decoder.seek_to(time_seconds);
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Session not found: {}", session_id))
+    }
+}
+
+pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
+    let session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some(ctx) = session_cache.get(&session_id) {
+        ctx.decoder.get_current_time()
+    } else {
+        Err(anyhow::anyhow!("Session not found: {}", session_id))
     }
 }
