@@ -1,6 +1,7 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
 use std::{
+    char::DecodeUtf16,
     collections::HashMap,
     fmt, mem,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
@@ -15,8 +16,6 @@ use crate::{core::types::DartUpdateStream, dart_types::StreamState, utils::LogEr
 
 use super::types;
 
-// for raw pixel buffer implementation see https://github.com/nrbnlulu/flutter-realtime-player/blob/fb7d9bd87719b462e7b9e6b32be6e353ba76bcba/rust/src/core/software_decoder.rs#L14
-
 #[derive(Clone)]
 pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video, Option<Vec<u8>>);
 
@@ -25,7 +24,6 @@ impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
         let width = self.0.width() as usize;
         let height = self.0.height() as usize;
 
-        // If we have a pre-copied contiguous buffer, use it
         if let Some(ref buffer) = self.1 {
             irondash_texture::PixelData {
                 width: width as _,
@@ -33,7 +31,6 @@ impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
                 data: buffer.as_slice(),
             }
         } else {
-            // No buffer means stride was already correct, use original data
             irondash_texture::PixelData {
                 width: width as _,
                 height: height as _,
@@ -43,12 +40,11 @@ impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
     }
 }
 
-pub struct PayloadHolder {
-    current_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
-    previous_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
-}
 impl FFmpegFrameWrapper {
-    /// Create a wrapper from a frame, copying data if stride doesn't match width
+    /// Create a wrapper from a frame, copying data if stride doesn't match width.
+    /// ffmpeg frames may have padding at the end of each row, resulting in a stride
+    /// that is larger than `width * bytes_per_pixel`. This function handles such cases
+    /// by creating a tightly packed buffer.
     fn from_frame(frame: ffmpeg::util::frame::Video) -> Self {
         let width = frame.width() as usize;
         let height = frame.height() as usize;
@@ -56,12 +52,12 @@ impl FFmpegFrameWrapper {
         let expected_stride = width * 4; // RGBA = 4 bytes per pixel
 
         if stride == expected_stride {
-            // No padding, can use frame directly
+            // No padding, can use frame data directly.
             Self(frame, None)
         } else {
-            // Stride mismatch - copy data row by row without padding
-            warn!(
-                "Stride mismatch detected! Width: {}, Expected stride: {}, Actual stride: {}. Copying to contiguous buffer.",
+            // Stride mismatch - copy data row by row to remove padding.
+            trace!(
+                "Stride mismatch! width: {}, expected stride: {}, actual stride: {}. Copying to contiguous buffer.",
                 width, expected_stride, stride
             );
 
@@ -79,6 +75,11 @@ impl FFmpegFrameWrapper {
     }
 }
 
+pub struct PayloadHolder {
+    current_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
+    previous_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
+}
+
 impl PayloadHolder {
     pub fn new() -> Self {
         Self {
@@ -88,9 +89,21 @@ impl PayloadHolder {
     }
 
     pub fn set_payload(&self, payload: Box<FFmpegFrameWrapper>) {
-        let mut curr_frame = self.current_frame.lock().unwrap();
-        let mut prev_frame = self.previous_frame.lock().unwrap();
-        // Move current to previous before replacing
+        let mut curr_frame = match self.current_frame.lock() {
+            Ok(lock) => lock,
+            Err(e) => {
+                error!("current_frame mutex poisoned in set_payload: {}", e);
+                return;
+            }
+        };
+        let mut prev_frame = match self.previous_frame.lock() {
+            Ok(lock) => lock,
+            Err(e) => {
+                error!("previous_frame mutex poisoned in set_payload: {}", e);
+                return;
+            }
+        };
+        // Move current to previous before replacing.
         *prev_frame = curr_frame.take();
         *curr_frame = Some(payload);
     }
@@ -98,24 +111,36 @@ impl PayloadHolder {
 
 impl PayloadProvider<BoxedPixelData> for PayloadHolder {
     fn get_payload(&self) -> BoxedPixelData {
-        let curr_frame = self.current_frame.lock().unwrap();
-        if let Some(ref frame) = *curr_frame {
-            // Clone instead of take to keep frame available for resize operations
-            frame.clone()
-        } else {
-            // Try to return a clone of the previous frame if it exists
-            let prev_frame = self.previous_frame.lock().unwrap();
-            if let Some(ref prev) = *prev_frame {
-                debug!("returning previous frame");
-                prev.clone()
-            } else {
-                debug!("no frame available returning a default");
-                // return empty frame
-                Box::new(FFmpegFrameWrapper::from_frame(
-                    ffmpeg::util::frame::Video::new(ffmpeg::format::Pixel::RGBA, 640, 480),
-                ))
+        // Create a default frame to return on error or if no frame is available.
+        let default_frame = || {
+            debug!("No frame available, returning a default black frame.");
+            Box::new(FFmpegFrameWrapper::from_frame(
+                ffmpeg::util::frame::Video::new(ffmpeg::format::Pixel::RGBA, 640, 480),
+            ))
+        };
+
+        let curr_frame_lock = self.current_frame.lock();
+        if let Ok(curr_frame) = curr_frame_lock {
+            if let Some(ref frame) = *curr_frame {
+                // Clone instead of take to keep frame available for resize operations.
+                return frame.clone();
             }
+        } else {
+            error!("current_frame mutex poisoned in get_payload");
+            return default_frame();
         }
+
+        let prev_frame_lock = self.previous_frame.lock();
+        if let Ok(prev_frame) = prev_frame_lock {
+            if let Some(ref frame) = *prev_frame {
+                debug!("Returning previous frame");
+                return frame.clone();
+            }
+        } else {
+            error!("previous_frame mutex poisoned in get_payload");
+        }
+
+        default_frame()
     }
 }
 
@@ -140,7 +165,7 @@ impl fmt::Debug for DecodingContext {
 struct FrameSynchronizer {
     start_system_time: Instant,
     start_stream_time: f64,
-    frames_processed: u64, 
+    frames_processed: u64,
 }
 
 impl FrameSynchronizer {
@@ -148,22 +173,19 @@ impl FrameSynchronizer {
         Self {
             start_system_time: Instant::now(),
             start_stream_time: current_pts_seconds,
-            frames_processed: 0, // Initialize to 0
+            frames_processed: 0,
         }
     }
 
-    /// Returns the duration the thread should sleep
+    /// Returns the duration the thread should sleep to synchronize with the video's PTS.
     fn get_sleep_duration(&mut self, pts_seconds: f64, framerate: f64) -> Option<Duration> {
         self.frames_processed += 1;
 
-        // FALLBACK: If PTS is 0.0 but we have processed multiple frames,
-        // ignore PTS and calculate time based on framerate.
+        // If PTS is unreliable (e.g., stuck at 0), estimate the current time
+        // based on the frame rate.
         let mut effective_time = pts_seconds;
-
-        // If pts is stuck at 0 (or very close to start) and we are moving forward...
         if effective_time <= 0.001 && self.frames_processed > 1 {
             if framerate > 0.0 {
-                // Calculate: Frame 10 at 30fps = 0.33s
                 effective_time = (self.frames_processed as f64) / framerate;
             }
         }
@@ -196,43 +218,37 @@ pub struct SoftwareDecoder {
     decoding_context: Mutex<Option<DecodingContext>>,
     ffmpeg_options: Option<HashMap<String, String>>,
     current_time: Arc<Mutex<f64>>, // Track current playback time in seconds
-    seek_request: Arc<Mutex<Option<i64>>>, // Pending seek timestamp in microseconds (AV_TIME_BASE)
+    seek_request: Arc<Mutex<Option<i64>>>, // Pending seek timestamp in microseconds
     seekable: Arc<AtomicBool>,     // Whether the stream is seekable
-    output_dimensions: Arc<Mutex<types::VideoDimensions>>, // Track current output dimensions for dynamic resize
-    sendable_texture:
-        Arc<Mutex<Option<Weak<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>>>>,
-    synchronizer: Mutex<Option<FrameSynchronizer>>, // For frame timing synchronization in non-live streams
+    output_dimensions: Arc<Mutex<types::VideoDimensions>>, // Track current output dimensions
+    sendable_texture: Arc<Mutex<Option<WeakSendableTexture>>>,
+    synchronizer: Mutex<Option<FrameSynchronizer>>, // For frame timing synchronization
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
 pub type SharedSendableTexture = Arc<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
 type WeakSendableTexture = Weak<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
 impl SoftwareDecoder {
-    /// Validates if a stream is compatible with software scaling
+    /// Validates if a stream is compatible with software scaling.
     fn validate_stream_compatibility(
         decoder: &ffmpeg::decoder::Video,
     ) -> Result<(), ffmpeg::Error> {
         let width = decoder.width();
         let height = decoder.height();
 
-        // Validate frame dimensions
         if width == 0 || height == 0 {
             error!("Invalid frame dimensions: {}x{}", width, height);
             return Err(ffmpeg::Error::InvalidData);
         }
-
-        // Warn about potentially problematic dimensions
         if width % 2 != 0 || height % 2 != 0 {
             warn!(
-                "Stream has odd dimensions: {}x{}, this might cause issues with some codecs",
+                "Stream has odd dimensions: {}x{}, this might cause issues with some codecs.",
                 width, height
             );
         }
-
-        // Check for extremely large dimensions that might cause memory issues
         if width > 7680 || height > 4320 {
             warn!(
-                "Very large frame dimensions detected: {}x{}, this may cause performance issues",
+                "Very large frame dimensions detected: {}x{}, may cause performance issues.",
                 width, height
             );
         }
@@ -240,7 +256,7 @@ impl SoftwareDecoder {
         Ok(())
     }
 
-    /// Creates a scaler with fallback options for maximum compatibility
+    /// Creates a scaler with fallback options for maximum compatibility.
     fn create_scaler_with_fallbacks(
         src_format: ffmpeg::format::Pixel,
         src_width: u32,
@@ -249,21 +265,17 @@ impl SoftwareDecoder {
         dst_width: u32,
         dst_height: u32,
     ) -> Result<ffmpeg::software::scaling::Context, ffmpeg::Error> {
-        // Try different scaling algorithms in order of preference
         let scaling_flags = [
             ffmpeg::software::scaling::Flags::FAST_BILINEAR,
             ffmpeg::software::scaling::Flags::BILINEAR,
             ffmpeg::software::scaling::Flags::POINT,
-            ffmpeg::software::scaling::Flags::AREA,
         ];
         for flag in scaling_flags.iter() {
             match ffmpeg::software::scaling::Context::get(
                 src_format, src_width, src_height, dst_format, dst_width, dst_height, *flag,
             ) {
                 Ok(scaler) => {
-                    if !flag.contains(ffmpeg::software::scaling::Flags::FAST_BILINEAR)
-                        && !flag.contains(ffmpeg::software::scaling::Flags::BILINEAR)
-                    {
+                    if !flag.contains(ffmpeg::software::scaling::Flags::FAST_BILINEAR) {
                         warn!("Using fallback scaling algorithm: {:?}", flag);
                     }
                     return Ok(scaler);
@@ -273,7 +285,7 @@ impl SoftwareDecoder {
                 }
             }
         }
-
+        error!("All scaling attempts failed.");
         Err(ffmpeg::Error::InvalidData)
     }
 
@@ -300,58 +312,28 @@ impl SoftwareDecoder {
         (self_, payload_holder)
     }
 
-    pub fn set_sendable_texture(
-        &self,
-        texture: Weak<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>,
-    ) {
-        let mut texture_ref = self.sendable_texture.lock().unwrap();
-        *texture_ref = Some(texture);
+    pub fn set_sendable_texture(&self, texture: WeakSendableTexture) {
+        if let Ok(mut texture_ref) = self.sendable_texture.lock() {
+            *texture_ref = Some(texture);
+        } else {
+            error!("sendable_texture mutex poisoned in set_sendable_texture");
+        }
     }
 
     pub fn seek_to(&self, time_seconds: f64) {
         if time_seconds < 0.0 {
             warn!("Seek requested to negative time: {}", time_seconds);
-            return; // Invalid seek
+            return;
         }
 
-        let seekable = self.seekable.load(std::sync::atomic::Ordering::Relaxed);
-        if !seekable {
+        if !self.seekable.load(std::sync::atomic::Ordering::Relaxed) {
             warn!("Seek requested but stream is not seekable");
             return;
         }
 
-        // Check if we're already at the requested time to avoid unnecessary seeks
-        let current_time = *self.current_time.lock().unwrap();
-
-        // Check if the stream has a duration limit and validate the seek time
-        let decoding_context = self.decoding_context.lock().unwrap();
-        if let Some(ref context) = *decoding_context {
-            let duration = context.ictx.duration();
-            if duration > 0 {
-                let duration_seconds = duration as f64 / 1_000_000.0; // Convert from AV_TIME_BASE
-                if time_seconds > duration_seconds {
-                    warn!(
-                        "Seek requested beyond stream duration ({} > {})",
-                        time_seconds, duration_seconds
-                    );
-                    // Seek to end instead of failing
-                    let clamped_time = duration_seconds.max(0.0);
-                    if (current_time - clamped_time).abs() < 0.1 {
-                        info!("Already at end time ({}), skipping seek", clamped_time);
-                        return;
-                    }
-                    let ts = (clamped_time * 1_000_000.0) as i64;
-                    let mut seek = self.seek_request.lock().unwrap();
-                    *seek = Some(ts);
-                    info!("Seek clamped to end ({} seconds, {} us)", clamped_time, ts);
-                    return;
-                }
-            }
-        }
-        drop(decoding_context); // Release the lock early
+        let current_time = self.current_time.lock().map(|guard| *guard).unwrap_or(0.0);
 
         if (current_time - time_seconds).abs() < 0.1 {
-            // Within 0.1 second tolerance
             info!(
                 "Already at requested time ({}), skipping seek",
                 time_seconds
@@ -359,21 +341,28 @@ impl SoftwareDecoder {
             return;
         }
 
-        let ts = (time_seconds * 1_000_000.0) as i64; // Convert to microseconds (AV_TIME_BASE)
-        let mut seek = self.seek_request.lock().unwrap();
-        *seek = Some(ts);
-        info!(
-            "Seek requested to {} seconds ({} us), current time: {}",
-            time_seconds, ts, current_time
-        );
+        // Convert to AV_TIME_BASE and set seek request
+        let ts = (time_seconds * 1_000_000.0) as i64;
+        if let Ok(mut seek) = self.seek_request.lock() {
+            *seek = Some(ts);
+            info!(
+                "Seek requested to {} seconds ({} us), current time: {}",
+                time_seconds, ts, current_time
+            );
+        } else {
+            error!("seek_request mutex poisoned in seek_to");
+        }
     }
+
     pub fn get_current_time(&self) -> anyhow::Result<f64> {
-        let current_time = self.current_time.lock().unwrap();
-        Ok(*current_time)
+        self.current_time
+            .lock()
+            .map(|guard| *guard)
+            .map_err(|e| anyhow::anyhow!("current_time mutex poisoned: {}", e))
     }
 
     pub fn initialize_stream(&self) -> Result<(), ffmpeg::Error> {
-        trace!("starting ffmpeg session for {}", &self.video_info.uri);
+        trace!("Starting ffmpeg session for {}", &self.video_info.uri);
         let mut option_dict = ffmpeg::Dictionary::new();
         if let Some(ref options) = self.ffmpeg_options {
             for (key, value) in options {
@@ -387,78 +376,73 @@ impl SoftwareDecoder {
             .ok_or(ffmpeg::Error::StreamNotFound)?;
         let video_stream_index = input.index();
         let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
-        let decoder = context_decoder.decoder().video()?;
-        trace!(
-            "got decoder(
-            format={:?},
-            width={:?},
-            height={:?},
-            frame_rate={:?}
-            ",
-            decoder.format(),
-            decoder.width(),
-            decoder.height(),
-            decoder.frame_rate()
-        );
+        let mut decoder = context_decoder.decoder().video()?;
 
-        // Validate stream compatibility
+        decoder.set_threading(ffmpeg::threading::Config {
+            kind: ffmpeg::threading::Type::Frame,
+            count: 0, // auto-detect
+            ..Default::default()
+        });
+
         Self::validate_stream_compatibility(&decoder)?;
 
-        // Create scaler with fallback options
         let src_format = decoder.format();
         let dst_format = ffmpeg::format::Pixel::RGBA;
         let src_width = decoder.width();
         let src_height = decoder.height();
-        // Use target dimensions from video_info for output
-        let target_width = self.video_info.dimensions.width;
-        let target_height = self.video_info.dimensions.height;
+        let target_dims = self
+            .output_dimensions
+            .lock()
+            .map(|d| d.clone())
+            .unwrap_or_else(|_| self.video_info.dimensions.clone());
 
         let scaler = Self::create_scaler_with_fallbacks(
             src_format,
             src_width,
             src_height,
             dst_format,
-            target_width,
-            target_height,
-        )
-        .inspect_err(|e| {
-            error!(
-                "Failed to create scaler for stream {}: {}",
-                &self.video_info.uri, e
-            );
-        })?;
+            target_dims.width,
+            target_dims.height,
+        )?;
+
         let avg_frame_rate = input.avg_frame_rate();
         let frame_rate = if avg_frame_rate.denominator() != 0 {
-            avg_frame_rate.numerator() as f64 / avg_frame_rate.denominator() as f64
+            (avg_frame_rate.numerator() as f64 / avg_frame_rate.denominator() as f64) as u32
         } else {
-            0.0
+            0
         };
+
         let context = DecodingContext {
             ictx,
             video_stream_index,
             decoder,
             scaler,
-            framerate: frame_rate as _,
+            framerate: frame_rate,
         };
         debug!(
-            "created context {:?} for url: {}",
+            "Created context {:?} for url: {}",
             context, &self.video_info.uri
         );
         let duration = context.ictx.duration();
         let is_seekable = duration > 0;
         info!("Stream duration: {}, seekable: {}", duration, is_seekable);
-        let mut decoding_context = self.decoding_context.lock().unwrap();
-        decoding_context.replace(context);
-        self.seekable
-            .store(is_seekable, std::sync::atomic::Ordering::Relaxed);
-        trace!("ffmpeg session started for {}", &self.video_info.uri);
 
-        Ok(())
+        if let Ok(mut decoding_context) = self.decoding_context.lock() {
+            *decoding_context = Some(context);
+            self.seekable
+                .store(is_seekable, std::sync::atomic::Ordering::Relaxed);
+            trace!("FFmpeg session started for {}", &self.video_info.uri);
+            Ok(())
+        } else {
+            error!("decoding_context mutex poisoned in initialize_stream");
+            Err(ffmpeg::Error::Unknown)
+        }
     }
 
     fn asked_for_termination(&self) -> bool {
         self.kill_sig.load(std::sync::atomic::Ordering::Relaxed)
     }
+
     pub fn stream(
         &self,
         sendable_texture: SharedSendableTexture,
@@ -466,40 +450,41 @@ impl SoftwareDecoder {
         texture_id: i64,
     ) -> Result<(), StreamExitResult> {
         let weak_sendable_texture: WeakSendableTexture = Arc::downgrade(&sendable_texture);
-        drop(sendable_texture); // drop the strong reference to allow cleanup
-        loop {
-            if self.asked_for_termination() {
-                return Ok(());
-            }
-            trace!("ffmpeg session initializing for {}", &self.video_info.uri);
+        drop(sendable_texture); // Drop strong reference
+
+        while !self.asked_for_termination() {
+            trace!("FFmpeg session initializing for {}", &self.video_info.uri);
             dart_update_stream.add(StreamState::Loading).log_err();
+
             if let Err(e) = self.initialize_stream() {
-                info!(
-                    "Failed to reinitialize stream({}): {}",
-                    &self.video_info.uri, e
-                );
+                let error_msg =
+                    format!("Stream initialization failed: {}, reinitializing in 2s", e);
+                error!("{} for uri: {}", error_msg, &self.video_info.uri);
                 dart_update_stream
-                    .add(StreamState::Error(format!(
-                        "stream({}) initialization failed: {}, reinitializing in 2 seconds",
-                        &self.video_info.uri, e
-                    )))
+                    .add(StreamState::Error(error_msg))
                     .log_err();
-            } else {
-                info!("stream({}) successfully initialized", &self.video_info.uri);
-                let res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
-                match res {
-                    StreamExitResult::LegalExit | StreamExitResult::EOF => {
-                        if self.video_info.auto_restart {
-                            dart_update_stream.add(StreamState::Stopped).log_err();
-                            thread::sleep(Duration::from_millis(800));
-                            continue;
-                        }
+                thread::sleep(Duration::from_millis(2000));
+                continue;
+            }
+
+            info!("Stream initialized: {}", &self.video_info.uri);
+            let res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
+            match res {
+                StreamExitResult::LegalExit => break,
+                StreamExitResult::EOF => {
+                    if self.video_info.auto_restart {
+                        dart_update_stream.add(StreamState::Stopped).log_err();
+                        info!("Stream EOF, restarting...");
+                        thread::sleep(Duration::from_millis(800));
+                    } else {
                         break;
                     }
-                    _ => continue,
-                };
+                }
+                StreamExitResult::Error => {
+                    info!("Stream error, reinitializing...");
+                    thread::sleep(Duration::from_millis(2000));
+                }
             }
-            thread::sleep(Duration::from_millis(2000));
         }
         dart_update_stream.add(StreamState::Stopped).log_err();
         Ok(())
@@ -511,501 +496,437 @@ impl SoftwareDecoder {
         dart_update_stream: &DartUpdateStream,
         texture_id: i64,
     ) -> StreamExitResult {
-        let cb = move || {
-            if let Some(sendable_weak) = sendable_weak.upgrade() {
-                sendable_weak.mark_frame_available();
+        let mark_frame_avb = || {
+            if let Some(sendable) = sendable_weak.upgrade() {
+                sendable.mark_frame_available();
             }
         };
-        let mut first_frame = true;
+
+        let mut is_playing = false;
 
         loop {
             if self.asked_for_termination() {
-                let _ = dart_update_stream.add(StreamState::Stopped);
-                trace!("stream killed, exiting");
-                // Flush decoder on exit
-                if let Some(mut ctx_guard) = self.decoding_context.lock().ok() {
-                    if let Some(ctx) = &mut *ctx_guard {
-                        self.terminate(&mut ctx.decoder).log_err();
-                    }
-                }
+                self.terminate(None);
                 return StreamExitResult::LegalExit;
             }
 
-            // Lock context for this iteration (per packet/frame processing)
-            let mut ctx_guard = match self.decoding_context.lock() {
-                Ok(guard) => guard,
-                Err(e) => {
-                    error!("Failed to lock decoding context: {}", e);
-                    return StreamExitResult::Error;
-                }
-            };
+            let mut sleep_duration: Option<Duration> = None; // Declare sleep duration outside the guard scope
 
-            let ctx = match &mut *ctx_guard {
-                Some(ctx) => ctx,
-                None => {
-                    error!("Decoding context not available");
-                    return StreamExitResult::Error;
-                }
-            };
-
-            // Check for seek request before reading packet
             {
-                let mut seek = self.seek_request.lock().unwrap();
-                if let Some(ts) = seek.take() {
-                    info!("Performing seek to {} us", ts);
-                    // Seek the input context (wide range for any direction)
-                    match ctx.ictx.seek(ts, 0..5) {
-                        Ok(_) => {
-                            info!("Seek successful to timestamp: {}", ts);
-                            // Flush decoder to clear buffered frames
-                            ctx.decoder.flush();
-                            // Clear payload holder to avoid stale frames
-                            if let Some(holder) = self.payload_holder.upgrade() {
-                                holder.current_frame.lock().unwrap().take();
-                                holder.previous_frame.lock().unwrap().take();
-                            }
-                            // Update current_time based on the seek target
-                            *self.current_time.lock().unwrap() = (ts as f64) / 1_000_000.0;
-
-                            // Reset the synchronizer to re-anchor timing after seek
-                            *self.synchronizer.lock().unwrap() = None;
-                        }
-                        Err(e) => {
-                            error!("Seek failed to timestamp {}: {}", ts, e);
-                            dart_update_stream
-                                .add(StreamState::Error(format!("Seek failed: {}", e)))
-                                .log_err();
-                        }
+                // Scope to hold the decoding_context lock briefly
+                let mut ctx_guard = match self.decoding_context.lock() {
+                    Ok(guard) => guard,
+                    Err(e) => {
+                        error!("Failed to lock decoding context: {}", e);
+                        return StreamExitResult::Error;
                     }
-                }
-            }
+                };
 
-            let mut packet = ffmpeg::Packet::empty();
-            match packet.read(&mut ctx.ictx) {
-                Ok(_) => unsafe {
-                    let stream = ffmpeg::format::stream::Stream::wrap(
-                        // this somehow gets the raw C ptr to the stream..
-                        mem::transmute_copy(&&ctx.ictx),
-                        packet.stream(),
-                    );
-                    if packet.is_corrupt() || packet.is_empty() {
-                        trace!(
-                            "stream({}) received empty or corrupt packet, skipping",
-                            self.video_info.uri
-                        );
-                        continue;
+                let ctx = match ctx_guard.as_mut() {
+                    Some(ctx) => ctx,
+                    None => {
+                        error!("Decoding context not available");
+                        return StreamExitResult::Error;
                     }
-                    if stream.index() == ctx.video_stream_index {
-                        match ctx.decoder.send_packet(&packet) {
-                            Ok(_) => {
-                                self.on_new_sample(
+                };
+                self.handle_seek_request(ctx, dart_update_stream);
+                let mut packet = ffmpeg::Packet::empty();
+
+                // Packet reading and sending to decoder logic
+                match packet.read(&mut ctx.ictx) {
+                    Ok(_) => {
+                        if packet.stream() == ctx.video_stream_index {
+                            if let Err(err) = ctx.decoder.send_packet(&packet) {
+                                error!("Error sending packet to decoder: {}", err);
+                            } else {
+                                match self.on_new_sample(
                                     &mut ctx.decoder,
                                     &mut ctx.scaler,
-                                    ctx.framerate as f64,
-                                    &cb,
-                                )
-                                .log_err();
-                                if first_frame {
-                                    first_frame = false;
-                                    trace!(
-                                        "First frame received for stream {}, marking as playing",
-                                        &self.video_info.uri
-                                    );
-                                    let _ = dart_update_stream.add(StreamState::Playing {
-                                        texture_id,
-                                        seekable: self
-                                            .seekable
-                                            .load(std::sync::atomic::Ordering::Relaxed),
-                                    });
+                                    ctx.framerate,
+                                    &mark_frame_avb,
+                                ) {
+                                    Ok(duration) => {
+                                        // Capture the returned duration
+                                        sleep_duration = duration;
+                                        if !is_playing {
+                                            is_playing = true;
+                                            let seekable = self
+                                                .seekable
+                                                .load(std::sync::atomic::Ordering::Relaxed);
+                                            dart_update_stream
+                                                .add(StreamState::Playing {
+                                                    texture_id,
+                                                    seekable,
+                                                })
+                                                .log_err();
+                                        }
+                                    }
+                                    Err(e) => error!("Error processing sample: {}", e),
                                 }
-                            }
-                            Err(err) => {
-                                error!(
-                                    "Error sending packet to decoder for stream {}: {}",
-                                    &self.video_info.uri, err
-                                );
                             }
                         }
                     }
-                },
+                    Err(ffmpeg::Error::Eof) => {
+                        info!("Stream EOF: {}", &self.video_info.uri);
+                        self.terminate(Some(ctx));
+                        return StreamExitResult::EOF;
+                    }
+                    Err(ffmpeg::Error::Other {
+                        errno: ffmpeg::error::EAGAIN,
+                    }) => {
+                        trace!("EAGAIN received, retrying packet read");
+                        thread::sleep(Duration::from_millis(10)); // Avoid busy-looping
+                        continue;
+                    }
+                    Err(e) => {
+                        error!("Failed to read frame: {}", e);
+                        dart_update_stream
+                            .add(StreamState::Error("Stream corrupted".to_owned()))
+                            .log_err();
+                        return StreamExitResult::Error;
+                    }
+                }
+            } // ctx_guard is dropped here, releasing the decoding_context lock
 
-                Err(ffmpeg::Error::Eof) => {
-                    info!("Stream {} reached end of file", &self.video_info.uri);
-                    self.terminate(&mut ctx.decoder).log_err();
-                    return StreamExitResult::EOF;
-                }
-                Err(ffmpeg::Error::Other {
-                    errno: ffmpeg::error::EAGAIN,
-                }) => {
-                    // EAGAIN means try again, so just continue the loop
-                    // Decoder is not ready, try again later
-                    trace!("EAGAIN received, retrying packet read");
-                    continue;
-                }
-                Err(..) => {
-                    info!("Failed to get frame");
-                    let _ = dart_update_stream.add(StreamState::Error(
-                        "stream corrupted, reinitializing".to_owned(),
-                    ));
-                    return StreamExitResult::Error;
-                }
+            // Perform the sleep outside the lock
+            if let Some(duration) = sleep_duration {
+                thread::sleep(duration);
             }
-
-            // Drop guard to release lock after processing this packet
-            drop(ctx_guard);
         }
     }
 
-    fn terminate(&self, decoder: &mut ffmpeg::decoder::Video) -> anyhow::Result<()> {
-        decoder
-            .send_eof()
-            .map_err(|e| anyhow::anyhow!("Error sending EOF: {:?}", e))
+    fn handle_seek_request(
+        &self,
+        ctx: &mut DecodingContext,
+        dart_update_stream: &DartUpdateStream,
+    ) {
+        let mut seek_lock = match self.seek_request.lock() {
+            Ok(lock) => lock,
+            Err(_) => {
+                error!("seek_request mutex poisoned");
+                return;
+            }
+        };
+
+        if let Some(ts) = seek_lock.take() {
+            info!("Performing seek to {} us", ts);
+            if let Err(e) = ctx.ictx.seek(ts, ..ts) {
+                error!("Seek failed to timestamp {}: {}", ts, e);
+                dart_update_stream
+                    .add(StreamState::Error(format!("Seek failed: {}", e)))
+                    .log_err();
+            } else {
+                info!("Seek successful to timestamp: {}", ts);
+                ctx.decoder.flush();
+                if let Some(holder) = self.payload_holder.upgrade() {
+                    holder.current_frame.lock().ok().and_then(|mut g| g.take());
+                    holder.previous_frame.lock().ok().and_then(|mut g| g.take());
+                }
+                if let Ok(mut current_time) = self.current_time.lock() {
+                    *current_time = (ts as f64) / 1_000_000.0;
+                }
+                if let Ok(mut synchronizer) = self.synchronizer.lock() {
+                    *synchronizer = None;
+                }
+            }
+        }
     }
 
-    fn on_new_sample<T>(
+    fn terminate(&self, decoding_ctx: Option<&mut DecodingContext>) {
+        if let Some(ctx) = decoding_ctx {
+            if let Err(e) = ctx.decoder.send_eof() {
+                error!("Error sending EOF to decoder: {}", e);
+            }
+        } else {
+            // let mut ctx = self.decoding_context.lock();
+            // if let Ok(ctxa) = ctx{
+            //     if let Some(dectx) = *ctxa.as_mut(){
+                    
+            //     }
+            // }
+        }
+    }
+
+    fn on_new_sample<F>(
         &self,
         decoder: &mut ffmpeg::decoder::Video,
         scaler: &mut ffmpeg::software::scaling::Context,
-        framerate: f64, // <--- ADD THIS ARGUMENT
-        mark_frame_avb: &T,
-    ) -> anyhow::Result<()>
+        framerate: u32,
+        mark_frame_avb: &F,
+    ) -> anyhow::Result<Option<Duration>>
     where
-        T: Fn(),
+        F: Fn(),
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
+        let mut sleep_duration = None; // Track max sleep duration found
+
         while decoder.receive_frame(&mut decoded).is_ok() {
             let time_base = decoder.time_base();
             let time_base_seconds = time_base.numerator() as f64 / time_base.denominator() as f64;
 
-            let pts_seconds: Option<f64> = decoded
+            let pts_seconds = decoded
                 .pts()
-                .or(decoded.timestamp())
-                .map(|pts| pts as f64 * time_base_seconds);
+                .map(|pts| pts as f64 * time_base_seconds)
+                .unwrap_or(0.0);
 
-            // Default to 0.0 if None
-            let current_pts = pts_seconds.unwrap_or(0.0);
-
-            // Update shared current time
-            if let Some(ts) = pts_seconds {
-                let pending_seek = self.seek_request.lock().unwrap().is_some();
-                if !pending_seek {
-                    *self.current_time.lock().unwrap() = ts;
+            if let Ok(mut current_time) = self.current_time.lock() {
+                if self
+                    .seek_request
+                    .lock()
+                    .map(|g| g.is_none())
+                    .unwrap_or(true)
+                {
+                    *current_time = pts_seconds;
                 }
             }
 
-            // ---------------------------------------------------------
-            // SYNCHRONIZATION LOGIC
-            // ---------------------------------------------------------
-            {
-                // Scoped to drop lock immediately after use
-                let mut sync_guard = self.synchronizer.lock().unwrap();
-
-                if sync_guard.is_none() {
-                    *sync_guard = Some(FrameSynchronizer::new(current_pts));
-                }
-
-                if let Some(ref mut sync) = *sync_guard {
-                    // Pass framerate to helper.
-                    // If current_pts is 0.0, the helper will use the frame counter.
-                    // Use a safe default for framerate (e.g., 30.0) if the stream reports 0.0
-                    let safe_fps = if framerate <= 0.0 { 30.0 } else { framerate };
-
-                    if let Some(sleep_duration) = sync.get_sleep_duration(current_pts, safe_fps) {
-                        thread::sleep(sleep_duration);
-                    }
-                }
+            // --- Synchronizer Logic ---
+            let mut sync_guard = self.synchronizer.lock().unwrap();
+            if sync_guard.is_none() {
+                *sync_guard = Some(FrameSynchronizer::new(pts_seconds));
             }
-            // ---------------------------------------------------------
+            if let Some(ref mut sync) = *sync_guard {
+                let safe_fps = if framerate == 0 {
+                    30.0
+                } else {
+                    framerate as f64
+                };
+                sleep_duration = sync.get_sleep_duration(pts_seconds, safe_fps);
+            }
+            drop(sync_guard);
 
             let mut rgb_frame = ffmpeg::util::frame::Video::empty();
             scaler.run(&decoded, &mut rgb_frame)?;
 
-            // Log scaled frame dimensions for debugging
-            let frame_width = rgb_frame.width();
-            let frame_height = rgb_frame.height();
-            let frame_stride = rgb_frame.stride(0);
-            let expected_dims = self.output_dimensions.lock().unwrap().clone();
-
-            if frame_width != expected_dims.width || frame_height != expected_dims.height {
-                error!(
-                    "Frame dimension mismatch! Scaler produced {}x{} but expected {}x{}",
-                    frame_width, frame_height, expected_dims.width, expected_dims.height
-                );
+            if let Some(payload_holder) = self.payload_holder.upgrade() {
+                payload_holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(rgb_frame)));
+                mark_frame_avb();
+            } else {
+                break;
             }
 
-            trace!(
-                "Scaled frame to {}x{} (stride: {}) for stream {}",
-                frame_width,
-                frame_height,
-                frame_stride,
-                &self.video_info.uri
-            );
-
-            match self.payload_holder.upgrade() {
-                Some(payload_holder) => {
-                    payload_holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(rgb_frame)));
-                }
-                None => {
-                    break;
-                }
-            }
-            mark_frame_avb();
             if self.asked_for_termination() {
                 break;
             }
         }
-        Ok(())
+
+        Ok(sleep_duration) // Return the duration
     }
 
     pub fn destroy_stream(&self) {
         self.kill_sig
             .store(true, std::sync::atomic::Ordering::Relaxed);
-        let mut seek = self.seek_request.lock().unwrap();
-        *seek = None;
+        if let Ok(mut seek) = self.seek_request.lock() {
+            *seek = None;
+        } else {
+            error!("seek_request mutex poisoned in destroy_stream");
+        }
     }
 
-    pub fn resize_stream(&self, mut new_width: u32, mut new_height: u32) -> anyhow::Result<()> {
-        // Validate dimensions
-        if new_width == 0 || new_height == 0 {
-            return Err(anyhow::anyhow!(
-                "Invalid resize dimensions: {}x{}",
-                new_width,
-                new_height
-            ));
-        }
+    pub fn resize_stream(&self, new_width: u32, new_height: u32) -> anyhow::Result<()> {
+        let (new_width, new_height) = sanitize_dimensions(new_width, new_height)?;
 
-        // Sanitize dimensions to be even (required by most video codecs)
-        // Round down to nearest even number to maintain aspect ratio better
-        let original_width = new_width;
-        let original_height = new_height;
+        let old_dims = self
+            .output_dimensions
+            .lock()
+            .map_err(|e| anyhow::anyhow!("output_dimensions mutex poisoned: {}", e))?
+            .clone();
 
-        if new_width % 2 != 0 {
-            new_width = new_width.saturating_sub(1).max(2);
-            debug!(
-                "Adjusted width from {} to {} (must be even)",
-                original_width, new_width
-            );
-        }
-
-        if new_height % 2 != 0 {
-            new_height = new_height.saturating_sub(1).max(2);
-            debug!(
-                "Adjusted height from {} to {} (must be even)",
-                original_height, new_height
-            );
-        }
-
-        // Validate aspect ratio - warn if extremely stretched
-        let aspect_ratio = new_width as f64 / new_height as f64;
-        if aspect_ratio < 0.1 || aspect_ratio > 10.0 {
-            warn!(
-                "Unusual aspect ratio detected: {:.2} ({}x{}). This may produce distorted output.",
-                aspect_ratio, new_width, new_height
-            );
-        }
-
-        // Validate maximum dimensions to prevent memory issues
-        const MAX_DIMENSION: u32 = 7680; // 8K width
-        if new_width > MAX_DIMENSION || new_height > MAX_DIMENSION {
-            return Err(anyhow::anyhow!(
-                "Dimensions too large: {}x{} (max: {}x{})",
-                new_width,
-                new_height,
-                MAX_DIMENSION,
-                MAX_DIMENSION
-            ));
-        }
-
-        // Validate minimum dimensions
-        const MIN_DIMENSION: u32 = 2;
-        if new_width < MIN_DIMENSION || new_height < MIN_DIMENSION {
-            return Err(anyhow::anyhow!(
-                "Dimensions too small: {}x{} (min: {}x{})",
-                new_width,
-                new_height,
-                MIN_DIMENSION,
-                MIN_DIMENSION
-            ));
-        }
-
-        // Get old dimensions before updating
-        let old_dims = {
-            let dims = self.output_dimensions.lock().unwrap();
-            dims.clone()
-        };
-
-        info!(
-            "Resizing stream from {}x{} to {}x{} for session {}",
-            old_dims.width, old_dims.height, new_width, new_height, self.session_id
-        );
-
-        // Early exit if dimensions haven't actually changed
         if old_dims.width == new_width && old_dims.height == new_height {
-            debug!("Resize requested but dimensions unchanged, skipping");
+            warn!("Resize requested but dimensions unchanged, skipping.");
             return Ok(());
         }
 
-        // Lock decoding context and update scaler
-        let mut ctx_guard = self.decoding_context.lock().unwrap();
-        let ctx = ctx_guard
-            .as_mut()
-            .ok_or(anyhow::anyhow!("Decoding context not initialized"))?;
+        info!(
+            "Resizing stream from {}x{} to {}x{}",
+            old_dims.width, old_dims.height, new_width, new_height
+        );
 
-        // Get the original source format and dimensions
-        let src_format = ctx.decoder.format();
-        let src_width = ctx.decoder.width();
-        let src_height = ctx.decoder.height();
+        self.update_scaler(new_width, new_height)?;
 
-        // Create a new scaler with the requested output dimensions
-        let new_scaler = Self::create_scaler_with_fallbacks(
-            src_format,
-            src_width,
-            src_height,
-            ffmpeg::format::Pixel::RGBA,
-            new_width,
-            new_height,
-        )
-        .inspect_err(|e| error!("Failed to create new scaler: {}", e))?;
-
-        // Replace the scaler in the context
-        ctx.scaler = new_scaler;
-        info!("Scaler updated to new dimensions");
-
-        // Drop the context lock early to avoid holding it during frame processing
-        drop(ctx_guard);
-
-        // Update the output dimensions
         {
-            let mut output_dims = self.output_dimensions.lock().unwrap();
+            let mut output_dims = self
+                .output_dimensions
+                .lock()
+                .map_err(|e| anyhow::anyhow!("output_dimensions mutex poisoned on write: {}", e))?;
             *output_dims = types::VideoDimensions {
                 width: new_width,
                 height: new_height,
             };
         }
 
-        // Update the payload holder with a frame of new dimensions to ensure the texture can handle it
-        if let Some(holder) = self.payload_holder.upgrade() {
-            // Rescale the previous frame if available to maintain visual continuity
-            let prev_opt = holder.previous_frame.lock().unwrap().clone();
-            if let Some(prev) = prev_opt {
-                let prev_width = prev.0.width();
-                let prev_height = prev.0.height();
-                info!(
-                    "Rescaling previous frame from {}x{} to {}x{}",
-                    prev_width, prev_height, new_width, new_height
-                );
-
-                // Verify previous frame dimensions match what we expect
-                if prev_width != old_dims.width || prev_height != old_dims.height {
-                    warn!(
-                        "Previous frame dimensions ({}x{}) don't match expected old dimensions ({}x{})",
-                        prev_width, prev_height, old_dims.width, old_dims.height
-                    );
-                }
-
-                // Create temporary scaler to rescale previous frame from old to new dimensions
-                let temp_scaler = Self::create_scaler_with_fallbacks(
-                    ffmpeg::format::Pixel::RGBA,
-                    prev_width, // Use actual frame dimensions, not old_dims
-                    prev_height,
-                    ffmpeg::format::Pixel::RGBA,
-                    new_width,
-                    new_height,
-                );
-
-                if let Ok(mut temp_scaler) = temp_scaler {
-                    let mut resized_frame = ffmpeg::util::frame::Video::empty();
-                    match temp_scaler.run(&prev.0, &mut resized_frame) {
-                        Ok(_) => {
-                            let result_width = resized_frame.width();
-                            let result_height = resized_frame.height();
-                            info!(
-                                "Successfully rescaled previous frame to {}x{} (expected {}x{})",
-                                result_width, result_height, new_width, new_height
-                            );
-
-                            // Verify the output dimensions are correct
-                            if result_width != new_width || result_height != new_height {
-                                error!(
-                                    "Scaler produced wrong dimensions! Expected {}x{}, got {}x{}",
-                                    new_width, new_height, result_width, result_height
-                                );
-                                self.create_black_frame(new_width, new_height, &holder);
-                            } else {
-                                holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(
-                                    resized_frame,
-                                )));
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to rescale previous frame: {}", e);
-                            self.create_black_frame(new_width, new_height, &holder);
-                        }
-                    }
-                } else {
-                    warn!("Failed to create temp scaler, using black fallback");
-                    self.create_black_frame(new_width, new_height, &holder);
-                }
-            } else {
-                info!("No previous frame available, using black fallback");
-                self.create_black_frame(new_width, new_height, &holder);
-            }
-        }
+        self.update_texture_with_placeholder(&old_dims, new_width, new_height);
 
         // Immediately signal the texture that a new frame is available
-        {
-            let texture_ref = self.sendable_texture.lock().unwrap();
-            if let Some(ref weak_texture) = *texture_ref {
-                if let Some(texture) = weak_texture.upgrade() {
-                    texture.mark_frame_available();
-                    info!("Marked frame available after resize");
-                }
+        if let Some(ref weak_texture) = *self.sendable_texture.lock().unwrap() {
+            if let Some(texture) = weak_texture.upgrade() {
+                texture.mark_frame_available();
+                info!("Marked frame available after resize");
             }
         }
 
         Ok(())
     }
 
-    /// Helper function to create and set a black frame with specified dimensions
+    /// Updates the scaler in the decoding context to output new dimensions.
+    fn update_scaler(&self, new_width: u32, new_height: u32) -> anyhow::Result<()> {
+        let mut ctx_guard = self
+            .decoding_context
+            .lock()
+            .map_err(|e| anyhow::anyhow!("decoding_context mutex poisoned: {}", e))?;
+        let ctx = ctx_guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Decoding context not initialized"))?;
+
+        let new_scaler = Self::create_scaler_with_fallbacks(
+            ctx.decoder.format(),
+            ctx.decoder.width(),
+            ctx.decoder.height(),
+            ffmpeg::format::Pixel::RGBA,
+            new_width,
+            new_height,
+        )?;
+
+        ctx.scaler = new_scaler;
+        info!(
+            "Scaler updated to new dimensions: {}x{}",
+            new_width, new_height
+        );
+        Ok(())
+    }
+
+    /// Creates a placeholder frame (rescaled previous or black) to prevent visual glitches.
+    fn update_texture_with_placeholder(
+        &self,
+        old_dims: &types::VideoDimensions,
+        new_width: u32,
+        new_height: u32,
+    ) {
+        if let Some(holder) = self.payload_holder.upgrade() {
+            let prev_frame = holder.previous_frame.lock().ok().and_then(|g| g.clone());
+            if let Some(prev) = prev_frame {
+                if !self
+                    .rescale_and_set_previous_frame(&holder, &prev, old_dims, new_width, new_height)
+                {
+                    self.create_black_frame(new_width, new_height, &holder);
+                }
+            } else {
+                info!("No previous frame available, using black fallback.");
+                self.create_black_frame(new_width, new_height, &holder);
+            }
+        }
+    }
+
+    /// Tries to rescale the last displayed frame to the new dimensions.
+    fn rescale_and_set_previous_frame(
+        &self,
+        holder: &Arc<PayloadHolder>,
+        prev_frame: &FFmpegFrameWrapper,
+        old_dims: &types::VideoDimensions,
+        new_width: u32,
+        new_height: u32,
+    ) -> bool {
+        let prev_width = prev_frame.0.width();
+        let prev_height = prev_frame.0.height();
+
+        if prev_width != old_dims.width || prev_height != old_dims.height {
+            warn!(
+                "Previous frame dimensions ({}x{}) don't match expected old dimensions ({}x{}).",
+                prev_width, prev_height, old_dims.width, old_dims.height
+            );
+        }
+
+        let temp_scaler = Self::create_scaler_with_fallbacks(
+            ffmpeg::format::Pixel::RGBA,
+            prev_width,
+            prev_height,
+            ffmpeg::format::Pixel::RGBA,
+            new_width,
+            new_height,
+        );
+
+        if let Ok(mut temp_scaler) = temp_scaler {
+            let mut resized_frame = ffmpeg::util::frame::Video::empty();
+            if temp_scaler.run(&prev_frame.0, &mut resized_frame).is_ok() {
+                if resized_frame.width() == new_width && resized_frame.height() == new_height {
+                    info!(
+                        "Successfully rescaled previous frame to {}x{}",
+                        new_width, new_height
+                    );
+                    holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(resized_frame)));
+                    return true;
+                } else {
+                    error!("Rescaled frame has wrong dimensions!");
+                }
+            } else {
+                error!("Failed to rescale previous frame.");
+            }
+        }
+        false
+    }
+
+    /// Helper function to create and set a black frame with specified dimensions.
     fn create_black_frame(&self, width: u32, height: u32, holder: &Arc<PayloadHolder>) {
         info!("Creating black frame with dimensions {}x{}", width, height);
         let mut new_frame =
             ffmpeg::util::frame::Video::new(ffmpeg::format::Pixel::RGBA, width, height);
 
-        // Verify the frame was created with correct dimensions
-        let actual_width = new_frame.width();
-        let actual_height = new_frame.height();
-        if actual_width != width || actual_height != height {
-            error!(
-                "Black frame created with wrong dimensions! Expected {}x{}, got {}x{}",
-                width, height, actual_width, actual_height
-            );
-        }
-
-        // Fill with black pixels (RGBA: 0, 0, 0, 255) to avoid garbage data
         let data = new_frame.data_mut(0);
-        let expected_size = (width * height * 4) as usize;
-        if data.len() < expected_size {
-            error!(
-                "Black frame buffer too small! Expected {} bytes, got {}",
-                expected_size,
-                data.len()
-            );
-        }
-
         for chunk in data.chunks_mut(4) {
-            if chunk.len() >= 4 {
-                chunk[0] = 0; // R
-                chunk[1] = 0; // G
-                chunk[2] = 0; // B
-                chunk[3] = 255; // A
-            }
+            chunk[0] = 0; // R
+            chunk[1] = 0; // G
+            chunk[2] = 0; // B
+            chunk[3] = 255; // A
         }
 
-        info!(
-            "Black frame created successfully: {}x{}",
-            actual_width, actual_height
-        );
         holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(new_frame)));
     }
+}
+
+/// Validates and sanitizes dimensions for resizing.
+fn sanitize_dimensions(width: u32, height: u32) -> anyhow::Result<(u32, u32)> {
+    if width == 0 || height == 0 {
+        return Err(anyhow::anyhow!(
+            "Invalid resize dimensions: {}x{}",
+            width,
+            height
+        ));
+    }
+
+    let mut new_width = width;
+    let mut new_height = height;
+
+    if new_width % 2 != 0 {
+        new_width = new_width.saturating_sub(1).max(2);
+        debug!(
+            "Adjusted width from {} to {} (must be even)",
+            width, new_width
+        );
+    }
+    if new_height % 2 != 0 {
+        new_height = new_height.saturating_sub(1).max(2);
+        debug!(
+            "Adjusted height from {} to {} (must be even)",
+            height, new_height
+        );
+    }
+
+    const MAX_DIMENSION: u32 = 7680; // 8K
+    if new_width > MAX_DIMENSION || new_height > MAX_DIMENSION {
+        return Err(anyhow::anyhow!(
+            "Dimensions {}x{} too large",
+            new_width,
+            new_height
+        ));
+    }
+    const MIN_DIMENSION: u32 = 2;
+    if new_width < MIN_DIMENSION || new_height < MIN_DIMENSION {
+        return Err(anyhow::anyhow!(
+            "Dimensions {}x{} too small",
+            new_width,
+            new_height
+        ));
+    }
+
+    Ok((new_width, new_height))
 }

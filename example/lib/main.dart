@@ -21,8 +21,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
-        body: StreamControlWidget(),
+        appBar: AppBar(title: const Text('Flutter Realtime Player')),
+        body: const StreamControlWidget(),
       ),
     );
   }
@@ -132,12 +132,13 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       children: [
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(16.0),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 1.5,
+              crossAxisSpacing: 16.0,
+              mainAxisSpacing: 16.0,
+              childAspectRatio:
+                  16 / 11, // Adjusted to account for controls below video
             ),
             itemCount: _streams.length,
             addAutomaticKeepAlives: true,
@@ -157,7 +158,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(16.0),
           child: ElevatedButton.icon(
             icon: const Icon(Icons.add),
             label: const Text('Add Stream'),
@@ -221,10 +222,12 @@ class _StreamGridItemState extends State<_StreamGridItem>
     super.build(context);
     final stream = widget.stream;
     return Card(
+      elevation: 4.0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
       child: Padding(
-        padding: const EdgeInsets.all(8.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          spacing: 6,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
@@ -232,7 +235,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                   child: TextField(
                     controller: stream.urlController,
                     decoration: const InputDecoration(
-                      labelText: 'Stream URL',
+                      labelText: 'Stream URL (e.g., rtsp://...)',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -244,66 +247,86 @@ class _StreamGridItemState extends State<_StreamGridItem>
                 ),
               ],
             ),
-            Flexible(
-              flex: 1,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'FFmpeg Options:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    ...stream.ffmpegOptionControllers.asMap().entries.map((
-                      entry,
-                    ) {
-                      final idx = entry.key;
-                      final controllers = entry.value;
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: controllers.key,
-                              decoration: const InputDecoration(
-                                labelText: 'Key',
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: controllers.value,
-                              decoration: const InputDecoration(
-                                labelText: 'Value',
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed:
-                                () => widget.removeFfmpegOptionField(
-                                  widget.streamIdx,
-                                  idx,
-                                ),
-                            tooltip: 'Remove option',
-                          ),
-                        ],
-                      );
-                    }),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Option'),
-                        onPressed:
-                            () => widget.addFfmpegOptionField(widget.streamIdx),
-                      ),
-                    ),
-                  ],
-                ),
+            const SizedBox(height: 16.0),
+            ExpansionTile(
+              title: const Text('FFmpeg Options'),
+              childrenPadding: const EdgeInsets.only(
+                left: 16.0,
+                right: 16.0,
+                bottom: 16.0,
               ),
+              children: [
+                ...stream.ffmpegOptionControllers.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final controllers = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controllers.key,
+                            decoration: const InputDecoration(
+                              labelText: 'Option Key',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        Expanded(
+                          child: TextField(
+                            controller: controllers.value,
+                            decoration: const InputDecoration(
+                              labelText: 'Option Value',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed:
+                              () => widget.removeFfmpegOptionField(
+                                widget.streamIdx,
+                                idx,
+                              ),
+                          tooltip: 'Remove option',
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Option'),
+                    onPressed:
+                        () => widget.addFfmpegOptionField(widget.streamIdx),
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 16.0),
+            Expanded(
+              child:
+                  stream.isStreaming
+                      ? _VideoPlayerWithControls(
+                        url: stream.urlController.text,
+                        autoRestart: stream.autoRestart,
+                        ffmpegOptions: widget.collectFfmpegOptions(
+                          stream.ffmpegOptionControllers,
+                        ),
+                      )
+                      : const Center(
+                        child: Text(
+                          'Stream is stopped',
+                          style: TextStyle(fontSize: 16.0, color: Colors.grey),
+                        ),
+                      ),
+            ),
+            const SizedBox(height: 16.0),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 ElevatedButton(
                   onPressed: () => widget.toggleStream(widget.streamIdx),
@@ -311,31 +334,21 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     stream.isStreaming ? 'Stop Stream' : 'Start Stream',
                   ),
                 ),
-                Tooltip(
-                  message: "auto restart",
-                  child: Switch(
-                    value: stream.autoRestart,
-                    onChanged: (value) {
-                      setState(() {
-                        stream.autoRestart = value;
-                      });
-                    },
-                  ),
+                Row(
+                  children: [
+                    Switch(
+                      value: stream.autoRestart,
+                      onChanged: (value) {
+                        setState(() {
+                          stream.autoRestart = value;
+                        });
+                      },
+                    ),
+                    const Text('Auto Restart'),
+                  ],
                 ),
               ],
             ),
-            stream.isStreaming
-                ? Flexible(
-                  flex: 6,
-                  child: _VideoPlayerWithControls(
-                    url: stream.urlController.text,
-                    autoRestart: stream.autoRestart,
-                    ffmpegOptions: widget.collectFfmpegOptions(
-                      stream.ffmpegOptionControllers,
-                    ),
-                  ),
-                )
-                : const Text('Stream is stopped'),
           ],
         ),
       ),
@@ -362,10 +375,11 @@ class _VideoPlayerWithControls extends StatefulWidget {
 class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   VideoController? _controller;
   bool _isLoading = true;
-  final Duration _duration =
-      Duration.zero; // We don't have duration for this simple player
   Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
   Timer? _positionTimer;
+  bool _isSeeking = false;
+  bool _isSeekable = false;
 
   @override
   void initState() {
@@ -374,10 +388,11 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   }
 
   Future<void> _initializeVideo() async {
+    // Use a standard HD resolution that maintains 16:9 aspect ratio
     final dimensions = const VideoDimensions(
-      width: 356,
-      height: 200,
-    ); // 16:9 aspect ratio for 200 height
+      width: 1280,
+      height: 720,
+    ); // 16:9 aspect ratio for HD resolution
 
     final result = await VideoController.create(
       url: widget.url,
@@ -385,7 +400,6 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
       autoRestart: widget.autoRestart,
       ffmpegOptions: widget.ffmpegOptions,
     );
-    
 
     setState(() {
       _controller = result.$1;
@@ -393,6 +407,14 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
     });
 
     if (_controller != null) {
+      _controller!.stateBroadcast.listen((state) {
+        if (state is StreamState_Playing) {
+          setState(() {
+            _isSeekable = state.seekable;
+          });
+        }
+      });
+
       // Start periodic position updates
       _positionTimer = Timer.periodic(const Duration(seconds: 1), (
         timer,
@@ -412,16 +434,6 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
     }
   }
 
-  Future<void> _seekToPosition(double value) async {
-    if (_controller != null) {
-      final newPosition = Duration(milliseconds: (value * 1000).round());
-      await _controller!.seekTo(newPosition);
-      setState(() {
-        _position = newPosition;
-      });
-    }
-  }
-
   @override
   void dispose() {
     _positionTimer?.cancel();
@@ -433,7 +445,6 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
-      
     }
 
     if (_controller == null) {
@@ -441,79 +452,87 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Flexible(
-          flex: 6,
-          child: VideoPlayer.fromController(
-            controller: _controller!,
-            autoDispose: false, // Don't auto dispose since we're managing it
+        Expanded(
+          child: AspectRatio(
+            aspectRatio: 16 / 9, // Standard video aspect ratio
+            child: VideoPlayer.fromController(
+              controller: _controller!,
+              autoDispose: false, // Don't auto dispose since we're managing it
+            ),
           ),
         ),
-
-        // Video controls
-        Flexible(
-          flex: 3,
+        Padding(
+          padding: const EdgeInsets.only(top: 8.0),
           child: Column(
             children: [
-              // Position slider
-              Slider(
-                value: _position.inMilliseconds.toDouble(),
-                min: 0.0,
-                max:
-                    _duration.inMilliseconds.toDouble().isNaN
-                        ? 100.0
-                        : _duration.inMilliseconds.toDouble(),
-                onChanged: _seekToPosition,
-                label: '${_position.inSeconds}s',
-              ),
+              // Seek bar - only show if the stream is seekable
+              if (_isSeekable)
+                Slider(
+                  value:
+                      _isSeeking
+                          ? _position.inMilliseconds.toDouble()
+                          : _position.inMilliseconds.toDouble(),
+                  onChanged: (value) {
+                    setState(() {
+                      _isSeeking = true;
+                      _position = Duration(milliseconds: value.round());
+                    });
+                  },
+                  onChangeEnd: (value) async {
+                    if (_controller != null) {
+                      await _controller!.seekTo(
+                        Duration(milliseconds: value.round()),
+                      );
+                    }
+                    setState(() {
+                      _isSeeking = false;
+                      _position = Duration(milliseconds: value.round());
+                    });
+                  },
+                  min: 0.0,
+                  max:
+                      _isSeekable && _duration.inMilliseconds.toDouble() > 0
+                          ? _duration.inMilliseconds.toDouble()
+                          : _position.inMilliseconds.toDouble() > 0
+                          ? _position.inMilliseconds.toDouble() *
+                              2 // Use double the current position as max if duration is unknown but we've started playing
+                          : 60000.0, // 60 seconds fallback for unknown duration
+                  label: _formatDuration(_position),
+                ),
               // Time display
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(_position.toString().split('.')[0]),
-                  Text(_duration.toString().split('.')[0]),
-                ],
-              ),
-              // Seek buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.replay_10),
-                    onPressed: () async {
-                      if (_controller != null) {
-                        final newPosition = Duration(
-                          milliseconds: _position.inMilliseconds - 10000,
-                        );
-                        if (newPosition.isNegative) {
-                          await _seekToPosition(0.0);
-                        } else {
-                          await _seekToPosition(
-                            newPosition.inMilliseconds.toDouble(),
-                          );
-                        }
-                      }
-                    },
+                  Text(
+                    _formatDuration(_position),
+                    style: const TextStyle(color: Colors.grey),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.forward_10),
-                    onPressed: () async {
-                      if (_controller != null) {
-                        final newPosition = Duration(
-                          milliseconds: _position.inMilliseconds + 10000,
-                        );
-                        await _seekToPosition(
-                          newPosition.inMilliseconds.toDouble(),
-                        );
-                      }
-                    },
+                  Text(
+                    _isSeekable && _duration.inMilliseconds > 0
+                        ? _formatDuration(_duration)
+                        : '--:--:--',
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ],
               ),
+              if (!_isSeekable)
+                const Text(
+                  'Stream is not seekable',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
   }
 }
