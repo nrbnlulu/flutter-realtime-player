@@ -59,6 +59,19 @@ Future<void> seekToTime({
 Future<double> getCurrentTime({required PlatformInt64 sessionId}) =>
     RustLib.instance.api.crateApiSimpleGetCurrentTime(sessionId: sessionId);
 
+Future<void> seekIso8601({
+  required PlatformInt64 sessionId,
+  required String iso8601Time,
+}) => RustLib.instance.api.crateApiSimpleSeekIso8601(
+  sessionId: sessionId,
+  iso8601Time: iso8601Time,
+);
+
+Stream<double> subscribeToStreamTime({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleSubscribeToStreamTime(
+      sessionId: sessionId,
+    );
+
 Future<void> resizeStreamSession({
   required PlatformInt64 sessionId,
   required int width,

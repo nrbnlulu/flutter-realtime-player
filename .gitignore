@@ -34,3 +34,6 @@ build/
 target/
 
 *.log*
+
+# FVM Version Cache
+.fvm/

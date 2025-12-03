@@ -380,10 +380,13 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   Timer? _positionTimer;
   bool _isSeeking = false;
   bool _isSeekable = false;
+  double _currentStreamTime = 0.0; // Stream time in seconds
+  final TextEditingController _iso8601Controller = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _iso8601Controller.text = DateTime.now().toIso8601String();
     _initializeVideo();
   }
 
@@ -414,6 +417,21 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
           });
         }
       });
+
+      // Subscribe to stream time updates
+      try {
+        _controller!.timeBroadcast
+            ?.listen((time) {
+              setState(() {
+                _currentStreamTime = time;
+              });
+            })
+            .onError((error) {
+              debugPrint('Time broadcast error: $error');
+            });
+      } catch (e) {
+        debugPrint('Time broadcast not available: $e');
+      }
 
       // Start periodic position updates
       _positionTimer = Timer.periodic(const Duration(seconds: 1), (
@@ -501,13 +519,27 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                           : 60000.0, // 60 seconds fallback for unknown duration
                   label: _formatDuration(_position),
                 ),
-              // Time display
+              // Time display with stream time
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    _formatDuration(_position),
-                    style: const TextStyle(color: Colors.grey),
+                  // Show current position and stream time
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _formatDuration(_position),
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                      if (_currentStreamTime >= 0)
+                        Text(
+                          'Stream Time: ${_formatDuration(Duration(seconds: _currentStreamTime.floor()))}',
+                          style: const TextStyle(
+                            color: Colors.blue,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
                   ),
                   Text(
                     _isSeekable && _duration.inMilliseconds > 0
@@ -521,6 +553,92 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                 const Text(
                   'Stream is not seekable',
                   style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              // HLS/X-PROGRAM-DATE-TIME seeking controls for streams with temporal metadata
+              if (_isSeekable)
+                Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        // Seek backward button
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.replay_5),
+                          label: const Text('-5s'),
+                          onPressed: () async {
+                            if (_controller != null) {
+                              try {
+                                final currentPos =
+                                    await _controller!.getCurrentPosition();
+                                final newPos = Duration(
+                                  seconds:
+                                      (currentPos.inSeconds - 5).compareTo(0) >
+                                              0
+                                          ? currentPos.inSeconds - 5
+                                          : 0,
+                                );
+                                await _controller!.seekTo(newPos);
+                              } catch (e) {
+                                debugPrint('Error seeking backward: $e');
+                              }
+                            }
+                          },
+                        ),
+                        // ISO 8601 time picker for absolute seeking
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _iso8601Controller,
+                            decoration: const InputDecoration(
+                              hintText:
+                                  'ISO 8601 time (e.g., 2025-12-03T07:00:00Z)',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Seek to ISO 8601 time button
+                        ElevatedButton(
+                          onPressed: () async {
+                            if (_controller != null &&
+                                _iso8601Controller.text.isNotEmpty) {
+                              try {
+                                await _controller!.seekToISO8601(
+                                  _iso8601Controller.text,
+                                );
+                              } catch (e) {
+                                debugPrint('Error seeking to ISO time: $e');
+                              }
+                            }
+                          },
+                          child: const Text('Seek'),
+                        ),
+                        // Seek forward button
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.forward_5),
+                          label: const Text('+5s'),
+                          onPressed: () async {
+                            debugPrint("trying to seek forward");
+                            if (_controller != null) {
+                              try {
+                                final currentPos =
+                                    await _controller!.getCurrentPosition();
+                                final newPos = Duration(
+                                  seconds: currentPos.inSeconds + 5,
+                                );
+                                await _controller!.seekTo(newPos);
+                              } catch (e) {
+                                debugPrint('Error seeking forward: $e');
+                              }
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
             ],
           ),

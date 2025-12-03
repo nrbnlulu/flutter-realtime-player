@@ -1,5 +1,6 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
+use chrono::{DateTime, Utc};
 use std::{
     char::DecodeUtf16,
     collections::HashMap,
@@ -150,6 +151,7 @@ struct DecodingContext {
     decoder: ffmpeg::decoder::Video,
     scaler: ffmpeg::software::scaling::Context,
     framerate: u32,
+    stream_start_time: Option<i64>, // Unix timestamp in seconds when stream started (from #EXT-X-PROGRAM-DATE-TIME)
 }
 
 impl fmt::Debug for DecodingContext {
@@ -157,6 +159,7 @@ impl fmt::Debug for DecodingContext {
         f.debug_struct("DecodingContext")
             .field("video_stream_index", &self.video_stream_index)
             .field("framerate", &self.framerate)
+            .field("stream_start_time", &self.stream_start_time)
             .field("decoder", &self.decoder.id())
             .finish()
     }
@@ -209,6 +212,9 @@ pub enum StreamExitResult {
     EOF,
     Error,
 }
+
+use crate::frb_generated::StreamSink;
+
 pub struct SoftwareDecoder {
     video_info: types::VideoInfo,
     kill_sig: AtomicBool,
@@ -223,6 +229,8 @@ pub struct SoftwareDecoder {
     output_dimensions: Arc<Mutex<types::VideoDimensions>>, // Track current output dimensions
     sendable_texture: Arc<Mutex<Option<WeakSendableTexture>>>,
     synchronizer: Mutex<Option<FrameSynchronizer>>, // For frame timing synchronization
+    time_sink: Arc<Mutex<Option<StreamSink<f64>>>>, // To send current time to Flutter
+    last_time_update: Arc<Mutex<std::time::Instant>>, // Track when last time update was sent
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
@@ -308,6 +316,8 @@ impl SoftwareDecoder {
             output_dimensions: Arc::new(Mutex::new(video_info.dimensions.clone())),
             sendable_texture: Arc::new(Mutex::new(None)),
             synchronizer: Mutex::new(None),
+            time_sink: Arc::new(Mutex::new(None)),
+            last_time_update: Arc::new(Mutex::new(std::time::Instant::now())),
         });
         (self_, payload_holder)
     }
@@ -317,6 +327,15 @@ impl SoftwareDecoder {
             *texture_ref = Some(texture);
         } else {
             error!("sendable_texture mutex poisoned in set_sendable_texture");
+        }
+    }
+
+    pub fn set_time_sink(&self, sink: StreamSink<f64>) {
+        if let Ok(mut time_sink_ref) = self.time_sink.lock() {
+            *time_sink_ref = Some(sink);
+            info!("Time sink set successfully");
+        } else {
+            error!("time_sink mutex poisoned in set_time_sink");
         }
     }
 
@@ -352,6 +371,82 @@ impl SoftwareDecoder {
         } else {
             error!("seek_request mutex poisoned in seek_to");
         }
+    }
+
+    pub fn seek_iso_8601(&self, iso_8601_time: &str) -> anyhow::Result<()> {
+        // Parse the ISO 8601 time string to a Unix timestamp
+        let target_dt = DateTime::parse_from_rfc3339(iso_8601_time)
+            .or_else(|_| {
+                // Try parsing as a more lenient format like "YYYY-MM-DDTHH:MM:SS"
+                DateTime::parse_from_str(iso_8601_time, "%Y-%m-%dT%H:%M:%S%.f%z")
+                    .or_else(|_| DateTime::parse_from_str(iso_8601_time, "%Y-%m-%dT%H:%M:%S%z"))
+            })
+            .or_else(|_| {
+                // Try parsing without timezone, assume UTC
+                chrono::NaiveDateTime::parse_from_str(iso_8601_time, "%Y-%m-%dT%H:%M:%S%.f")
+                    .or_else(|_| {
+                        chrono::NaiveDateTime::parse_from_str(iso_8601_time, "%Y-%m-%dT%H:%M:%S")
+                    })
+                    .map(|ndt| DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc).fixed_offset())
+            })
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to parse ISO 8601 time '{}': {}", iso_8601_time, e)
+            })?;
+
+        let target_timestamp_secs = target_dt.timestamp();
+
+        if !self.seekable.load(std::sync::atomic::Ordering::Relaxed) {
+            warn!("Seek requested but stream is not seekable");
+            return Err(anyhow::anyhow!("Stream is not seekable"));
+        }
+
+        // Get the stream start time from the decoding context
+        let decoding_ctx = self
+            .decoding_context
+            .lock()
+            .map_err(|_| anyhow::anyhow!("decoding_context mutex poisoned in seek_iso_8601"))?;
+
+        let stream_start_time = decoding_ctx
+            .as_ref()
+            .and_then(|ctx| ctx.stream_start_time)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Stream does not have temporal metadata (#EXT-X-PROGRAM-DATE-TIME). \
+                 ISO 8601 seeking is only available for streams with absolute time information."
+                )
+            })?;
+
+        drop(decoding_ctx); // Release lock early
+
+        // Calculate the relative timestamp: target_time - stream_start_time
+        let relative_secs = target_timestamp_secs - stream_start_time;
+
+        if relative_secs < 0 {
+            warn!(
+                "Target time {} is before stream start time (stream started at Unix timestamp {})",
+                iso_8601_time, stream_start_time
+            );
+            return Err(anyhow::anyhow!(
+                "Target time is before the stream start time. Cannot seek to a time before the stream began."
+            ));
+        }
+
+        // Convert to AV_TIME_BASE (microseconds)
+        let timestamp_us = relative_secs * 1_000_000;
+
+        // Set seek request with the relative timestamp
+        if let Ok(mut seek) = self.seek_request.lock() {
+            *seek = Some(timestamp_us);
+            info!(
+                "ISO 8601 seek requested to {} (absolute Unix: {}, stream start: {}, relative: {} us)",
+                iso_8601_time, target_timestamp_secs, stream_start_time, timestamp_us
+            );
+        } else {
+            error!("seek_request mutex poisoned in seek_iso_8601");
+            return Err(anyhow::anyhow!("Seek request mutex poisoned"));
+        }
+
+        Ok(())
     }
 
     pub fn get_current_time(&self) -> anyhow::Result<f64> {
@@ -412,19 +507,31 @@ impl SoftwareDecoder {
             0
         };
 
+        // Extract HLS program date time from metadata if available
+        let stream_start_time = Self::extract_program_date_time(&ictx, &input);
+        if let Some(start_time) = stream_start_time {
+            info!(
+                "Stream has #EXT-X-PROGRAM-DATE-TIME metadata. Start time: {} (Unix timestamp)",
+                start_time
+            );
+        } else {
+            info!("Stream does not have #EXT-X-PROGRAM-DATE-TIME metadata. ISO 8601 seeking will not be available.");
+        }
+
         let context = DecodingContext {
             ictx,
             video_stream_index,
             decoder,
             scaler,
             framerate: frame_rate,
+            stream_start_time,
         };
         debug!(
             "Created context {:?} for url: {}",
             context, &self.video_info.uri
         );
         let duration = context.ictx.duration();
-        let is_seekable = duration > 0;
+        let is_seekable = true; // Allow seeking for HLS streams even if duration is unknown
         info!("Stream duration: {}, seekable: {}", duration, is_seekable);
 
         if let Ok(mut decoding_context) = self.decoding_context.lock() {
@@ -437,6 +544,62 @@ impl SoftwareDecoder {
             error!("decoding_context mutex poisoned in initialize_stream");
             Err(ffmpeg::Error::Unknown)
         }
+    }
+
+    /// Extract the program date time from HLS stream metadata
+    /// Returns Unix timestamp in seconds if #EXT-X-PROGRAM-DATE-TIME is available
+    fn extract_program_date_time(
+        ictx: &ffmpeg::format::context::Input,
+        stream: &ffmpeg::format::stream::Stream,
+    ) -> Option<i64> {
+        // Try to get metadata from format context
+        if let Some(metadata) = ictx.metadata().get("creation_time") {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(metadata) {
+                info!("Found creation_time in format metadata: {}", metadata);
+                return Some(dt.timestamp());
+            }
+        }
+
+        // Try to get metadata from the stream
+        if let Some(metadata) = stream.metadata().get("creation_time") {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(metadata) {
+                info!("Found creation_time in stream metadata: {}", metadata);
+                return Some(dt.timestamp());
+            }
+        }
+
+        // For HLS, FFmpeg may store the program date time in other metadata fields
+        // Check for "start_time" or "date" fields
+        if let Some(metadata) = stream.metadata().get("date") {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(metadata) {
+                info!("Found date in stream metadata: {}", metadata);
+                return Some(dt.timestamp());
+            }
+        }
+
+        // If stream has a start_time, we can use that along with the current wall clock
+        // to approximate the program date time, but this is less accurate
+        let start_time = stream.start_time();
+        if start_time != ffmpeg::ffi::AV_NOPTS_VALUE {
+            let time_base = stream.time_base();
+            let start_time_secs = if time_base.denominator() != 0 {
+                (start_time as f64 * time_base.numerator() as f64) / time_base.denominator() as f64
+            } else {
+                start_time as f64 / 1_000_000.0 // Assume AV_TIME_BASE
+            };
+
+            // Calculate approximate program date time based on current time
+            let now = Utc::now().timestamp();
+            let estimated_start = now - start_time_secs as i64;
+
+            info!(
+                "No explicit program date time found. Estimated stream start: {} (based on start_time: {}, time_base: {}/{})",
+                estimated_start, start_time, time_base.numerator(), time_base.denominator()
+            );
+            // Don't return estimated time - it's too unreliable for seeking
+        }
+
+        None
     }
 
     fn asked_for_termination(&self) -> bool {
@@ -609,25 +772,32 @@ impl SoftwareDecoder {
         };
 
         if let Some(ts) = seek_lock.take() {
-            info!("Performing seek to {} us", ts);
+            info!("Performing seek to {} us (relative stream time)", ts);
+            // Seek using the timestamp with AVSEEK_FLAG_BACKWARD to ensure we land on a keyframe
+            // The ..ts range syntax in rust-ffmpeg translates to seeking with AVSEEK_FLAG_BACKWARD
             if let Err(e) = ctx.ictx.seek(ts, ..ts) {
                 error!("Seek failed to timestamp {}: {}", ts, e);
                 dart_update_stream
                     .add(StreamState::Error(format!("Seek failed: {}", e)))
                     .log_err();
             } else {
-                info!("Seek successful to timestamp: {}", ts);
+                info!("Seek successful to timestamp: {} us", ts);
+                // Flush the decoder to clear any buffered frames
                 ctx.decoder.flush();
+                // Clear frame buffers
                 if let Some(holder) = self.payload_holder.upgrade() {
                     holder.current_frame.lock().ok().and_then(|mut g| g.take());
                     holder.previous_frame.lock().ok().and_then(|mut g| g.take());
                 }
+                // Update current time to reflect the seek position
                 if let Ok(mut current_time) = self.current_time.lock() {
                     *current_time = (ts as f64) / 1_000_000.0;
                 }
+                // Reset the frame synchronizer since we're at a new position
                 if let Ok(mut synchronizer) = self.synchronizer.lock() {
                     *synchronizer = None;
                 }
+                info!("Decoder state reset after seek");
             }
         }
     }
@@ -641,7 +811,7 @@ impl SoftwareDecoder {
             // let mut ctx = self.decoding_context.lock();
             // if let Ok(ctxa) = ctx{
             //     if let Some(dectx) = *ctxa.as_mut(){
-                    
+
             //     }
             // }
         }
@@ -677,6 +847,37 @@ impl SoftwareDecoder {
                     .unwrap_or(true)
                 {
                     *current_time = pts_seconds;
+                }
+            }
+
+            // Send current time to Flutter periodically (every 1 second)
+            {
+                if let Ok(mut last_time_update) = self.last_time_update.lock() {
+                    if last_time_update.elapsed() >= std::time::Duration::from_secs(1) {
+                        // Update the last time update
+                        *last_time_update = std::time::Instant::now();
+
+                        // Get the current time and send it to the Flutter sink
+                        if let Ok(current_time) = self.current_time.lock() {
+                            let current_time_value = *current_time;
+                            drop(current_time); // Release the lock early
+
+                            // Send the time update to Flutter if sink exists
+                            if let Ok(time_sink_ref) = self.time_sink.lock() {
+                                if let Some(ref sink) = *time_sink_ref {
+                                    match sink.add(current_time_value) {
+                                        Ok(_) => trace!(
+                                            "Sent time update to Flutter: {}",
+                                            current_time_value
+                                        ),
+                                        Err(e) => {
+                                            warn!("Failed to send time update to Flutter: {}", e)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

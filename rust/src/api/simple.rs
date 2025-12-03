@@ -89,6 +89,14 @@ pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
     crate::core::fluttersink::get_current_time(session_id)
 }
 
+pub fn seek_iso_8601(session_id: i64, iso_8601_time: String) -> anyhow::Result<()> {
+    crate::core::fluttersink::seek_iso_8601(session_id, iso_8601_time)
+}
+
+pub fn subscribe_to_stream_time(session_id: i64, sink: StreamSink<f64>) -> anyhow::Result<()> {
+    crate::core::fluttersink::set_time_sink(session_id, sink)
+}
+
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
     crate::core::fluttersink::resize_stream_session(session_id, width, height)
 }

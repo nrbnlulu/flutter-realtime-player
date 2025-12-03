@@ -20,6 +20,10 @@ class VideoController {
   bool _running = false;
   int? _engineHandle;
 
+  // Add a stream for time updates
+  Stream<double>? _timeStream;
+  Stream<double>? get timeBroadcast => _timeStream;
+
   VideoController(
     StreamSubscription<StreamState> originalSub, {
     required this.url,
@@ -76,6 +80,15 @@ class VideoController {
       );
       ret._engineHandle = handle;
       ret._running = true;
+
+      // Set up time broadcast if available
+      try {
+        ret._timeStream = rlib.subscribeToStreamTime(sessionId: sessionId);
+      } catch (e) {
+        debugPrint('Time subscription not available for this stream: $e');
+        // Time subscription might not be available for all stream types
+      }
+
       // start ping task
       Future.microtask(() async {
         while (ret._running) {
@@ -102,6 +115,11 @@ class VideoController {
   Future<Duration> getCurrentPosition() async {
     final timeSeconds = await rlib.getCurrentTime(sessionId: sessionId);
     return Duration(milliseconds: (timeSeconds * 1000).round());
+  }
+
+  /// Seek to a specific ISO 8601 timestamp within the video stream
+  Future<void> seekToISO8601(String iso8601Time) async {
+    await rlib.seekIso8601(sessionId: sessionId, iso8601Time: iso8601Time);
   }
 
   /// Resize the video stream with new dimensions
