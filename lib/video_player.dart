@@ -117,6 +117,17 @@ class VideoController {
     return Duration(milliseconds: (timeSeconds * 1000).round());
   }
 
+  /// Get the start time of the stream (Unix timestamp in seconds) if available
+  /// This is particularly useful for HLS streams with #EXT-X-PROGRAM-DATE-TIME
+  Future<int?> getStreamStartTime() async {
+    try {
+      return await rlib.getStreamStartTime(sessionId: sessionId);
+    } catch (e) {
+      debugPrint('Error getting stream start time: $e');
+      return null;
+    }
+  }
+
   /// Seek to a specific ISO 8601 timestamp within the video stream
   Future<void> seekToISO8601(String iso8601Time) async {
     await rlib.seekIso8601(sessionId: sessionId, iso8601Time: iso8601Time);

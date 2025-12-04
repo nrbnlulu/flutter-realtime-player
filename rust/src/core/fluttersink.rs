@@ -179,6 +179,15 @@ pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
     }
 }
 
+pub fn get_stream_start_time(session_id: i64) -> anyhow::Result<Option<i64>> {
+    let session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some(ctx) = session_cache.get(&session_id) {
+        ctx.decoder.get_stream_start_time()
+    } else {
+        Err(anyhow::anyhow!("Session not found: {}", session_id))
+    }
+}
+
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
     let session_cache = SESSION_CACHE.lock().unwrap();
     if let Some(ctx) = session_cache.get(&session_id) {
@@ -188,7 +197,10 @@ pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow
     }
 }
 
-pub fn set_time_sink(session_id: i64, time_sink: crate::frb_generated::StreamSink<f64>) -> anyhow::Result<()> {
+pub fn set_time_sink(
+    session_id: i64,
+    time_sink: crate::frb_generated::StreamSink<f64>,
+) -> anyhow::Result<()> {
     let session_cache = SESSION_CACHE.lock().unwrap();
     if let Some(ctx) = session_cache.get(&session_id) {
         ctx.decoder.set_time_sink(time_sink);

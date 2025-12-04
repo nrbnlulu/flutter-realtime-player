@@ -9,1126 +9,770 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart_types.dart';
 import 'frb_generated.dart';
-import 'frb_generated.io.dart'
-    if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'frb_generated.io.dart' if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-/// Main entrypoint of the Rust API
-class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
-  @internal
-  static final instance = RustLib._();
 
-  RustLib._();
+                /// Main entrypoint of the Rust API
+                class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
+                  @internal
+                  static final instance = RustLib._();
 
-  /// Initialize flutter_rust_bridge
-  static Future<void> init({
-    RustLibApi? api,
-    BaseHandler? handler,
-    ExternalLibrary? externalLibrary,
-    bool forceSameCodegenVersion = true,
-  }) async {
-    await instance.initImpl(
-      api: api,
-      handler: handler,
-      externalLibrary: externalLibrary,
-      forceSameCodegenVersion: forceSameCodegenVersion,
-    );
-  }
+                  RustLib._();
 
-  /// Initialize flutter_rust_bridge in mock mode.
-  /// No libraries for FFI are loaded.
-  static void initMock({required RustLibApi api}) {
-    instance.initMockImpl(api: api);
-  }
+                  /// Initialize flutter_rust_bridge
+                  static Future<void> init({
+                    RustLibApi? api,
+                    BaseHandler? handler,
+                    ExternalLibrary? externalLibrary,
+                    bool forceSameCodegenVersion = true,
+                  }) async {
+                    await instance.initImpl(
+                      api: api,
+                      handler: handler,
+                      externalLibrary: externalLibrary,
+                      forceSameCodegenVersion: forceSameCodegenVersion,
+                    );
+                  }
 
-  /// Dispose flutter_rust_bridge
-  ///
-  /// The call to this function is optional, since flutter_rust_bridge (and everything else)
-  /// is automatically disposed when the app stops.
-  static void dispose() => instance.disposeImpl();
+                  /// Initialize flutter_rust_bridge in mock mode.
+                  /// No libraries for FFI are loaded.
+                  static void initMock({
+                    required RustLibApi api,
+                  }) {
+                    instance.initMockImpl(
+                      api: api,
+                    );
+                  }
 
-  @override
-  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor =>
-      RustLibApiImpl.new;
+                  /// Dispose flutter_rust_bridge
+                  ///
+                  /// The call to this function is optional, since flutter_rust_bridge (and everything else)
+                  /// is automatically disposed when the app stops.
+                  static void dispose() => instance.disposeImpl();
 
-  @override
-  WireConstructor<RustLibWire> get wireConstructor =>
-      RustLibWire.fromExternalLibrary;
+                  @override
+                  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor => RustLibApiImpl.new;
 
-  @override
-  Future<void> executeRustInitializers() async {
-    await api.crateApiSimpleInitApp();
-  }
+                  @override
+                  WireConstructor<RustLibWire> get wireConstructor => RustLibWire.fromExternalLibrary;
 
-  @override
-  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig =>
-      kDefaultExternalLibraryLoaderConfig;
+                  @override
+                  Future<void> executeRustInitializers() async {
+                    await api.crateApiSimpleInitApp();
 
-  @override
-  String get codegenVersion => '2.11.1';
+                  }
 
-  @override
-  int get rustContentHash => 1597561460;
+                  @override
+                  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig => kDefaultExternalLibraryLoaderConfig;
 
-  static const kDefaultExternalLibraryLoaderConfig =
-      ExternalLibraryLoaderConfig(
-        stem: 'flutter_realtime_player',
-        ioDirectory: 'rust/target/release/',
-        webPrefix: 'pkg/',
-      );
-}
+                  @override
+                  String get codegenVersion => '2.11.1';
 
-abstract class RustLibApi extends BaseApi {
-  Stream<StreamState> crateApiSimpleCreateNewPlayable({
-    required PlatformInt64 sessionId,
-    required PlatformInt64 engineHandle,
-    required VideoInfo videoInfo,
-    Map<String, String>? ffmpegOptions,
-  });
+                  @override
+                  int get rustContentHash => 2083343054;
 
-  Future<PlatformInt64> crateApiSimpleCreateNewSession();
+                  static const kDefaultExternalLibraryLoaderConfig = ExternalLibraryLoaderConfig(
+                    stem: 'flutter_realtime_player',
+                    ioDirectory: 'rust/target/release/',
+                    webPrefix: 'pkg/',
+                  );
+                }
+                
 
-  Future<void> crateApiSimpleDestroyEngineStreams({
-    required PlatformInt64 engineId,
-  });
+                abstract class RustLibApi extends BaseApi {
+                  Stream<StreamState> crateApiSimpleCreateNewPlayable({required PlatformInt64 sessionId , required PlatformInt64 engineHandle , required VideoInfo videoInfo , Map<String, String>? ffmpegOptions });
 
-  Future<void> crateApiSimpleDestroyStreamSession({
-    required PlatformInt64 sessionId,
-  });
+Future<PlatformInt64> crateApiSimpleCreateNewSession();
 
-  Future<void> crateApiSimpleFlutterRealtimePlayerInit({
-    required PlatformInt64 ffiPtr,
-  });
+Future<void> crateApiSimpleDestroyEngineStreams({required PlatformInt64 engineId });
 
-  Future<double> crateApiSimpleGetCurrentTime({
-    required PlatformInt64 sessionId,
-  });
+Future<void> crateApiSimpleDestroyStreamSession({required PlatformInt64 sessionId });
 
-  Future<void> crateApiSimpleInitApp();
+Future<void> crateApiSimpleFlutterRealtimePlayerInit({required PlatformInt64 ffiPtr });
 
-  Future<void> crateApiSimpleMarkSessionAlive({
-    required PlatformInt64 sessionId,
-  });
+Future<double> crateApiSimpleGetCurrentTime({required PlatformInt64 sessionId });
 
-  Future<void> crateApiSimpleResizeStreamSession({
-    required PlatformInt64 sessionId,
-    required int width,
-    required int height,
-  });
+Future<PlatformInt64?> crateApiSimpleGetStreamStartTime({required PlatformInt64 sessionId });
 
-  Future<void> crateApiSimpleSeekIso8601({
-    required PlatformInt64 sessionId,
-    required String iso8601Time,
-  });
+Future<void> crateApiSimpleInitApp();
 
-  Future<void> crateApiSimpleSeekToTime({
-    required PlatformInt64 sessionId,
-    required double timeSeconds,
-  });
+Future<void> crateApiSimpleMarkSessionAlive({required PlatformInt64 sessionId });
 
-  Stream<double> crateApiSimpleSubscribeToStreamTime({
-    required PlatformInt64 sessionId,
-  });
-}
+Future<void> crateApiSimpleResizeStreamSession({required PlatformInt64 sessionId , required int width , required int height });
 
-class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
-  RustLibApiImpl({
-    required super.handler,
-    required super.wire,
-    required super.generalizedFrbRustBinding,
-    required super.portManager,
-  });
+Future<void> crateApiSimpleSeekIso8601({required PlatformInt64 sessionId , required String iso8601Time });
 
-  @override
-  Stream<StreamState> crateApiSimpleCreateNewPlayable({
-    required PlatformInt64 sessionId,
-    required PlatformInt64 engineHandle,
-    required VideoInfo videoInfo,
-    Map<String, String>? ffmpegOptions,
-  }) {
-    final sink = RustStreamSink<StreamState>();
-    unawaited(
-      handler.executeNormal(
-        NormalTask(
-          callFfi: (port_) {
+Future<void> crateApiSimpleSeekToTime({required PlatformInt64 sessionId , required double timeSeconds });
+
+Stream<double> crateApiSimpleSubscribeToStreamTime({required PlatformInt64 sessionId });
+
+
+                }
+                
+
+                class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
+                  RustLibApiImpl({
+                    required super.handler,
+                    required super.wire,
+                    required super.generalizedFrbRustBinding,
+                    required super.portManager,
+                  });
+
+                  @override Stream<StreamState> crateApiSimpleCreateNewPlayable({required PlatformInt64 sessionId , required PlatformInt64 engineHandle , required VideoInfo videoInfo , Map<String, String>? ffmpegOptions })  { 
+            final sink = RustStreamSink<StreamState>();
+            unawaited(handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+sse_encode_i_64(engineHandle, serializer);
+sse_encode_box_autoadd_video_info(videoInfo, serializer);
+sse_encode_opt_Map_String_String_None(ffmpegOptions, serializer);
+sse_encode_StreamSink_stream_state_Sse(sink, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        )
+        ,
+            constMeta: kCrateApiSimpleCreateNewPlayableConstMeta,
+            argValues: [sessionId, engineHandle, videoInfo, ffmpegOptions, sink],
+            apiImpl: this,
+        )));
+            return sink.stream;
+             }
+
+
+        TaskConstMeta get kCrateApiSimpleCreateNewPlayableConstMeta => const TaskConstMeta(
+            debugName: "create_new_playable",
+            argNames: ["sessionId", "engineHandle", "videoInfo", "ffmpegOptions", "sink"],
+        );
+        
+
+@override Future<PlatformInt64> crateApiSimpleCreateNewSession()  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
             final serializer = SseSerializer(generalizedFrbRustBinding);
-            sse_encode_i_64(sessionId, serializer);
-            sse_encode_i_64(engineHandle, serializer);
-            sse_encode_box_autoadd_video_info(videoInfo, serializer);
-            sse_encode_opt_Map_String_String_None(ffmpegOptions, serializer);
-            sse_encode_StreamSink_stream_state_Sse(sink, serializer);
-            pdeCallFfi(
-              generalizedFrbRustBinding,
-              serializer,
-              funcId: 1,
-              port: port_,
-            );
-          },
-          codec: SseCodec(
-            decodeSuccessData: sse_decode_unit,
-            decodeErrorData: sse_decode_AnyhowException,
-          ),
-          constMeta: kCrateApiSimpleCreateNewPlayableConstMeta,
-          argValues: [sessionId, engineHandle, videoInfo, ffmpegOptions, sink],
-          apiImpl: this,
-        ),
-      ),
-    );
-    return sink.stream;
-  }
-
-  TaskConstMeta get kCrateApiSimpleCreateNewPlayableConstMeta =>
-      const TaskConstMeta(
-        debugName: "create_new_playable",
-        argNames: [
-          "sessionId",
-          "engineHandle",
-          "videoInfo",
-          "ffmpegOptions",
-          "sink",
-        ],
-      );
-
-  @override
-  Future<PlatformInt64> crateApiSimpleCreateNewSession() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 2,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
           decodeSuccessData: sse_decode_i_64,
           decodeErrorData: null,
-        ),
-        constMeta: kCrateApiSimpleCreateNewSessionConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
+        )
+        ,
+            constMeta: kCrateApiSimpleCreateNewSessionConstMeta,
+            argValues: [],
+            apiImpl: this,
+        )); }
 
-  TaskConstMeta get kCrateApiSimpleCreateNewSessionConstMeta =>
-      const TaskConstMeta(debugName: "create_new_session", argNames: []);
 
-  @override
-  Future<void> crateApiSimpleDestroyEngineStreams({
-    required PlatformInt64 engineId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(engineId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 3,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
+        TaskConstMeta get kCrateApiSimpleCreateNewSessionConstMeta => const TaskConstMeta(
+            debugName: "create_new_session",
+            argNames: [],
+        );
+        
+
+@override Future<void> crateApiSimpleDestroyEngineStreams({required PlatformInt64 engineId })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(engineId, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
-        ),
-        constMeta: kCrateApiSimpleDestroyEngineStreamsConstMeta,
-        argValues: [engineId],
-        apiImpl: this,
-      ),
-    );
-  }
+        )
+        ,
+            constMeta: kCrateApiSimpleDestroyEngineStreamsConstMeta,
+            argValues: [engineId],
+            apiImpl: this,
+        )); }
 
-  TaskConstMeta get kCrateApiSimpleDestroyEngineStreamsConstMeta =>
-      const TaskConstMeta(
-        debugName: "destroy_engine_streams",
-        argNames: ["engineId"],
-      );
 
-  @override
-  Future<void> crateApiSimpleDestroyStreamSession({
-    required PlatformInt64 sessionId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(sessionId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 4,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
+        TaskConstMeta get kCrateApiSimpleDestroyEngineStreamsConstMeta => const TaskConstMeta(
+            debugName: "destroy_engine_streams",
+            argNames: ["engineId"],
+        );
+        
+
+@override Future<void> crateApiSimpleDestroyStreamSession({required PlatformInt64 sessionId })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
-        ),
-        constMeta: kCrateApiSimpleDestroyStreamSessionConstMeta,
-        argValues: [sessionId],
-        apiImpl: this,
-      ),
-    );
-  }
+        )
+        ,
+            constMeta: kCrateApiSimpleDestroyStreamSessionConstMeta,
+            argValues: [sessionId],
+            apiImpl: this,
+        )); }
 
-  TaskConstMeta get kCrateApiSimpleDestroyStreamSessionConstMeta =>
-      const TaskConstMeta(
-        debugName: "destroy_stream_session",
-        argNames: ["sessionId"],
-      );
 
-  @override
-  Future<void> crateApiSimpleFlutterRealtimePlayerInit({
-    required PlatformInt64 ffiPtr,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(ffiPtr, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 5,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
+        TaskConstMeta get kCrateApiSimpleDestroyStreamSessionConstMeta => const TaskConstMeta(
+            debugName: "destroy_stream_session",
+            argNames: ["sessionId"],
+        );
+        
+
+@override Future<void> crateApiSimpleFlutterRealtimePlayerInit({required PlatformInt64 ffiPtr })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(ffiPtr, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
-        ),
-        constMeta: kCrateApiSimpleFlutterRealtimePlayerInitConstMeta,
-        argValues: [ffiPtr],
-        apiImpl: this,
-      ),
-    );
-  }
+        )
+        ,
+            constMeta: kCrateApiSimpleFlutterRealtimePlayerInitConstMeta,
+            argValues: [ffiPtr],
+            apiImpl: this,
+        )); }
 
-  TaskConstMeta get kCrateApiSimpleFlutterRealtimePlayerInitConstMeta =>
-      const TaskConstMeta(
-        debugName: "flutter_realtime_player_init",
-        argNames: ["ffiPtr"],
-      );
 
-  @override
-  Future<double> crateApiSimpleGetCurrentTime({
-    required PlatformInt64 sessionId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(sessionId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 6,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
+        TaskConstMeta get kCrateApiSimpleFlutterRealtimePlayerInitConstMeta => const TaskConstMeta(
+            debugName: "flutter_realtime_player_init",
+            argNames: ["ffiPtr"],
+        );
+        
+
+@override Future<double> crateApiSimpleGetCurrentTime({required PlatformInt64 sessionId })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
           decodeSuccessData: sse_decode_f_64,
           decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kCrateApiSimpleGetCurrentTimeConstMeta,
-        argValues: [sessionId],
-        apiImpl: this,
-      ),
-    );
-  }
+        )
+        ,
+            constMeta: kCrateApiSimpleGetCurrentTimeConstMeta,
+            argValues: [sessionId],
+            apiImpl: this,
+        )); }
 
-  TaskConstMeta get kCrateApiSimpleGetCurrentTimeConstMeta =>
-      const TaskConstMeta(
-        debugName: "get_current_time",
-        argNames: ["sessionId"],
-      );
 
-  @override
-  Future<void> crateApiSimpleInitApp() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 7,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiSimpleInitAppConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
+        TaskConstMeta get kCrateApiSimpleGetCurrentTimeConstMeta => const TaskConstMeta(
+            debugName: "get_current_time",
+            argNames: ["sessionId"],
+        );
+        
 
-  TaskConstMeta get kCrateApiSimpleInitAppConstMeta =>
-      const TaskConstMeta(debugName: "init_app", argNames: []);
-
-  @override
-  Future<void> crateApiSimpleMarkSessionAlive({
-    required PlatformInt64 sessionId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(sessionId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 8,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiSimpleMarkSessionAliveConstMeta,
-        argValues: [sessionId],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSimpleMarkSessionAliveConstMeta =>
-      const TaskConstMeta(
-        debugName: "mark_session_alive",
-        argNames: ["sessionId"],
-      );
-
-  @override
-  Future<void> crateApiSimpleResizeStreamSession({
-    required PlatformInt64 sessionId,
-    required int width,
-    required int height,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(sessionId, serializer);
-          sse_encode_u_32(width, serializer);
-          sse_encode_u_32(height, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 9,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
+@override Future<PlatformInt64?> crateApiSimpleGetStreamStartTime({required PlatformInt64 sessionId })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_i_64,
           decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kCrateApiSimpleResizeStreamSessionConstMeta,
-        argValues: [sessionId, width, height],
-        apiImpl: this,
-      ),
-    );
-  }
+        )
+        ,
+            constMeta: kCrateApiSimpleGetStreamStartTimeConstMeta,
+            argValues: [sessionId],
+            apiImpl: this,
+        )); }
 
-  TaskConstMeta get kCrateApiSimpleResizeStreamSessionConstMeta =>
-      const TaskConstMeta(
-        debugName: "resize_stream_session",
-        argNames: ["sessionId", "width", "height"],
-      );
 
-  @override
-  Future<void> crateApiSimpleSeekIso8601({
-    required PlatformInt64 sessionId,
-    required String iso8601Time,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(sessionId, serializer);
-          sse_encode_String(iso8601Time, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 10,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kCrateApiSimpleSeekIso8601ConstMeta,
-        argValues: [sessionId, iso8601Time],
-        apiImpl: this,
-      ),
-    );
-  }
+        TaskConstMeta get kCrateApiSimpleGetStreamStartTimeConstMeta => const TaskConstMeta(
+            debugName: "get_stream_start_time",
+            argNames: ["sessionId"],
+        );
+        
 
-  TaskConstMeta get kCrateApiSimpleSeekIso8601ConstMeta => const TaskConstMeta(
-    debugName: "seek_iso_8601",
-    argNames: ["sessionId", "iso8601Time"],
-  );
-
-  @override
-  Future<void> crateApiSimpleSeekToTime({
-    required PlatformInt64 sessionId,
-    required double timeSeconds,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(sessionId, serializer);
-          sse_encode_f_64(timeSeconds, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 11,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kCrateApiSimpleSeekToTimeConstMeta,
-        argValues: [sessionId, timeSeconds],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSimpleSeekToTimeConstMeta => const TaskConstMeta(
-    debugName: "seek_to_time",
-    argNames: ["sessionId", "timeSeconds"],
-  );
-
-  @override
-  Stream<double> crateApiSimpleSubscribeToStreamTime({
-    required PlatformInt64 sessionId,
-  }) {
-    final sink = RustStreamSink<double>();
-    unawaited(
-      handler.executeNormal(
-        NormalTask(
-          callFfi: (port_) {
+@override Future<void> crateApiSimpleInitApp()  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
             final serializer = SseSerializer(generalizedFrbRustBinding);
-            sse_encode_i_64(sessionId, serializer);
-            sse_encode_StreamSink_f_64_Sse(sink, serializer);
-            pdeCallFfi(
-              generalizedFrbRustBinding,
-              serializer,
-              funcId: 12,
-              port: port_,
-            );
-          },
-          codec: SseCodec(
-            decodeSuccessData: sse_decode_unit,
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        )
+        ,
+            constMeta: kCrateApiSimpleInitAppConstMeta,
+            argValues: [],
+            apiImpl: this,
+        )); }
+
+
+        TaskConstMeta get kCrateApiSimpleInitAppConstMeta => const TaskConstMeta(
+            debugName: "init_app",
+            argNames: [],
+        );
+        
+
+@override Future<void> crateApiSimpleMarkSessionAlive({required PlatformInt64 sessionId })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        )
+        ,
+            constMeta: kCrateApiSimpleMarkSessionAliveConstMeta,
+            argValues: [sessionId],
+            apiImpl: this,
+        )); }
+
+
+        TaskConstMeta get kCrateApiSimpleMarkSessionAliveConstMeta => const TaskConstMeta(
+            debugName: "mark_session_alive",
+            argNames: ["sessionId"],
+        );
+        
+
+@override Future<void> crateApiSimpleResizeStreamSession({required PlatformInt64 sessionId , required int width , required int height })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+sse_encode_u_32(width, serializer);
+sse_encode_u_32(height, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        )
+        ,
+            constMeta: kCrateApiSimpleResizeStreamSessionConstMeta,
+            argValues: [sessionId, width, height],
+            apiImpl: this,
+        )); }
+
+
+        TaskConstMeta get kCrateApiSimpleResizeStreamSessionConstMeta => const TaskConstMeta(
+            debugName: "resize_stream_session",
+            argNames: ["sessionId", "width", "height"],
+        );
+        
+
+@override Future<void> crateApiSimpleSeekIso8601({required PlatformInt64 sessionId , required String iso8601Time })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+sse_encode_String(iso8601Time, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        )
+        ,
+            constMeta: kCrateApiSimpleSeekIso8601ConstMeta,
+            argValues: [sessionId, iso8601Time],
+            apiImpl: this,
+        )); }
+
+
+        TaskConstMeta get kCrateApiSimpleSeekIso8601ConstMeta => const TaskConstMeta(
+            debugName: "seek_iso_8601",
+            argNames: ["sessionId", "iso8601Time"],
+        );
+        
+
+@override Future<void> crateApiSimpleSeekToTime({required PlatformInt64 sessionId , required double timeSeconds })  { return handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+sse_encode_f_64(timeSeconds, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        )
+        ,
+            constMeta: kCrateApiSimpleSeekToTimeConstMeta,
+            argValues: [sessionId, timeSeconds],
+            apiImpl: this,
+        )); }
+
+
+        TaskConstMeta get kCrateApiSimpleSeekToTimeConstMeta => const TaskConstMeta(
+            debugName: "seek_to_time",
+            argNames: ["sessionId", "timeSeconds"],
+        );
+        
+
+@override Stream<double> crateApiSimpleSubscribeToStreamTime({required PlatformInt64 sessionId })  { 
+            final sink = RustStreamSink<double>();
+            unawaited(handler.executeNormal(NormalTask(
+            callFfi: (port_) {
+              
+            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(sessionId, serializer);
+sse_encode_StreamSink_f_64_Sse(sink, serializer);
+            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13, port: port_);
+            
+            },
+            codec: 
+        SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        )
+        ,
+            constMeta: kCrateApiSimpleSubscribeToStreamTimeConstMeta,
+            argValues: [sessionId, sink],
+            apiImpl: this,
+        )));
+            return sink.stream;
+             }
+
+
+        TaskConstMeta get kCrateApiSimpleSubscribeToStreamTimeConstMeta => const TaskConstMeta(
+            debugName: "subscribe_to_stream_time",
+            argNames: ["sessionId", "sink"],
+        );
+        
+
+
+
+                  @protected AnyhowException dco_decode_AnyhowException(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return AnyhowException(raw as String); }
+
+@protected Map<String, String> dco_decode_Map_String_String_None(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return Map.fromEntries(dco_decode_list_record_string_string(raw).map((e) => MapEntry(e.$1, e.$2))); }
+
+@protected RustStreamSink<double> dco_decode_StreamSink_f_64_Sse(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+throw UnimplementedError(); }
+
+@protected RustStreamSink<StreamState> dco_decode_StreamSink_stream_state_Sse(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+throw UnimplementedError(); }
+
+@protected String dco_decode_String(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw as String; }
+
+@protected bool dco_decode_bool(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw as bool; }
+
+@protected int dco_decode_box_autoadd_i_32(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw as int; }
+
+@protected PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return dco_decode_i_64(raw); }
+
+@protected VideoInfo dco_decode_box_autoadd_video_info(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return dco_decode_video_info(raw); }
+
+@protected double dco_decode_f_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw as double; }
+
+@protected int dco_decode_i_32(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw as int; }
+
+@protected PlatformInt64 dco_decode_i_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return dcoDecodeI64(raw); }
+
+@protected Uint8List dco_decode_list_prim_u_8_strict(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw as Uint8List; }
+
+@protected List<(String,String)> dco_decode_list_record_string_string(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return (raw as List<dynamic>).map(dco_decode_record_string_string).toList(); }
+
+@protected Map<String, String>? dco_decode_opt_Map_String_String_None(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw == null ? null : dco_decode_Map_String_String_None(raw); }
+
+@protected int? dco_decode_opt_box_autoadd_i_32(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw == null ? null : dco_decode_box_autoadd_i_32(raw); }
+
+@protected PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw == null ? null : dco_decode_box_autoadd_i_64(raw); }
+
+@protected (String,String) dco_decode_record_string_string(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+final arr = raw as List<dynamic>;
+            if (arr.length != 2) {
+                throw Exception('Expected 2 elements, got ${arr.length}');
+            }
+            return (dco_decode_String(arr[0]),dco_decode_String(arr[1]),); }
+
+@protected StreamState dco_decode_stream_state(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+switch (raw[0]) {
+                case 0: return StreamState_Error(dco_decode_String(raw[1]),);
+case 1: return StreamState_Loading();
+case 2: return StreamState_Playing(textureId: dco_decode_i_64(raw[1]),seekable: dco_decode_bool(raw[2]),);
+case 3: return StreamState_Stopped();
+                default: throw Exception("unreachable");
+            } }
+
+@protected int dco_decode_u_32(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw as int; }
+
+@protected int dco_decode_u_8(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return raw as int; }
+
+@protected void dco_decode_unit(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+return; }
+
+@protected VideoDimensions dco_decode_video_dimensions(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+final arr = raw as List<dynamic>;
+                if (arr.length != 2) throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+                return VideoDimensions(width: dco_decode_u_32(arr[0]),
+height: dco_decode_u_32(arr[1]),); }
+
+@protected VideoInfo dco_decode_video_info(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
+final arr = raw as List<dynamic>;
+                if (arr.length != 5) throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+                return VideoInfo(uri: dco_decode_String(arr[0]),
+dimensions: dco_decode_video_dimensions(arr[1]),
+framerate: dco_decode_opt_box_autoadd_i_32(arr[2]),
+mute: dco_decode_bool(arr[3]),
+autoRestart: dco_decode_bool(arr[4]),); }
+
+@protected AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+var inner = sse_decode_String(deserializer);
+        return AnyhowException(inner); }
+
+@protected Map<String, String> sse_decode_Map_String_String_None(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+var inner = sse_decode_list_record_string_string(deserializer);
+        return Map.fromEntries(inner.map((e) => MapEntry(e.$1, e.$2))); }
+
+@protected RustStreamSink<double> sse_decode_StreamSink_f_64_Sse(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+throw UnimplementedError('Unreachable ()'); }
+
+@protected RustStreamSink<StreamState> sse_decode_StreamSink_stream_state_Sse(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+throw UnimplementedError('Unreachable ()'); }
+
+@protected String sse_decode_String(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+var inner = sse_decode_list_prim_u_8_strict(deserializer);
+        return utf8.decoder.convert(inner); }
+
+@protected bool sse_decode_bool(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return deserializer.buffer.getUint8() != 0; }
+
+@protected int sse_decode_box_autoadd_i_32(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return (sse_decode_i_32(deserializer)); }
+
+@protected PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return (sse_decode_i_64(deserializer)); }
+
+@protected VideoInfo sse_decode_box_autoadd_video_info(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return (sse_decode_video_info(deserializer)); }
+
+@protected double sse_decode_f_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return deserializer.buffer.getFloat64(); }
+
+@protected int sse_decode_i_32(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return deserializer.buffer.getInt32(); }
+
+@protected PlatformInt64 sse_decode_i_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return deserializer.buffer.getPlatformInt64(); }
+
+@protected Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+var len_ = sse_decode_i_32(deserializer);
+                return deserializer.buffer.getUint8List(len_); }
+
+@protected List<(String,String)> sse_decode_list_record_string_string(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+
+        var len_ = sse_decode_i_32(deserializer);
+        var ans_ = <(String,String)>[];
+        for (var idx_ = 0; idx_ < len_; ++idx_) { ans_.add(sse_decode_record_string_string(deserializer)); }
+        return ans_;
+         }
+
+@protected Map<String, String>? sse_decode_opt_Map_String_String_None(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+
+            if (sse_decode_bool(deserializer)) {
+                return (sse_decode_Map_String_String_None(deserializer));
+            } else {
+                return null;
+            }
+             }
+
+@protected int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+
+            if (sse_decode_bool(deserializer)) {
+                return (sse_decode_box_autoadd_i_32(deserializer));
+            } else {
+                return null;
+            }
+             }
+
+@protected PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+
+            if (sse_decode_bool(deserializer)) {
+                return (sse_decode_box_autoadd_i_64(deserializer));
+            } else {
+                return null;
+            }
+             }
+
+@protected (String,String) sse_decode_record_string_string(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+var var_field0 = sse_decode_String(deserializer);
+var var_field1 = sse_decode_String(deserializer);
+return (var_field0, var_field1); }
+
+@protected StreamState sse_decode_stream_state(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+
+            var tag_ = sse_decode_i_32(deserializer);
+            switch (tag_) { case 0: var var_field0 = sse_decode_String(deserializer);
+return StreamState_Error(var_field0);case 1: return StreamState_Loading();case 2: var var_textureId = sse_decode_i_64(deserializer);
+var var_seekable = sse_decode_bool(deserializer);
+return StreamState_Playing(textureId: var_textureId, seekable: var_seekable);case 3: return StreamState_Stopped(); default: throw UnimplementedError(''); }
+             }
+
+@protected int sse_decode_u_32(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return deserializer.buffer.getUint32(); }
+
+@protected int sse_decode_u_8(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+return deserializer.buffer.getUint8(); }
+
+@protected void sse_decode_unit(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+ }
+
+@protected VideoDimensions sse_decode_video_dimensions(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+var var_width = sse_decode_u_32(deserializer);
+var var_height = sse_decode_u_32(deserializer);
+return VideoDimensions(width: var_width, height: var_height); }
+
+@protected VideoInfo sse_decode_video_info(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+var var_uri = sse_decode_String(deserializer);
+var var_dimensions = sse_decode_video_dimensions(deserializer);
+var var_framerate = sse_decode_opt_box_autoadd_i_32(deserializer);
+var var_mute = sse_decode_bool(deserializer);
+var var_autoRestart = sse_decode_bool(deserializer);
+return VideoInfo(uri: var_uri, dimensions: var_dimensions, framerate: var_framerate, mute: var_mute, autoRestart: var_autoRestart); }
+
+@protected void sse_encode_AnyhowException(AnyhowException self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_String(self.message, serializer); }
+
+@protected void sse_encode_Map_String_String_None(Map<String, String> self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_list_record_string_string(self.entries.map((e) => (e.key, e.value)).toList(), serializer); }
+
+@protected void sse_encode_StreamSink_f_64_Sse(RustStreamSink<double> self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_String(self.setupAndSerialize(codec: SseCodec(
+            decodeSuccessData: sse_decode_f_64,
             decodeErrorData: sse_decode_AnyhowException,
-          ),
-          constMeta: kCrateApiSimpleSubscribeToStreamTimeConstMeta,
-          argValues: [sessionId, sink],
-          apiImpl: this,
-        ),
-      ),
-    );
-    return sink.stream;
-  }
-
-  TaskConstMeta get kCrateApiSimpleSubscribeToStreamTimeConstMeta =>
-      const TaskConstMeta(
-        debugName: "subscribe_to_stream_time",
-        argNames: ["sessionId", "sink"],
-      );
-
-  @protected
-  AnyhowException dco_decode_AnyhowException(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return AnyhowException(raw as String);
-  }
-
-  @protected
-  Map<String, String> dco_decode_Map_String_String_None(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return Map.fromEntries(
-      dco_decode_list_record_string_string(
-        raw,
-      ).map((e) => MapEntry(e.$1, e.$2)),
-    );
-  }
-
-  @protected
-  RustStreamSink<double> dco_decode_StreamSink_f_64_Sse(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    throw UnimplementedError();
-  }
-
-  @protected
-  RustStreamSink<StreamState> dco_decode_StreamSink_stream_state_Sse(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    throw UnimplementedError();
-  }
-
-  @protected
-  String dco_decode_String(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as String;
-  }
-
-  @protected
-  bool dco_decode_bool(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as bool;
-  }
-
-  @protected
-  int dco_decode_box_autoadd_i_32(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
-  }
-
-  @protected
-  VideoInfo dco_decode_box_autoadd_video_info(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_video_info(raw);
-  }
-
-  @protected
-  double dco_decode_f_64(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as double;
-  }
-
-  @protected
-  int dco_decode_i_32(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
-  }
-
-  @protected
-  PlatformInt64 dco_decode_i_64(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dcoDecodeI64(raw);
-  }
-
-  @protected
-  Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as Uint8List;
-  }
-
-  @protected
-  List<(String, String)> dco_decode_list_record_string_string(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_record_string_string).toList();
-  }
-
-  @protected
-  Map<String, String>? dco_decode_opt_Map_String_String_None(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_Map_String_String_None(raw);
-  }
-
-  @protected
-  int? dco_decode_opt_box_autoadd_i_32(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_i_32(raw);
-  }
-
-  @protected
-  (String, String) dco_decode_record_string_string(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2) {
-      throw Exception('Expected 2 elements, got ${arr.length}');
-    }
-    return (dco_decode_String(arr[0]), dco_decode_String(arr[1]));
-  }
-
-  @protected
-  StreamState dco_decode_stream_state(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    switch (raw[0]) {
-      case 0:
-        return StreamState_Error(dco_decode_String(raw[1]));
-      case 1:
-        return StreamState_Loading();
-      case 2:
-        return StreamState_Playing(
-          textureId: dco_decode_i_64(raw[1]),
-          seekable: dco_decode_bool(raw[2]),
-        );
-      case 3:
-        return StreamState_Stopped();
-      default:
-        throw Exception("unreachable");
-    }
-  }
-
-  @protected
-  int dco_decode_u_32(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
-  }
-
-  @protected
-  int dco_decode_u_8(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
-  }
-
-  @protected
-  void dco_decode_unit(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return;
-  }
-
-  @protected
-  VideoDimensions dco_decode_video_dimensions(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-    return VideoDimensions(
-      width: dco_decode_u_32(arr[0]),
-      height: dco_decode_u_32(arr[1]),
-    );
-  }
-
-  @protected
-  VideoInfo dco_decode_video_info(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
-    return VideoInfo(
-      uri: dco_decode_String(arr[0]),
-      dimensions: dco_decode_video_dimensions(arr[1]),
-      framerate: dco_decode_opt_box_autoadd_i_32(arr[2]),
-      mute: dco_decode_bool(arr[3]),
-      autoRestart: dco_decode_bool(arr[4]),
-    );
-  }
-
-  @protected
-  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var inner = sse_decode_String(deserializer);
-    return AnyhowException(inner);
-  }
-
-  @protected
-  Map<String, String> sse_decode_Map_String_String_None(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var inner = sse_decode_list_record_string_string(deserializer);
-    return Map.fromEntries(inner.map((e) => MapEntry(e.$1, e.$2)));
-  }
-
-  @protected
-  RustStreamSink<double> sse_decode_StreamSink_f_64_Sse(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    throw UnimplementedError('Unreachable ()');
-  }
-
-  @protected
-  RustStreamSink<StreamState> sse_decode_StreamSink_stream_state_Sse(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    throw UnimplementedError('Unreachable ()');
-  }
-
-  @protected
-  String sse_decode_String(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var inner = sse_decode_list_prim_u_8_strict(deserializer);
-    return utf8.decoder.convert(inner);
-  }
-
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
-  }
-
-  @protected
-  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_i_32(deserializer));
-  }
-
-  @protected
-  VideoInfo sse_decode_box_autoadd_video_info(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_video_info(deserializer));
-  }
-
-  @protected
-  double sse_decode_f_64(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getFloat64();
-  }
-
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
-  }
-
-  @protected
-  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getPlatformInt64();
-  }
-
-  @protected
-  Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var len_ = sse_decode_i_32(deserializer);
-    return deserializer.buffer.getUint8List(len_);
-  }
-
-  @protected
-  List<(String, String)> sse_decode_list_record_string_string(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <(String, String)>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_record_string_string(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  Map<String, String>? sse_decode_opt_Map_String_String_None(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_Map_String_String_None(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
-  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_i_32(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
-  (String, String) sse_decode_record_string_string(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_field0 = sse_decode_String(deserializer);
-    var var_field1 = sse_decode_String(deserializer);
-    return (var_field0, var_field1);
-  }
-
-  @protected
-  StreamState sse_decode_stream_state(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var tag_ = sse_decode_i_32(deserializer);
-    switch (tag_) {
-      case 0:
-        var var_field0 = sse_decode_String(deserializer);
-        return StreamState_Error(var_field0);
-      case 1:
-        return StreamState_Loading();
-      case 2:
-        var var_textureId = sse_decode_i_64(deserializer);
-        var var_seekable = sse_decode_bool(deserializer);
-        return StreamState_Playing(
-          textureId: var_textureId,
-          seekable: var_seekable,
-        );
-      case 3:
-        return StreamState_Stopped();
-      default:
-        throw UnimplementedError('');
-    }
-  }
-
-  @protected
-  int sse_decode_u_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint32();
-  }
-
-  @protected
-  int sse_decode_u_8(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8();
-  }
-
-  @protected
-  void sse_decode_unit(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  VideoDimensions sse_decode_video_dimensions(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_width = sse_decode_u_32(deserializer);
-    var var_height = sse_decode_u_32(deserializer);
-    return VideoDimensions(width: var_width, height: var_height);
-  }
-
-  @protected
-  VideoInfo sse_decode_video_info(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_uri = sse_decode_String(deserializer);
-    var var_dimensions = sse_decode_video_dimensions(deserializer);
-    var var_framerate = sse_decode_opt_box_autoadd_i_32(deserializer);
-    var var_mute = sse_decode_bool(deserializer);
-    var var_autoRestart = sse_decode_bool(deserializer);
-    return VideoInfo(
-      uri: var_uri,
-      dimensions: var_dimensions,
-      framerate: var_framerate,
-      mute: var_mute,
-      autoRestart: var_autoRestart,
-    );
-  }
-
-  @protected
-  void sse_encode_AnyhowException(
-    AnyhowException self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.message, serializer);
-  }
-
-  @protected
-  void sse_encode_Map_String_String_None(
-    Map<String, String> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_list_record_string_string(
-      self.entries.map((e) => (e.key, e.value)).toList(),
-      serializer,
-    );
-  }
-
-  @protected
-  void sse_encode_StreamSink_f_64_Sse(
-    RustStreamSink<double> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(
-      self.setupAndSerialize(
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_f_64,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-      ),
-      serializer,
-    );
-  }
-
-  @protected
-  void sse_encode_StreamSink_stream_state_Sse(
-    RustStreamSink<StreamState> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(
-      self.setupAndSerialize(
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_stream_state,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-      ),
-      serializer,
-    );
-  }
-
-  @protected
-  void sse_encode_String(String self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
-  }
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
-  }
-
-  @protected
-  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self, serializer);
-  }
-
-  @protected
-  void sse_encode_box_autoadd_video_info(
-    VideoInfo self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_video_info(self, serializer);
-  }
-
-  @protected
-  void sse_encode_f_64(double self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putFloat64(self);
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
-  }
-
-  @protected
-  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putPlatformInt64(self);
-  }
-
-  @protected
-  void sse_encode_list_prim_u_8_strict(
-    Uint8List self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    serializer.buffer.putUint8List(self);
-  }
-
-  @protected
-  void sse_encode_list_record_string_string(
-    List<(String, String)> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_record_string_string(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_opt_Map_String_String_None(
-    Map<String, String>? self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_Map_String_String_None(self, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_box_autoadd_i_32(self, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_record_string_string(
-    (String, String) self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.$1, serializer);
-    sse_encode_String(self.$2, serializer);
-  }
-
-  @protected
-  void sse_encode_stream_state(StreamState self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    switch (self) {
-      case StreamState_Error(field0: final field0):
-        sse_encode_i_32(0, serializer);
-        sse_encode_String(field0, serializer);
-      case StreamState_Loading():
-        sse_encode_i_32(1, serializer);
-      case StreamState_Playing(
-        textureId: final textureId,
-        seekable: final seekable,
-      ):
-        sse_encode_i_32(2, serializer);
-        sse_encode_i_64(textureId, serializer);
-        sse_encode_bool(seekable, serializer);
-      case StreamState_Stopped():
-        sse_encode_i_32(3, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_u_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint32(self);
-  }
-
-  @protected
-  void sse_encode_u_8(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self);
-  }
-
-  @protected
-  void sse_encode_unit(void self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  void sse_encode_video_dimensions(
-    VideoDimensions self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.width, serializer);
-    sse_encode_u_32(self.height, serializer);
-  }
-
-  @protected
-  void sse_encode_video_info(VideoInfo self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.uri, serializer);
-    sse_encode_video_dimensions(self.dimensions, serializer);
-    sse_encode_opt_box_autoadd_i_32(self.framerate, serializer);
-    sse_encode_bool(self.mute, serializer);
-    sse_encode_bool(self.autoRestart, serializer);
-  }
-}
+        )), serializer); }
+
+@protected void sse_encode_StreamSink_stream_state_Sse(RustStreamSink<StreamState> self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_String(self.setupAndSerialize(codec: SseCodec(
+            decodeSuccessData: sse_decode_stream_state,
+            decodeErrorData: sse_decode_AnyhowException,
+        )), serializer); }
+
+@protected void sse_encode_String(String self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer); }
+
+@protected void sse_encode_bool(bool self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+serializer.buffer.putUint8(self ? 1 : 0); }
+
+@protected void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_i_32(self, serializer); }
+
+@protected void sse_encode_box_autoadd_i_64(PlatformInt64 self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_i_64(self, serializer); }
+
+@protected void sse_encode_box_autoadd_video_info(VideoInfo self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_video_info(self, serializer); }
+
+@protected void sse_encode_f_64(double self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+serializer.buffer.putFloat64(self); }
+
+@protected void sse_encode_i_32(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+serializer.buffer.putInt32(self); }
+
+@protected void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+serializer.buffer.putPlatformInt64(self); }
+
+@protected void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_i_32(self.length, serializer);
+                    serializer.buffer.putUint8List(self); }
+
+@protected void sse_encode_list_record_string_string(List<(String,String)> self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_i_32(self.length, serializer);
+        for (final item in self) { sse_encode_record_string_string(item, serializer); } }
+
+@protected void sse_encode_opt_Map_String_String_None(Map<String, String>? self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+
+                sse_encode_bool(self != null, serializer);
+                if (self != null) {
+                    sse_encode_Map_String_String_None(self, serializer);
+                }
+                 }
+
+@protected void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+
+                sse_encode_bool(self != null, serializer);
+                if (self != null) {
+                    sse_encode_box_autoadd_i_32(self, serializer);
+                }
+                 }
+
+@protected void sse_encode_opt_box_autoadd_i_64(PlatformInt64? self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+
+                sse_encode_bool(self != null, serializer);
+                if (self != null) {
+                    sse_encode_box_autoadd_i_64(self, serializer);
+                }
+                 }
+
+@protected void sse_encode_record_string_string((String,String) self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_String(self.$1, serializer);
+sse_encode_String(self.$2, serializer);
+ }
+
+@protected void sse_encode_stream_state(StreamState self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+switch (self) { case StreamState_Error(field0: final field0): sse_encode_i_32(0, serializer); sse_encode_String(field0, serializer);
+case StreamState_Loading(): sse_encode_i_32(1, serializer); case StreamState_Playing(textureId: final textureId,seekable: final seekable): sse_encode_i_32(2, serializer); sse_encode_i_64(textureId, serializer);
+sse_encode_bool(seekable, serializer);
+case StreamState_Stopped(): sse_encode_i_32(3, serializer);   } }
+
+@protected void sse_encode_u_32(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+serializer.buffer.putUint32(self); }
+
+@protected void sse_encode_u_8(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+serializer.buffer.putUint8(self); }
+
+@protected void sse_encode_unit(void self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+ }
+
+@protected void sse_encode_video_dimensions(VideoDimensions self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_u_32(self.width, serializer);
+sse_encode_u_32(self.height, serializer);
+ }
+
+@protected void sse_encode_video_info(VideoInfo self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+sse_encode_String(self.uri, serializer);
+sse_encode_video_dimensions(self.dimensions, serializer);
+sse_encode_opt_box_autoadd_i_32(self.framerate, serializer);
+sse_encode_bool(self.mute, serializer);
+sse_encode_bool(self.autoRestart, serializer);
+ }
+                }
+                

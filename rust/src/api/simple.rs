@@ -89,6 +89,10 @@ pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
     crate::core::fluttersink::get_current_time(session_id)
 }
 
+pub fn get_stream_start_time(session_id: i64) -> anyhow::Result<Option<i64>> {
+    crate::core::fluttersink::get_stream_start_time(session_id)
+}
+
 pub fn seek_iso_8601(session_id: i64, iso_8601_time: String) -> anyhow::Result<()> {
     crate::core::fluttersink::seek_iso_8601(session_id, iso_8601_time)
 }

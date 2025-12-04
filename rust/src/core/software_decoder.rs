@@ -456,6 +456,19 @@ impl SoftwareDecoder {
             .map_err(|e| anyhow::anyhow!("current_time mutex poisoned: {}", e))
     }
 
+    pub fn get_stream_start_time(&self) -> anyhow::Result<Option<i64>> {
+        let decoding_context = self
+            .decoding_context
+            .lock()
+            .map_err(|e| anyhow::anyhow!("decoding_context mutex poisoned: {}", e))?;
+
+        if let Some(ref ctx) = *decoding_context {
+            Ok(ctx.stream_start_time)
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn initialize_stream(&self) -> Result<(), ffmpeg::Error> {
         trace!("Starting ffmpeg session for {}", &self.video_info.uri);
         let mut option_dict = ffmpeg::Dictionary::new();
@@ -531,8 +544,21 @@ impl SoftwareDecoder {
             context, &self.video_info.uri
         );
         let duration = context.ictx.duration();
-        let is_seekable = true; // Allow seeking for HLS streams even if duration is unknown
-        info!("Stream duration: {}, seekable: {}", duration, is_seekable);
+
+        // Determine if stream is seekable
+        // HLS streams (.m3u8) are generally seekable even without known duration or program date time
+        // For other streams, check if duration is available
+        let is_hls_stream =
+            self.video_info.uri.contains(".m3u8") || self.video_info.uri.contains("hls");
+        let is_seekable = is_hls_stream || duration > 0 || context.stream_start_time.is_some();
+
+        info!(
+            "Stream duration: {}, seekable: {}, has_program_date_time: {}, is_hls: {}",
+            duration,
+            is_seekable,
+            context.stream_start_time.is_some(),
+            is_hls_stream
+        );
 
         if let Ok(mut decoding_context) = self.decoding_context.lock() {
             *decoding_context = Some(context);
@@ -552,53 +578,76 @@ impl SoftwareDecoder {
         ictx: &ffmpeg::format::context::Input,
         stream: &ffmpeg::format::stream::Stream,
     ) -> Option<i64> {
-        // Try to get metadata from format context
-        if let Some(metadata) = ictx.metadata().get("creation_time") {
-            if let Ok(dt) = DateTime::parse_from_rfc3339(metadata) {
-                info!("Found creation_time in format metadata: {}", metadata);
+        debug!("Attempting to extract program date time from stream metadata");
+
+        // Helper function to parse various date formats
+        let parse_datetime = |value: &str| -> Option<i64> {
+            // Try RFC3339 first (most common)
+            if let Ok(dt) = DateTime::parse_from_rfc3339(value) {
+                debug!("Parsed RFC3339 datetime: {}", value);
                 return Some(dt.timestamp());
+            }
+
+            // Try with milliseconds and timezone
+            if let Ok(dt) = DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.fZ") {
+                debug!("Parsed datetime with milliseconds: {}", value);
+                return Some(dt.timestamp());
+            }
+
+            // Try without milliseconds
+            if let Ok(dt) = DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%SZ") {
+                debug!("Parsed datetime without milliseconds: {}", value);
+                return Some(dt.timestamp());
+            }
+
+            // Try with timezone offset
+            if let Ok(dt) = DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%:z") {
+                debug!("Parsed datetime with timezone offset: {}", value);
+                return Some(dt.timestamp());
+            }
+
+            None
+        };
+
+        // Check all metadata keys in format context
+        debug!("Checking format context metadata...");
+        for (key, value) in ictx.metadata().iter() {
+            debug!("Format metadata: {} = {}", key, value);
+            let key_lower = key.to_lowercase();
+            if key_lower.contains("program") && key_lower.contains("date")
+                || key_lower == "creation_time"
+                || key_lower == "date"
+            {
+                if let Some(ts) = parse_datetime(value) {
+                    info!(
+                        "Found program_datetime in format metadata (key: {}): {}",
+                        key, value
+                    );
+                    return Some(ts);
+                }
             }
         }
 
-        // Try to get metadata from the stream
-        if let Some(metadata) = stream.metadata().get("creation_time") {
-            if let Ok(dt) = DateTime::parse_from_rfc3339(metadata) {
-                info!("Found creation_time in stream metadata: {}", metadata);
-                return Some(dt.timestamp());
+        // Check all metadata keys in stream
+        debug!("Checking stream metadata...");
+        for (key, value) in stream.metadata().iter() {
+            debug!("Stream metadata: {} = {}", key, value);
+            let key_lower = key.to_lowercase();
+            if key_lower.contains("program") && key_lower.contains("date")
+                || key_lower == "creation_time"
+                || key_lower == "date"
+            {
+                if let Some(ts) = parse_datetime(value) {
+                    info!(
+                        "Found program_datetime in stream metadata (key: {}): {}",
+                        key, value
+                    );
+                    return Some(ts);
+                }
             }
         }
 
-        // For HLS, FFmpeg may store the program date time in other metadata fields
-        // Check for "start_time" or "date" fields
-        if let Some(metadata) = stream.metadata().get("date") {
-            if let Ok(dt) = DateTime::parse_from_rfc3339(metadata) {
-                info!("Found date in stream metadata: {}", metadata);
-                return Some(dt.timestamp());
-            }
-        }
-
-        // If stream has a start_time, we can use that along with the current wall clock
-        // to approximate the program date time, but this is less accurate
-        let start_time = stream.start_time();
-        if start_time != ffmpeg::ffi::AV_NOPTS_VALUE {
-            let time_base = stream.time_base();
-            let start_time_secs = if time_base.denominator() != 0 {
-                (start_time as f64 * time_base.numerator() as f64) / time_base.denominator() as f64
-            } else {
-                start_time as f64 / 1_000_000.0 // Assume AV_TIME_BASE
-            };
-
-            // Calculate approximate program date time based on current time
-            let now = Utc::now().timestamp();
-            let estimated_start = now - start_time_secs as i64;
-
-            info!(
-                "No explicit program date time found. Estimated stream start: {} (based on start_time: {}, time_base: {}/{})",
-                estimated_start, start_time, time_base.numerator(), time_base.denominator()
-            );
-            // Don't return estimated time - it's too unreliable for seeking
-        }
-
+        info!("No #EXT-X-PROGRAM-DATE-TIME metadata found in stream");
         None
     }
 

@@ -8,15 +8,21 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'dart_types.freezed.dart';
 
-@freezed
-sealed class StreamState with _$StreamState {
-  const StreamState._();
+            
 
-  const factory StreamState.error(String field0) = StreamState_Error;
-  const factory StreamState.loading() = StreamState_Loading;
-  const factory StreamState.playing({
-    required PlatformInt64 textureId,
-    required bool seekable,
-  }) = StreamState_Playing;
-  const factory StreamState.stopped() = StreamState_Stopped;
-}
+            
+
+            @freezed
+                sealed class StreamState with _$StreamState  {
+                    const StreamState._();
+
+                     const factory StreamState.error(  String field0,) = StreamState_Error;
+ const factory StreamState.loading() = StreamState_Loading;
+ const factory StreamState.playing({   required PlatformInt64 textureId ,  required bool seekable , }) = StreamState_Playing;
+ const factory StreamState.stopped() = StreamState_Stopped;
+
+                    
+
+                    
+                }
+            

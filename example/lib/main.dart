@@ -381,11 +381,14 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   bool _isSeeking = false;
   bool _isSeekable = false;
   double _currentStreamTime = 0.0; // Stream time in seconds
+  int?
+  _streamStartTime; // Unix timestamp of stream start time (for HLS with EXT-X-PROGRAM-DATE-TIME)
   final TextEditingController _iso8601Controller = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    // Initialize with current time, will be updated when we have stream time
     _iso8601Controller.text = DateTime.now().toIso8601String();
     _initializeVideo();
   }
@@ -414,6 +417,27 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
         if (state is StreamState_Playing) {
           setState(() {
             _isSeekable = state.seekable;
+          });
+          // Fetch the stream start time after the stream is confirmed playing
+          // This ensures that the metadata is loaded
+          Future.microtask(() async {
+            try {
+              final startTime = await _controller!.getStreamStartTime();
+              if (startTime != null) {
+                setState(() {
+                  _streamStartTime = startTime;
+                });
+                debugPrint(
+                  'Stream start time: ${DateTime.fromMillisecondsSinceEpoch(startTime * 1000, isUtc: true).toIso8601String()}',
+                );
+              } else {
+                debugPrint(
+                  'Stream does not have temporal metadata (EXT-X-PROGRAM-DATE-TIME not available)',
+                );
+              }
+            } catch (e) {
+              debugPrint('Error getting stream start time: $e');
+            }
           });
         }
       });
@@ -485,8 +509,56 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
           padding: const EdgeInsets.only(top: 8.0),
           child: Column(
             children: [
-              // Seek bar - only show if the stream is seekable
-              if (_isSeekable)
+              // Time display
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Position: ${_formatDuration(Duration(seconds: _currentStreamTime.floor()))}',
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      // Show absolute time when stream has EXT-X-PROGRAM-DATE-TIME
+                      if (_streamStartTime != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Stream Start: ${_formatDateTime(DateTime.fromMillisecondsSinceEpoch(_streamStartTime! * 1000, isUtc: true))}',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontSize: 10,
+                          ),
+                        ),
+                        Text(
+                          'Current Time: ${_formatDateTime(DateTime.fromMillisecondsSinceEpoch((_streamStartTime! + _currentStreamTime.floor()) * 1000, isUtc: true))}',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (_isSeekable)
+                    const Text(
+                      '✓ Seekable',
+                      style: TextStyle(color: Colors.green, fontSize: 12),
+                    )
+                  else
+                    const Text(
+                      '✗ Not Seekable',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                ],
+              ),
+              // Seek bar - show for seekable streams with known duration
+              if (_isSeekable && _duration.inMilliseconds > 0) ...[
+                const SizedBox(height: 8),
                 Slider(
                   value:
                       _isSeeking
@@ -510,141 +582,206 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                     });
                   },
                   min: 0.0,
-                  max:
-                      _isSeekable && _duration.inMilliseconds.toDouble() > 0
-                          ? _duration.inMilliseconds.toDouble()
-                          : _position.inMilliseconds.toDouble() > 0
-                          ? _position.inMilliseconds.toDouble() *
-                              2 // Use double the current position as max if duration is unknown but we've started playing
-                          : 60000.0, // 60 seconds fallback for unknown duration
+                  max: _duration.inMilliseconds.toDouble(),
                   label: _formatDuration(_position),
                 ),
-              // Time display with stream time
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Show current position and stream time
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _formatDuration(_position),
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                      if (_currentStreamTime >= 0)
-                        Text(
-                          'Stream Time: ${_formatDuration(Duration(seconds: _currentStreamTime.floor()))}',
-                          style: const TextStyle(
-                            color: Colors.blue,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
-                  Text(
-                    _isSeekable && _duration.inMilliseconds > 0
-                        ? _formatDuration(_duration)
-                        : '--:--:--',
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-              if (!_isSeekable)
-                const Text(
-                  'Stream is not seekable',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              // HLS/X-PROGRAM-DATE-TIME seeking controls for streams with temporal metadata
-              if (_isSeekable)
-                Column(
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // Seek backward button
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.replay_5),
-                          label: const Text('-5s'),
-                          onPressed: () async {
-                            if (_controller != null) {
-                              try {
-                                final currentPos =
-                                    await _controller!.getCurrentPosition();
-                                final newPos = Duration(
-                                  seconds:
-                                      (currentPos.inSeconds - 5).compareTo(0) >
-                                              0
-                                          ? currentPos.inSeconds - 5
-                                          : 0,
-                                );
-                                await _controller!.seekTo(newPos);
-                              } catch (e) {
-                                debugPrint('Error seeking backward: $e');
-                              }
-                            }
-                          },
-                        ),
-                        // ISO 8601 time picker for absolute seeking
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: _iso8601Controller,
-                            decoration: const InputDecoration(
-                              hintText:
-                                  'ISO 8601 time (e.g., 2025-12-03T07:00:00Z)',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Seek to ISO 8601 time button
-                        ElevatedButton(
-                          onPressed: () async {
-                            if (_controller != null &&
-                                _iso8601Controller.text.isNotEmpty) {
-                              try {
-                                await _controller!.seekToISO8601(
-                                  _iso8601Controller.text,
-                                );
-                              } catch (e) {
-                                debugPrint('Error seeking to ISO time: $e');
-                              }
-                            }
-                          },
-                          child: const Text('Seek'),
-                        ),
-                        // Seek forward button
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.forward_5),
-                          label: const Text('+5s'),
-                          onPressed: () async {
-                            debugPrint("trying to seek forward");
-                            if (_controller != null) {
-                              try {
-                                final currentPos =
-                                    await _controller!.getCurrentPosition();
-                                final newPos = Duration(
-                                  seconds: currentPos.inSeconds + 5,
-                                );
-                                await _controller!.seekTo(newPos);
-                              } catch (e) {
-                                debugPrint('Error seeking forward: $e');
-                              }
-                            }
-                          },
-                        ),
-                      ],
+                    Text(
+                      '0:00',
+                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                    ),
+                    Text(
+                      _formatDuration(_duration),
+                      style: const TextStyle(color: Colors.grey, fontSize: 10),
                     ),
                   ],
                 ),
+              ],
+              // Seeking controls for seekable streams
+              if (_isSeekable) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // Seek backward button
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.replay_10, size: 18),
+                      label: const Text('-10s'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                      onPressed: () async {
+                        if (_controller != null) {
+                          try {
+                            final currentPos =
+                                await _controller!.getCurrentPosition();
+                            final newPos = Duration(
+                              seconds:
+                                  (currentPos.inSeconds - 10).compareTo(0) > 0
+                                      ? currentPos.inSeconds - 10
+                                      : 0,
+                            );
+                            await _controller!.seekTo(newPos);
+                          } catch (e) {
+                            debugPrint('Error seeking backward: $e');
+                          }
+                        }
+                      },
+                    ),
+                    // Seek forward button
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.forward_10, size: 18),
+                      label: const Text('+10s'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                      onPressed: () async {
+                        if (_controller != null) {
+                          try {
+                            final currentPos =
+                                await _controller!.getCurrentPosition();
+                            final newPos = Duration(
+                              seconds: currentPos.inSeconds + 10,
+                            );
+                            await _controller!.seekTo(newPos);
+                          } catch (e) {
+                            debugPrint('Error seeking forward: $e');
+                          }
+                        }
+                      },
+                    ),
+                    // ISO 8601 time seeking for HLS streams with program date time
+                    if (_streamStartTime != null)
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.access_time, size: 18),
+                        label: const Text('Seek to Time'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                        ),
+                        onPressed: () => _showIso8601SeekDialog(context),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
       ],
     );
+  }
+
+  void _showIso8601SeekDialog(BuildContext context) {
+    // Pre-populate with current stream time
+    final currentDateTime =
+        _streamStartTime != null && _currentStreamTime >= 0
+            ? DateTime.fromMillisecondsSinceEpoch(
+              (_streamStartTime! + _currentStreamTime.floor()) * 1000,
+              isUtc: true,
+            )
+            : DateTime.now().toUtc();
+
+    _iso8601Controller.text = currentDateTime.toIso8601String();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Seek to Absolute Time'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Enter an ISO 8601 timestamp to seek to a specific absolute time in the stream:',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _iso8601Controller,
+                  decoration: const InputDecoration(
+                    labelText: 'ISO 8601 Timestamp',
+                    hintText: '2025-12-04T12:00:00Z',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        // Set to stream start
+                        if (_streamStartTime != null) {
+                          _iso8601Controller.text =
+                              DateTime.fromMillisecondsSinceEpoch(
+                                _streamStartTime! * 1000,
+                                isUtc: true,
+                              ).toIso8601String();
+                        }
+                      },
+                      child: const Text('Stream Start'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        // Set to current time
+                        if (_streamStartTime != null &&
+                            _currentStreamTime >= 0) {
+                          _iso8601Controller.text =
+                              DateTime.fromMillisecondsSinceEpoch(
+                                (_streamStartTime! +
+                                        _currentStreamTime.floor()) *
+                                    1000,
+                                isUtc: true,
+                              ).toIso8601String();
+                        }
+                      },
+                      child: const Text('Current'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (_controller != null &&
+                      _iso8601Controller.text.isNotEmpty) {
+                    try {
+                      await _controller!.seekToISO8601(_iso8601Controller.text);
+                      if (context.mounted) Navigator.pop(context);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Seek failed: $e')),
+                        );
+                      }
+                    }
+                  }
+                },
+                child: const Text('Seek'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  String _formatDateTime(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')} UTC';
   }
 
   String _formatDuration(Duration duration) {
