@@ -6,59 +6,55 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+class VideoDimensions {
+  final int width;
+  final int height;
 
-            
+  const VideoDimensions({required this.width, required this.height});
 
-            
+  @override
+  int get hashCode => width.hashCode ^ height.hashCode;
 
-            class VideoDimensions  {
-                final int width;
-final int height;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VideoDimensions &&
+          runtimeType == other.runtimeType &&
+          width == other.width &&
+          height == other.height;
+}
 
-                const VideoDimensions({required this.width ,required this.height ,});
+class VideoInfo {
+  final String uri;
+  final VideoDimensions dimensions;
+  final int? framerate;
+  final bool mute;
+  final bool autoRestart;
 
-                
-                
+  const VideoInfo({
+    required this.uri,
+    required this.dimensions,
+    this.framerate,
+    required this.mute,
+    required this.autoRestart,
+  });
 
-                
-        @override
-        int get hashCode => width.hashCode^height.hashCode;
-        
+  @override
+  int get hashCode =>
+      uri.hashCode ^
+      dimensions.hashCode ^
+      framerate.hashCode ^
+      mute.hashCode ^
+      autoRestart.hashCode;
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is VideoDimensions &&
-                runtimeType == other.runtimeType
-                && width == other.width&& height == other.height;
-        
-            }
-
-class VideoInfo  {
-                final String uri;
-final VideoDimensions dimensions;
-final int? framerate;
-final bool mute;
-final bool autoRestart;
-
-                const VideoInfo({required this.uri ,required this.dimensions ,this.framerate ,required this.mute ,required this.autoRestart ,});
-
-                
-                
-
-                
-        @override
-        int get hashCode => uri.hashCode^dimensions.hashCode^framerate.hashCode^mute.hashCode^autoRestart.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is VideoInfo &&
-                runtimeType == other.runtimeType
-                && uri == other.uri&& dimensions == other.dimensions&& framerate == other.framerate&& mute == other.mute&& autoRestart == other.autoRestart;
-        
-            }
-            
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VideoInfo &&
+          runtimeType == other.runtimeType &&
+          uri == other.uri &&
+          dimensions == other.dimensions &&
+          framerate == other.framerate &&
+          mute == other.mute &&
+          autoRestart == other.autoRestart;
+}

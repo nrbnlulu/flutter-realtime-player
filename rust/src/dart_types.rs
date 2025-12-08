@@ -6,3 +6,10 @@ pub enum StreamState {
     Playing { texture_id: i64, seekable: bool },
     Stopped,
 }
+
+#[derive(Debug, Clone)]
+pub enum StreamEvent {
+    Error(String),
+    CurrentTime(i64),
+    OriginVideoSize{width: u64, height: u64}
+}

@@ -1617,7 +1617,6 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "rffmpeg"
 version = "8.0.0"
-source = "git+https://github.com/nrbnlulu/rffmpeg?branch=master#ebcd223d9f9ffe1f5fac8348c748c934bb1af0b3"
 dependencies = [
  "bitflags 2.9.1",
  "ffmpeg-sys-next",

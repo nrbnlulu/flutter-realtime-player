@@ -418,59 +418,6 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
           setState(() {
             _isSeekable = state.seekable;
           });
-          // Fetch the stream start time after the stream is confirmed playing
-          // This ensures that the metadata is loaded
-          Future.microtask(() async {
-            try {
-              final startTime = await _controller!.getStreamStartTime();
-              if (startTime != null) {
-                setState(() {
-                  _streamStartTime = startTime;
-                });
-                debugPrint(
-                  'Stream start time: ${DateTime.fromMillisecondsSinceEpoch(startTime * 1000, isUtc: true).toIso8601String()}',
-                );
-              } else {
-                debugPrint(
-                  'Stream does not have temporal metadata (EXT-X-PROGRAM-DATE-TIME not available)',
-                );
-              }
-            } catch (e) {
-              debugPrint('Error getting stream start time: $e');
-            }
-          });
-        }
-      });
-
-      // Subscribe to stream time updates
-      try {
-        _controller!.timeBroadcast
-            ?.listen((time) {
-              setState(() {
-                _currentStreamTime = time;
-              });
-            })
-            .onError((error) {
-              debugPrint('Time broadcast error: $error');
-            });
-      } catch (e) {
-        debugPrint('Time broadcast not available: $e');
-      }
-
-      // Start periodic position updates
-      _positionTimer = Timer.periodic(const Duration(seconds: 1), (
-        timer,
-      ) async {
-        try {
-          final position = await _controller!.getCurrentPosition();
-          final state = _controller!.stateBroadcast.value;
-          if (state is StreamState_Playing) {
-            setState(() {
-              _position = position;
-            });
-          }
-        } catch (e) {
-          // Handle potential errors
         }
       });
     }
@@ -573,7 +520,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                   onChangeEnd: (value) async {
                     if (_controller != null) {
                       await _controller!.seekTo(
-                        Duration(milliseconds: value.round()),
+                        value.toInt(),
                       );
                     }
                     setState(() {
@@ -618,15 +565,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                       onPressed: () async {
                         if (_controller != null) {
                           try {
-                            final currentPos =
-                                await _controller!.getCurrentPosition();
-                            final newPos = Duration(
-                              seconds:
-                                  (currentPos.inSeconds - 10).compareTo(0) > 0
-                                      ? currentPos.inSeconds - 10
-                                      : 0,
-                            );
-                            await _controller!.seekTo(newPos);
+                            await _controller!.seekTo(-10);
                           } catch (e) {
                             debugPrint('Error seeking backward: $e');
                           }
@@ -646,12 +585,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                       onPressed: () async {
                         if (_controller != null) {
                           try {
-                            final currentPos =
-                                await _controller!.getCurrentPosition();
-                            final newPos = Duration(
-                              seconds: currentPos.inSeconds + 10,
-                            );
-                            await _controller!.seekTo(newPos);
+                            await _controller!.seekTo(10);
                           } catch (e) {
                             debugPrint('Error seeking forward: $e');
                           }
@@ -755,24 +689,6 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (_controller != null &&
-                      _iso8601Controller.text.isNotEmpty) {
-                    try {
-                      await _controller!.seekToISO8601(_iso8601Controller.text);
-                      if (context.mounted) Navigator.pop(context);
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Seek failed: $e')),
-                        );
-                      }
-                    }
-                  }
-                },
-                child: const Text('Seek'),
               ),
             ],
           ),

@@ -20,10 +20,6 @@ class VideoController {
   bool _running = false;
   int? _engineHandle;
 
-  // Add a stream for time updates
-  Stream<double>? _timeStream;
-  Stream<double>? get timeBroadcast => _timeStream;
-
   VideoController(
     StreamSubscription<StreamState> originalSub, {
     required this.url,
@@ -81,14 +77,6 @@ class VideoController {
       ret._engineHandle = handle;
       ret._running = true;
 
-      // Set up time broadcast if available
-      try {
-        ret._timeStream = rlib.subscribeToStreamTime(sessionId: sessionId);
-      } catch (e) {
-        debugPrint('Time subscription not available for this stream: $e');
-        // Time subscription might not be available for all stream types
-      }
-
       // start ping task
       Future.microtask(() async {
         while (ret._running) {
@@ -104,33 +92,11 @@ class VideoController {
   }
 
   /// Seek to a specific time in seconds within the video
-  Future<void> seekTo(Duration position) async {
-    await rlib.seekToTime(
+  Future<void> seekTo(int ts) async {
+    await rlib.seekToTimestamp(
       sessionId: sessionId,
-      timeSeconds: position.inMilliseconds / 1000.0,
+      ts: ts
     );
-  }
-
-  /// Get the current playback time of the video
-  Future<Duration> getCurrentPosition() async {
-    final timeSeconds = await rlib.getCurrentTime(sessionId: sessionId);
-    return Duration(milliseconds: (timeSeconds * 1000).round());
-  }
-
-  /// Get the start time of the stream (Unix timestamp in seconds) if available
-  /// This is particularly useful for HLS streams with #EXT-X-PROGRAM-DATE-TIME
-  Future<int?> getStreamStartTime() async {
-    try {
-      return await rlib.getStreamStartTime(sessionId: sessionId);
-    } catch (e) {
-      debugPrint('Error getting stream start time: $e');
-      return null;
-    }
-  }
-
-  /// Seek to a specific ISO 8601 timestamp within the video stream
-  Future<void> seekToISO8601(String iso8601Time) async {
-    await rlib.seekIso8601(sessionId: sessionId, iso8601Time: iso8601Time);
   }
 
   /// Resize the video stream with new dimensions
@@ -145,8 +111,8 @@ class VideoController {
       debugPrint('Error resizing stream: $e');
     }
   }
-}
 
+}
 // ignore: implementation_imports
 
 class VideoPlayer extends StatefulWidget {

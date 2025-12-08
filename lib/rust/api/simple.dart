@@ -8,40 +8,65 @@ import '../dart_types.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-
-            // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SESSION_COUNTER`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SESSION_COUNTER`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `initialize`
 
-
-            Future<void>  flutterRealtimePlayerInit({required PlatformInt64 ffiPtr }) => RustLib.instance.api.crateApiSimpleFlutterRealtimePlayerInit(ffiPtr: ffiPtr);
+Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
+    RustLib.instance.api.crateApiSimpleFlutterRealtimePlayerInit(
+      ffiPtr: ffiPtr,
+    );
 
 /// updates the counter and returns a session id
 /// note that this doesn't create any resources apart from raising the counter
-Future<PlatformInt64>  createNewSession() => RustLib.instance.api.crateApiSimpleCreateNewSession();
+Future<PlatformInt64> createNewSession() =>
+    RustLib.instance.api.crateApiSimpleCreateNewSession();
 
-/// returns a session id that represents a playing session in rust
-Stream<StreamState>  createNewPlayable({required PlatformInt64 sessionId , required PlatformInt64 engineHandle , required VideoInfo videoInfo , Map<String, String>? ffmpegOptions }) => RustLib.instance.api.crateApiSimpleCreateNewPlayable(sessionId: sessionId, engineHandle: engineHandle, videoInfo: videoInfo, ffmpegOptions: ffmpegOptions);
+Stream<StreamState> createNewPlayable({
+  required PlatformInt64 sessionId,
+  required PlatformInt64 engineHandle,
+  required VideoInfo videoInfo,
+  Map<String, String>? ffmpegOptions,
+}) => RustLib.instance.api.crateApiSimpleCreateNewPlayable(
+  sessionId: sessionId,
+  engineHandle: engineHandle,
+  videoInfo: videoInfo,
+  ffmpegOptions: ffmpegOptions,
+);
+
+Future<void> seekToTimestamp({
+  required PlatformInt64 sessionId,
+  required PlatformInt64 ts,
+}) => RustLib.instance.api.crateApiSimpleSeekToTimestamp(
+  sessionId: sessionId,
+  ts: ts,
+);
+
+Stream<StreamEvent> registerToStreamEventsSink({
+  required PlatformInt64 sessionId,
+}) => RustLib.instance.api.crateApiSimpleRegisterToStreamEventsSink(
+  sessionId: sessionId,
+);
 
 /// marks the session as required by the ui
 /// if the ui won't call this every 2 seconds
 /// this session will terminate itself.
-Future<void>  markSessionAlive({required PlatformInt64 sessionId }) => RustLib.instance.api.crateApiSimpleMarkSessionAlive(sessionId: sessionId);
+Future<void> markSessionAlive({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleMarkSessionAlive(sessionId: sessionId);
 
-Future<void>  destroyEngineStreams({required PlatformInt64 engineId }) => RustLib.instance.api.crateApiSimpleDestroyEngineStreams(engineId: engineId);
+Future<void> destroyEngineStreams({required PlatformInt64 engineId}) =>
+    RustLib.instance.api.crateApiSimpleDestroyEngineStreams(engineId: engineId);
 
-Future<void>  destroyStreamSession({required PlatformInt64 sessionId }) => RustLib.instance.api.crateApiSimpleDestroyStreamSession(sessionId: sessionId);
+Future<void> destroyStreamSession({required PlatformInt64 sessionId}) => RustLib
+    .instance
+    .api
+    .crateApiSimpleDestroyStreamSession(sessionId: sessionId);
 
-Future<void>  seekToTime({required PlatformInt64 sessionId , required double timeSeconds }) => RustLib.instance.api.crateApiSimpleSeekToTime(sessionId: sessionId, timeSeconds: timeSeconds);
-
-Future<double>  getCurrentTime({required PlatformInt64 sessionId }) => RustLib.instance.api.crateApiSimpleGetCurrentTime(sessionId: sessionId);
-
-Future<PlatformInt64?>  getStreamStartTime({required PlatformInt64 sessionId }) => RustLib.instance.api.crateApiSimpleGetStreamStartTime(sessionId: sessionId);
-
-Future<void>  seekIso8601({required PlatformInt64 sessionId , required String iso8601Time }) => RustLib.instance.api.crateApiSimpleSeekIso8601(sessionId: sessionId, iso8601Time: iso8601Time);
-
-Stream<double>  subscribeToStreamTime({required PlatformInt64 sessionId }) => RustLib.instance.api.crateApiSimpleSubscribeToStreamTime(sessionId: sessionId);
-
-Future<void>  resizeStreamSession({required PlatformInt64 sessionId , required int width , required int height }) => RustLib.instance.api.crateApiSimpleResizeStreamSession(sessionId: sessionId, width: width, height: height);
-
-            
-            
+Future<void> resizeStreamSession({
+  required PlatformInt64 sessionId,
+  required int width,
+  required int height,
+}) => RustLib.instance.api.crateApiSimpleResizeStreamSession(
+  sessionId: sessionId,
+  width: width,
+  height: height,
+);

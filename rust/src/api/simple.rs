@@ -1,10 +1,12 @@
 use std::{collections::HashMap, thread};
 
-use log::{debug, trace};
+use chrono::Utc;
+use gdk::glib::PropertyGet;
+use log::{debug, info, trace};
 
 use crate::{
-    core::{fluttersink, types::VideoInfo, IS_INITIALIZED},
-    dart_types::StreamState,
+    core::{IS_INITIALIZED, fluttersink::{self, SESSION_CACHE}, types::VideoInfo},
+    dart_types::{StreamEvent, StreamState},
     frb_generated::StreamSink,
     utils::LogErr,
 };
@@ -38,13 +40,13 @@ pub fn create_new_session() -> i64 {
     *session_counter
 }
 
-/// returns a session id that represents a playing session in rust
 pub fn create_new_playable(
     session_id: i64,
     engine_handle: i64,
     video_info: VideoInfo,
     ffmpeg_options: Option<HashMap<String, String>>,
     sink: StreamSink<StreamState>,
+    
 ) -> anyhow::Result<()> {
     trace!(
         "get_texture was called with engine_handle: {}, video_info: {:?}, session_id: {}",
@@ -61,6 +63,30 @@ pub fn create_new_playable(
     )?;
     Ok(())
 }
+
+pub fn seek_to_timestamp(
+    session_id: i64,
+    ts: i64,
+) -> anyhow::Result<()>{
+    let mut session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some(session) = session_cache.get_mut(&session_id){
+        info!("seeking to {ts}");
+        session.seek(ts)?;
+    }
+    Ok(())
+}
+
+pub fn register_to_stream_events_sink(
+    session_id: i64,
+    sink: StreamSink<StreamEvent>,
+){
+    let mut session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some(session) = session_cache.get_mut(&session_id){
+        session.set_events_sink(sink);
+    }
+}
+
+
 /// marks the session as required by the ui
 /// if the ui won't call this every 2 seconds
 /// this session will terminate itself.
@@ -81,25 +107,7 @@ pub fn destroy_stream_session(session_id: i64) {
     crate::core::fluttersink::destroy_stream_session(session_id)
 }
 
-pub fn seek_to_time(session_id: i64, time_seconds: f64) -> anyhow::Result<()> {
-    crate::core::fluttersink::seek_to_time(session_id, time_seconds)
-}
 
-pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
-    crate::core::fluttersink::get_current_time(session_id)
-}
-
-pub fn get_stream_start_time(session_id: i64) -> anyhow::Result<Option<i64>> {
-    crate::core::fluttersink::get_stream_start_time(session_id)
-}
-
-pub fn seek_iso_8601(session_id: i64, iso_8601_time: String) -> anyhow::Result<()> {
-    crate::core::fluttersink::seek_iso_8601(session_id, iso_8601_time)
-}
-
-pub fn subscribe_to_stream_time(session_id: i64, sink: StreamSink<f64>) -> anyhow::Result<()> {
-    crate::core::fluttersink::set_time_sink(session_id, sink)
-}
 
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
     crate::core::fluttersink::resize_stream_session(session_id, width, height)

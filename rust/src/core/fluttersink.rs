@@ -7,7 +7,7 @@ use std::{
 use log::{debug, info};
 
 use crate::{
-    core::{software_decoder::SoftwareDecoder, types::DartUpdateStream},
+    core::{software_decoder::SoftwareDecoder, types::{DartEventsStream, DartStateStream}},
     utils::invoke_on_platform_main_thread,
 };
 
@@ -24,6 +24,16 @@ pub struct SessionContext {
     pub engine_handle: i64,
     pub sendable_texture: SharedSendableTexture,
     pub last_alive_mark: std::time::SystemTime,
+    pub events_sink: Option<DartEventsStream>
+}
+impl SessionContext{
+    pub fn set_events_sink(&mut self, sink: DartEventsStream) {
+        self.events_sink = Some(sink)
+    }
+    
+    pub fn seek(&self, ts: i64) -> anyhow::Result<()>{
+        self.decoder.seek(ts)
+    }
 }
 lazy_static::lazy_static! {
 pub static ref SESSION_CACHE: Mutex<HashMap<i64, SessionContext>> = Mutex::new(HashMap::new());
@@ -63,7 +73,7 @@ pub fn create_new_playable(
     session_id: i64,
     engine_handle: i64,
     video_info: types::VideoInfo,
-    update_stream: DartUpdateStream,
+    update_stream: DartStateStream,
     ffmpeg_options: Option<HashMap<String, String>>,
 ) -> anyhow::Result<()> {
     let (decoding_manager, payload_holder) =
@@ -87,6 +97,7 @@ pub fn create_new_playable(
             engine_handle,
             sendable_texture: sendable_texture.clone(),
             last_alive_mark: std::time::SystemTime::now(),
+            events_sink: None
         },
     );
 
@@ -96,6 +107,8 @@ pub fn create_new_playable(
 
     Ok(())
 }
+
+
 
 pub fn mark_session_alive(session_id: i64) {
     let mut session_cache = SESSION_CACHE.lock().unwrap();
@@ -151,43 +164,6 @@ pub fn destroy_stream_session(session_id: i64) {
     }
 }
 
-pub fn seek_to_time(session_id: i64, time_seconds: f64) -> anyhow::Result<()> {
-    let session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(ctx) = session_cache.get(&session_id) {
-        ctx.decoder.seek_to(time_seconds);
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("Session not found: {}", session_id))
-    }
-}
-
-pub fn seek_iso_8601(session_id: i64, iso_8601_time: String) -> anyhow::Result<()> {
-    let session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(ctx) = session_cache.get(&session_id) {
-        ctx.decoder.seek_iso_8601(&iso_8601_time)
-    } else {
-        Err(anyhow::anyhow!("Session not found: {}", session_id))
-    }
-}
-
-pub fn get_current_time(session_id: i64) -> anyhow::Result<f64> {
-    let session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(ctx) = session_cache.get(&session_id) {
-        ctx.decoder.get_current_time()
-    } else {
-        Err(anyhow::anyhow!("Session not found: {}", session_id))
-    }
-}
-
-pub fn get_stream_start_time(session_id: i64) -> anyhow::Result<Option<i64>> {
-    let session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(ctx) = session_cache.get(&session_id) {
-        ctx.decoder.get_stream_start_time()
-    } else {
-        Err(anyhow::anyhow!("Session not found: {}", session_id))
-    }
-}
-
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
     let session_cache = SESSION_CACHE.lock().unwrap();
     if let Some(ctx) = session_cache.get(&session_id) {
@@ -197,15 +173,3 @@ pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow
     }
 }
 
-pub fn set_time_sink(
-    session_id: i64,
-    time_sink: crate::frb_generated::StreamSink<f64>,
-) -> anyhow::Result<()> {
-    let session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(ctx) = session_cache.get(&session_id) {
-        ctx.decoder.set_time_sink(time_sink);
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!("Session not found: {}", session_id))
-    }
-}
