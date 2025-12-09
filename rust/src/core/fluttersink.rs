@@ -7,7 +7,10 @@ use std::{
 use log::{debug, info};
 
 use crate::{
-    core::{software_decoder::SoftwareDecoder, types::{DartEventsStream, DartStateStream}},
+    core::{
+        software_decoder::SoftwareDecoder,
+        types::{DartEventsStream, DartStateStream},
+    },
     utils::invoke_on_platform_main_thread,
 };
 
@@ -15,6 +18,7 @@ use super::{software_decoder::SharedSendableTexture, types};
 
 pub fn init() -> anyhow::Result<()> {
     ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))?;
+    info!("ffmpeg initialized: version {}");
     ffmpeg::util::log::set_level(ffmpeg::util::log::Level::Fatal);
     Ok(())
 }
@@ -24,14 +28,14 @@ pub struct SessionContext {
     pub engine_handle: i64,
     pub sendable_texture: SharedSendableTexture,
     pub last_alive_mark: std::time::SystemTime,
-    pub events_sink: Option<DartEventsStream>
+    pub events_sink: Option<DartEventsStream>,
 }
-impl SessionContext{
+impl SessionContext {
     pub fn set_events_sink(&mut self, sink: DartEventsStream) {
         self.events_sink = Some(sink)
     }
-    
-    pub fn seek(&self, ts: i64) -> anyhow::Result<()>{
+
+    pub fn seek(&self, ts: i64) -> anyhow::Result<()> {
         self.decoder.seek(ts)
     }
 }
@@ -97,7 +101,7 @@ pub fn create_new_playable(
             engine_handle,
             sendable_texture: sendable_texture.clone(),
             last_alive_mark: std::time::SystemTime::now(),
-            events_sink: None
+            events_sink: None,
         },
     );
 
@@ -107,8 +111,6 @@ pub fn create_new_playable(
 
     Ok(())
 }
-
-
 
 pub fn mark_session_alive(session_id: i64) {
     let mut session_cache = SESSION_CACHE.lock().unwrap();
@@ -172,4 +174,3 @@ pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow
         Err(anyhow::anyhow!("Session not found: {}", session_id))
     }
 }
-
