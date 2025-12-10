@@ -1,11 +1,14 @@
 use std::{collections::HashMap, thread};
 
-use chrono::Utc;
 use gdk::glib::PropertyGet;
 use log::{debug, info, trace};
 
 use crate::{
-    core::{IS_INITIALIZED, fluttersink::{self, SESSION_CACHE}, types::VideoInfo},
+    core::{
+        fluttersink::{self, SESSION_CACHE},
+        types::VideoInfo,
+        IS_INITIALIZED,
+    },
     dart_types::{StreamEvent, StreamState},
     frb_generated::StreamSink,
     utils::LogErr,
@@ -46,7 +49,6 @@ pub fn create_new_playable(
     video_info: VideoInfo,
     ffmpeg_options: Option<HashMap<String, String>>,
     sink: StreamSink<StreamState>,
-    
 ) -> anyhow::Result<()> {
     trace!(
         "get_texture was called with engine_handle: {}, video_info: {:?}, session_id: {}",
@@ -64,28 +66,21 @@ pub fn create_new_playable(
     Ok(())
 }
 
-pub fn seek_to_timestamp(
-    session_id: i64,
-    ts: i64,
-) -> anyhow::Result<()>{
+pub fn seek_to_timestamp(session_id: i64, ts: i64) -> anyhow::Result<()> {
     let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(session) = session_cache.get_mut(&session_id){
+    if let Some(session) = session_cache.get_mut(&session_id) {
         info!("seeking to {ts}");
         session.seek(ts)?;
     }
     Ok(())
 }
 
-pub fn register_to_stream_events_sink(
-    session_id: i64,
-    sink: StreamSink<StreamEvent>,
-){
+pub fn register_to_stream_events_sink(session_id: i64, sink: StreamSink<StreamEvent>) {
     let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(session) = session_cache.get_mut(&session_id){
+    if let Some(session) = session_cache.get_mut(&session_id) {
         session.set_events_sink(sink);
     }
 }
-
 
 /// marks the session as required by the ui
 /// if the ui won't call this every 2 seconds
@@ -106,8 +101,6 @@ pub fn destroy_stream_session(session_id: i64) {
     trace!("destroy_stream_session was called");
     crate::core::fluttersink::destroy_stream_session(session_id)
 }
-
-
 
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
     crate::core::fluttersink::resize_stream_session(session_id, width, height)

@@ -93,10 +93,7 @@ class VideoController {
 
   /// Seek to a specific time in seconds within the video
   Future<void> seekTo(int ts) async {
-    await rlib.seekToTimestamp(
-      sessionId: sessionId,
-      ts: ts
-    );
+    await rlib.seekToTimestamp(sessionId: sessionId, ts: ts);
   }
 
   /// Resize the video stream with new dimensions
@@ -111,7 +108,6 @@ class VideoController {
       debugPrint('Error resizing stream: $e');
     }
   }
-
 }
 // ignore: implementation_imports
 
@@ -373,17 +369,15 @@ class _VideoPlayerState extends State<VideoPlayer> {
   @override
   Widget build(BuildContext context) {
     // If a controller was provided, use it directly
-    if (widget.controller != null) {
-      return _VideoPlayerWithSize(
-        controller: widget.controller!,
-        initialDimensions: const VideoDimensions(
-          width: 640,
-          height: 360,
-        ), // Fallback dimensions
-        autoDispose: widget.autoDispose,
-        child: widget.child,
-      );
-    }
+    return _VideoPlayerWithSize(
+      controller: widget.controller,
+      initialDimensions: const VideoDimensions(
+        width: 640,
+        height: 360,
+      ), // Fallback dimensions
+      autoDispose: widget.autoDispose,
+      child: widget.child,
+    );
     // This case should not happen due to assertion, but we include it to avoid errors
     return const SizedBox.shrink();
   }

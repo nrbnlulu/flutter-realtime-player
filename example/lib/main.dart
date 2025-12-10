@@ -376,11 +376,11 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   VideoController? _controller;
   bool _isLoading = true;
   Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
+  final Duration _duration = Duration.zero;
   Timer? _positionTimer;
   bool _isSeeking = false;
   bool _isSeekable = false;
-  double _currentStreamTime = 0.0; // Stream time in seconds
+  final double _currentStreamTime = 0.0; // Stream time in seconds
   int?
   _streamStartTime; // Unix timestamp of stream start time (for HLS with EXT-X-PROGRAM-DATE-TIME)
   final TextEditingController _iso8601Controller = TextEditingController();
@@ -519,9 +519,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                   },
                   onChangeEnd: (value) async {
                     if (_controller != null) {
-                      await _controller!.seekTo(
-                        value.toInt(),
-                      );
+                      await _controller!.seekTo(value.toInt());
                     }
                     setState(() {
                       _isSeeking = false;

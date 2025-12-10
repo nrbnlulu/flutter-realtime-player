@@ -1,12 +1,9 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
-use chrono::{DateTime, Utc};
 use ffmpeg::Rescale;
 use std::{
-    any::Any,
-    char::DecodeUtf16,
     collections::HashMap,
-    fmt, mem,
+    fmt,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
     thread,
     time::{Duration, Instant},
@@ -15,11 +12,7 @@ use std::{
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, error, info, trace, warn};
 
-use crate::{
-    core::types::DartStateStream,
-    dart_types::StreamState,
-    utils::{ffmpeg_compat, LogErr},
-};
+use crate::{core::types::DartStateStream, dart_types::StreamState, utils::LogErr};
 
 use super::types;
 
@@ -27,7 +20,7 @@ use super::types;
 pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video, Option<Vec<u8>>);
 
 impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
-    fn get(&self) -> irondash_texture::PixelData {
+    fn get(&self) -> irondash_texture::PixelData<'_> {
         let width = self.0.width() as usize;
         let height = self.0.height() as usize;
 
@@ -219,8 +212,6 @@ pub enum StreamExitResult {
     Error,
 }
 
-use crate::frb_generated::StreamSink;
-
 pub struct SoftwareDecoder {
     video_info: types::VideoInfo,
     kill_sig: Arc<AtomicBool>,
@@ -348,7 +339,7 @@ impl SoftwareDecoder {
 
         let decoder = context_decoder.decoder().video()?;
         Self::validate_stream_compatibility(&decoder)?;
-        
+
         let src_format = decoder.format();
         let dst_format = ffmpeg::format::Pixel::RGBA;
         let src_width = decoder.width();
@@ -495,13 +486,13 @@ impl SoftwareDecoder {
                     }
                 };
                 let framerate = ctx.framerate;
-                 if framerate > 0 {
+                if framerate > 0 {
                     // 1. Calculate the total number of nanoseconds in one second: 1,000,000,000
                     // 2. Divide this by the framerate to get the duration per frame in nanoseconds.
                     let nanos_per_frame = 1_000_000_000 / framerate;
                     sleep_duration = Some(Duration::from_nanos(nanos_per_frame as u64));
-                } 
-                
+                }
+
                 let mut packet = ffmpeg::Packet::empty();
 
                 // Packet reading and sending to decoder logic
@@ -559,10 +550,7 @@ impl SoftwareDecoder {
         }
     }
 
-    pub fn seek(
-        &self,
-        timestamp_us: i64,
-    ) -> anyhow::Result<()> {
+    pub fn seek(&self, timestamp_us: i64) -> anyhow::Result<()> {
         let mut decoder_ctx = self
             .decoding_context
             .lock()
@@ -571,7 +559,7 @@ impl SoftwareDecoder {
             "Performing seek to {} us (relative stream time)",
             timestamp_us
         );
-        if let Some(decoder_ctx) = decoder_ctx.as_mut(){
+        if let Some(decoder_ctx) = decoder_ctx.as_mut() {
             let position = timestamp_us.rescale((1, 1000000), ffmpeg::rescale::TIME_BASE);
             if let Err(e) = decoder_ctx.input_ctx.seek(position, ..position) {
                 log::error!("Failed to seek {:?}", e);
