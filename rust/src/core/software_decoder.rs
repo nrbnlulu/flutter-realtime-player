@@ -1,27 +1,22 @@
-// inspired by
-// - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
-use chrono::{DateTime, Utc};
+//! s/w demuxer optimized for live streams with HLS seeking support inspired by Flyleaf's C# demuxer.
+
 use ffmpeg::Rescale;
 use std::{
-    any::Any,
-    char::DecodeUtf16,
     collections::HashMap,
-    fmt, mem,
+    fmt,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
     thread,
     time::{Duration, Instant},
 };
 
+use ffmpeg::ffi;
+
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, error, info, trace, warn};
 
-use crate::{
-    core::types::DartStateStream,
-    dart_types::StreamState,
-    utils::{ffmpeg_compat, LogErr},
-};
+use crate::{core::types::DartStateStream, dart_types::StreamState, utils::LogErr};
 
-use super::types;
+use super::{ffmpeg_private, types};
 
 #[derive(Clone)]
 pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video, Option<Vec<u8>>);
@@ -151,6 +146,370 @@ impl PayloadProvider<BoxedPixelData> for PayloadHolder {
     }
 }
 
+/// Trait for handling timeline adjustments for different stream types.
+///
+/// This trait abstracts the timeline management for various streaming protocols,
+/// allowing different implementations for HLS (segment-based) and standard streams.
+/// The key challenge with HLS is that it uses a segment-based timeline where seeking
+/// requires adjusting timestamps to account for the playlist structure.
+trait TimelineContext {
+    /// Adjust seek timestamp for the specific stream type.
+    ///
+    /// For HLS streams, this adjusts the requested timestamp to account for:
+    /// - The virtual start time calculated from segment information
+    /// - The format context's first_timestamp
+    ///
+    /// For standard streams, this typically returns the timestamp as-is.
+    ///
+    /// # Arguments
+    /// * `timestamp_us` - The requested timestamp in microseconds (relative to stream start)
+    ///
+    /// # Returns
+    /// The adjusted timestamp in microseconds suitable for seeking in the underlying format
+    fn adjust_seek_timestamp(&self, timestamp_us: i64) -> i64;
+
+    /// Update timeline information (called periodically during playback).
+    ///
+    /// For HLS streams, this:
+    /// - Monitors playlist changes via segment sequence numbers
+    /// - Recalculates duration when segments change
+    /// - Updates the virtual start time based on current position
+    ///
+    /// For standard streams, this is typically a no-op.
+    fn update_timeline(&mut self);
+
+    /// Get the current time offset for the stream in microseconds.
+    ///
+    /// For HLS, this returns the calculated start time of the current viewing window.
+    /// For standard streams, this returns the stream's native start_time.
+    fn get_time_offset(&self) -> i64;
+
+    /// Check if seeking is supported for this stream.
+    ///
+    /// For HLS, returns true only after the timeline has been initialized.
+    /// For standard streams, typically always returns true.
+    #[allow(dead_code)]
+    fn is_seekable(&self) -> bool;
+
+    /// Update timeline with packet timestamp information.
+    ///
+    /// For HLS streams, this is used to calculate hls_start_time from packet timestamps.
+    /// For standard streams, this is typically a no-op.
+    ///
+    /// # Arguments
+    /// * `packet_timestamp_us` - Packet timestamp in microseconds
+    fn update_from_packet(&mut self, packet_timestamp_us: i64);
+}
+
+/// HLS-specific timeline context for handling segment-based seeking.
+///
+/// HLS (HTTP Live Streaming) presents unique challenges for seeking:
+/// 1. Live streams are normally unseekable in FFmpeg
+/// 2. The stream is composed of discrete segments with individual timestamps
+/// 3. We need to maintain a virtual timeline across segment boundaries
+///
+/// This implementation follows the approach from Flyleaf's C# demuxer:
+/// - Tracks the HLS playlist structure and segment durations
+/// - Calculates a virtual start time based on segment information
+/// - Adjusts all seek operations to account for the segment timeline
+/// - Forces FFmpeg to treat HLS as seekable by manipulating context flags
+///
+/// The key insight is that we can seek within the "DVR window" (available segments)
+/// by calculating the correct timestamp offset for each segment.
+struct HLSTimelineContext {
+    /// Virtual start time in microseconds, calculated as:
+    /// (current packet timestamp - sum of previous segment durations)
+    hls_start_time: i64,
+
+    /// Duration in microseconds from playlist start to current segment start.
+    /// This is the sum of all segment durations before the current one.
+    hls_cur_duration: i64,
+
+    /// Previous sequence number to detect playlist updates (segment wraparound)
+    hls_prev_seq_no: i64,
+
+    /// Direct pointer to the HLS context (from format_ctx->priv_data)
+    hls_ctx: *const ffmpeg_private::HLSContext,
+
+    /// Direct pointer to the active playlist
+    playlist: *const ffmpeg_private::playlist,
+
+    /// Last packet timestamp we've seen (used to calculate hls_start_time)
+    last_packet_timestamp: i64,
+
+    /// Whether the timeline has been initialized with segment information
+    is_initialized: bool,
+}
+
+unsafe impl Send for HLSTimelineContext {}
+unsafe impl Sync for HLSTimelineContext {}
+
+impl HLSTimelineContext {
+    /// Create a new HLS timeline context from a format context pointer.
+    ///
+    /// # Safety
+    /// This function accesses FFmpeg internal structures and must verify the format is HLS.
+    /// The format context must remain valid for the lifetime of this HLSTimelineContext.
+    unsafe fn new(fmt_ctx_ptr: *mut ffi::AVFormatContext) -> Option<Self> {
+        if fmt_ctx_ptr.is_null() {
+            return None;
+        }
+
+        let fmt_ctx = &*fmt_ctx_ptr;
+
+        // Check if this is an HLS format
+        if fmt_ctx.iformat.is_null() {
+            return None;
+        }
+
+        let iformat = &*fmt_ctx.iformat;
+        let name = std::ffi::CStr::from_ptr(iformat.name);
+
+        if name.to_string_lossy() != "hls" {
+            warn!("Attempted to create HLS context for non-HLS format");
+            return None;
+        }
+
+        // Cast priv_data to HLSContext
+        if fmt_ctx.priv_data.is_null() {
+            warn!("HLS format context has null priv_data");
+            return None;
+        }
+
+        let hls_ctx = fmt_ctx.priv_data as *const ffmpeg_private::HLSContext;
+        let hls_ctx_ref = &*hls_ctx;
+
+        // Get the first playlist (most HLS streams have a single playlist)
+        // For multi-variant streams, this gets the first variant's playlist
+        let playlist = hls_ctx_ref.get_first_playlist().map(|p| p as *const _);
+
+        if playlist.is_none() {
+            warn!("HLS context has no available playlists");
+            return None;
+        }
+
+        info!("HLS timeline context created successfully");
+
+        Some(Self {
+            hls_start_time: ffi::AV_NOPTS_VALUE,
+            hls_cur_duration: 0,
+            hls_prev_seq_no: ffi::AV_NOPTS_VALUE,
+            hls_ctx,
+            playlist: playlist.unwrap(),
+            last_packet_timestamp: ffi::AV_NOPTS_VALUE,
+            is_initialized: false,
+        })
+    }
+
+    /// Calculate duration by accessing HLS playlist segments.
+    ///
+    /// This implementation:
+    /// 1. Accesses the stored playlist pointer
+    /// 2. Reads current sequence number
+    /// 3. Iterates through segments and sums their durations
+    /// 4. Detects sequence number changes (playlist updates)
+    /// 5. Updates hls_cur_duration and detects wraparound
+    ///
+    /// # Safety
+    /// Accesses FFmpeg internal structures via raw pointers.
+    unsafe fn update_hls_timeline(&mut self) {
+        if self.playlist.is_null() {
+            warn!("HLS playlist pointer is null, cannot update timeline");
+            return;
+        }
+
+        let playlist = &*self.playlist;
+
+        // Extract values
+        let cur_seq_no = playlist.cur_seq_no;
+        let start_seq_no = playlist.start_seq_no;
+        let duration_until_seq = playlist.calculate_duration_until_seq(cur_seq_no);
+        let prev_seq_no = self.hls_prev_seq_no;
+
+        trace!(
+            "Updating HLS timeline: cur_seq={}, prev_seq={}, start_seq={}, duration={}",
+            cur_seq_no,
+            prev_seq_no,
+            start_seq_no,
+            duration_until_seq
+        );
+
+        // Check if sequence number changed (playlist updated or wraparound)
+        if prev_seq_no != ffi::AV_NOPTS_VALUE && cur_seq_no != prev_seq_no {
+            debug!(
+                "HLS playlist sequence changed: {} -> {}",
+                prev_seq_no, cur_seq_no
+            );
+
+            self.hls_prev_seq_no = cur_seq_no;
+            self.hls_start_time = ffi::AV_NOPTS_VALUE;
+
+            // Convert from AV_TIME_BASE units to microseconds
+            self.hls_cur_duration = (duration_until_seq * 1000000) / ffi::AV_TIME_BASE as i64;
+
+            trace!(
+                "HLS current duration: {} us ({} segments)",
+                self.hls_cur_duration,
+                cur_seq_no - start_seq_no
+            );
+        } else if prev_seq_no == ffi::AV_NOPTS_VALUE {
+            // First time initialization
+            self.hls_prev_seq_no = cur_seq_no;
+            self.hls_cur_duration = (duration_until_seq * 1000000) / ffi::AV_TIME_BASE as i64;
+
+            info!(
+                "HLS timeline initialized: start_seq={}, cur_seq={}, duration={} us",
+                start_seq_no, cur_seq_no, self.hls_cur_duration
+            );
+        }
+
+        self.is_initialized = true;
+    }
+
+    /// Update hls_start_time based on packet timestamp
+    ///
+    /// This calculates the virtual start time as:
+    /// hls_start_time = last_packet_timestamp - hls_cur_duration
+    ///
+    /// This should be called when we receive packets to establish the timeline reference point.
+    unsafe fn update_start_time_from_packet(&mut self, packet_timestamp_us: i64) {
+        if packet_timestamp_us == ffi::AV_NOPTS_VALUE {
+            return;
+        }
+
+        self.last_packet_timestamp = packet_timestamp_us;
+
+        // Only calculate hls_start_time if we don't have it yet and we have duration info
+        if self.hls_start_time == ffi::AV_NOPTS_VALUE && self.hls_cur_duration > 0 {
+            self.hls_start_time = packet_timestamp_us - self.hls_cur_duration;
+            info!(
+                "HLS start time calculated: {} us (packet: {} us, duration: {} us)",
+                self.hls_start_time, packet_timestamp_us, self.hls_cur_duration
+            );
+        }
+    }
+}
+
+impl TimelineContext for HLSTimelineContext {
+    fn adjust_seek_timestamp(&self, timestamp_us: i64) -> i64 {
+        // If timeline not initialized, we can't adjust yet
+        if self.hls_start_time == ffi::AV_NOPTS_VALUE {
+            warn!(
+                "HLS timeline not initialized (hls_start_time = AV_NOPTS_VALUE), cannot adjust timestamp. Returning as-is: {} us",
+                timestamp_us
+            );
+            return timestamp_us;
+        }
+
+        // Adjust timestamp to account for HLS segment timeline
+        // Formula: adjusted = requested + hls_start_time - first_timestamp
+        // This converts from the virtual timeline to actual segment timestamps
+        unsafe {
+            if !self.hls_ctx.is_null() {
+                let hls_ctx = &*self.hls_ctx;
+                let first_timestamp = if hls_ctx.first_timestamp != ffi::AV_NOPTS_VALUE {
+                    (hls_ctx.first_timestamp * 1000000) / ffi::AV_TIME_BASE as i64
+                } else {
+                    0
+                };
+
+                let adjusted = timestamp_us + self.hls_start_time - first_timestamp;
+                trace!(
+                    "HLS timestamp adjustment: requested={} us, start={} us, first={} us, adjusted={} us",
+                    timestamp_us, self.hls_start_time, first_timestamp, adjusted
+                );
+                return adjusted;
+            }
+        }
+
+        timestamp_us
+    }
+
+    fn update_timeline(&mut self) {
+        unsafe {
+            self.update_hls_timeline();
+
+            // Try to calculate hls_start_time from HLS context's first_timestamp
+            if self.hls_start_time == ffi::AV_NOPTS_VALUE
+                && !self.hls_ctx.is_null()
+                && self.hls_cur_duration > 0
+            {
+                let hls_ctx = &*self.hls_ctx;
+                if hls_ctx.first_timestamp != ffi::AV_NOPTS_VALUE {
+                    let first_timestamp_us =
+                        (hls_ctx.first_timestamp * 1000000) / ffi::AV_TIME_BASE as i64;
+                    self.update_start_time_from_packet(first_timestamp_us);
+                }
+            }
+        }
+    }
+
+    fn update_from_packet(&mut self, packet_timestamp_us: i64) {
+        unsafe {
+            self.update_start_time_from_packet(packet_timestamp_us);
+        }
+    }
+
+    fn get_time_offset(&self) -> i64 {
+        if self.hls_start_time != ffi::AV_NOPTS_VALUE {
+            self.hls_start_time
+        } else {
+            0
+        }
+    }
+
+    fn is_seekable(&self) -> bool {
+        // For HLS, we need both initialization and a valid start time
+        self.is_initialized && self.hls_start_time != ffi::AV_NOPTS_VALUE
+    }
+}
+
+/// Standard timeline context for non-HLS streams.
+///
+/// This is the simpler case where the stream has a continuous timeline
+/// without segment boundaries. Seeking is straightforward and requires
+/// no timestamp adjustment beyond the stream's native start_time.
+struct StandardTimelineContext {
+    /// Stream start time in microseconds from the format context
+    start_time: i64,
+}
+
+impl StandardTimelineContext {
+    fn new(start_time: i64) -> Self {
+        Self { start_time }
+    }
+}
+
+impl TimelineContext for StandardTimelineContext {
+    fn adjust_seek_timestamp(&self, timestamp_us: i64) -> i64 {
+        // For standard streams, add the start_time offset
+        let adjusted = timestamp_us + self.start_time;
+        trace!(
+            "Standard timeline adjustment: requested={} us, start_time={} us, adjusted={} us",
+            timestamp_us,
+            self.start_time,
+            adjusted
+        );
+        adjusted
+    }
+
+    fn update_timeline(&mut self) {
+        // No special updates needed for standard streams
+    }
+
+    fn get_time_offset(&self) -> i64 {
+        self.start_time
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
+    fn update_from_packet(&mut self, _packet_timestamp_us: i64) {
+        // No-op for standard streams
+    }
+}
+
 struct DecodingContext {
     input_ctx: ffmpeg::format::context::Input,
     video_stream_index: usize,
@@ -158,19 +517,24 @@ struct DecodingContext {
     scaler: ffmpeg::software::scaling::Context,
     framerate: u32,
     stream_start_time: Option<i64>, // Unix timestamp in seconds when stream started (from #EXT-X-PROGRAM-DATE-TIME)
+    timeline_ctx: Box<dyn TimelineContext + Send>,
 }
 
 impl fmt::Debug for DecodingContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        info!("crash test 2");
+
         f.debug_struct("DecodingContext")
             .field("video_stream_index", &self.video_stream_index)
             .field("framerate", &self.framerate)
             .field("stream_start_time", &self.stream_start_time)
             .field("decoder", &self.decoder.id())
+            .field("timeline_offset", &self.timeline_ctx.get_time_offset())
             .finish()
     }
 }
 
+#[allow(dead_code)]
 struct FrameSynchronizer {
     start_system_time: Instant,
     start_stream_time: f64,
@@ -178,6 +542,7 @@ struct FrameSynchronizer {
 }
 
 impl FrameSynchronizer {
+    #[allow(dead_code)]
     fn new(current_pts_seconds: f64) -> Self {
         Self {
             start_system_time: Instant::now(),
@@ -187,6 +552,7 @@ impl FrameSynchronizer {
     }
 
     /// Returns the duration the thread should sleep to synchronize with the video's PTS.
+    #[allow(dead_code)]
     fn get_sleep_duration(&mut self, pts_seconds: f64, framerate: f64) -> Option<Duration> {
         self.frames_processed += 1;
 
@@ -218,8 +584,6 @@ pub enum StreamExitResult {
     EOF,
     Error,
 }
-
-use crate::frb_generated::StreamSink;
 
 pub struct SoftwareDecoder {
     video_info: types::VideoInfo,
@@ -338,6 +702,8 @@ impl SoftwareDecoder {
         }
         let ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
         let starttimerealtime = unsafe { (*ictx.as_ptr()).start_time_realtime } / 100_0000;
+        let format_ctx_ptr = unsafe { ictx.as_ptr() as *mut ffi::AVFormatContext };
+
         let input = ictx
             .streams()
             .best(ffmpeg::media::Type::Video)
@@ -348,7 +714,7 @@ impl SoftwareDecoder {
 
         let decoder = context_decoder.decoder().video()?;
         Self::validate_stream_compatibility(&decoder)?;
-        
+
         let src_format = decoder.format();
         let dst_format = ffmpeg::format::Pixel::RGBA;
         let src_width = decoder.width();
@@ -375,6 +741,46 @@ impl SoftwareDecoder {
             0
         };
 
+        // Determine stream type and create appropriate timeline context
+        let is_hls_stream =
+            self.video_info.uri.contains(".m3u8") || self.video_info.uri.contains("hls");
+        let is_rtsp = self.video_info.uri.starts_with("rtsp");
+
+        let timeline_ctx: Box<dyn TimelineContext + Send> = if is_hls_stream {
+            info!(
+                "Initializing HLS timeline context for {}",
+                &self.video_info.uri
+            );
+            // Create HLS timeline context with direct access to HLS structures
+            unsafe {
+                match HLSTimelineContext::new(format_ctx_ptr) {
+                    Some(ctx) => Box::new(ctx),
+                    None => {
+                        error!("Failed to create HLS timeline context, falling back to standard");
+                        let start_time = {
+                            let fmt_ctx = &*format_ctx_ptr;
+                            if fmt_ctx.start_time != ffi::AV_NOPTS_VALUE {
+                                (fmt_ctx.start_time * 1000000) / ffi::AV_TIME_BASE as i64
+                            } else {
+                                0
+                            }
+                        };
+                        Box::new(StandardTimelineContext::new(start_time))
+                    }
+                }
+            }
+        } else {
+            let start_time = unsafe {
+                let fmt_ctx = &*format_ctx_ptr;
+                if fmt_ctx.start_time != ffi::AV_NOPTS_VALUE {
+                    (fmt_ctx.start_time * 1000000) / ffi::AV_TIME_BASE as i64
+                } else {
+                    0
+                }
+            };
+            Box::new(StandardTimelineContext::new(start_time))
+        };
+
         let context = DecodingContext {
             input_ctx: ictx,
             video_stream_index,
@@ -382,15 +788,13 @@ impl SoftwareDecoder {
             scaler,
             framerate: frame_rate,
             stream_start_time: Some(starttimerealtime),
+            timeline_ctx,
         };
         debug!(
             "Created context {:?} for url: {}",
             context, &self.video_info.uri
         );
 
-        let is_hls_stream =
-            self.video_info.uri.contains(".m3u8") || self.video_info.uri.contains("hls");
-        let is_rtsp = self.video_info.uri.starts_with("rtsp");
         let is_seekable = is_hls_stream || is_rtsp;
         if let Ok(mut decoding_context) = self.decoding_context.lock() {
             *decoding_context = Some(context);
@@ -494,25 +898,44 @@ impl SoftwareDecoder {
                         return StreamExitResult::Error;
                     }
                 };
+
+                // Update HLS timeline if applicable
+                ctx.timeline_ctx.update_timeline();
+
                 let framerate = ctx.framerate;
-                 if framerate > 0 {
+                if framerate > 0 {
                     // 1. Calculate the total number of nanoseconds in one second: 1,000,000,000
                     // 2. Divide this by the framerate to get the duration per frame in nanoseconds.
                     let nanos_per_frame = 1_000_000_000 / framerate;
                     sleep_duration = Some(Duration::from_nanos(nanos_per_frame as u64));
-                } 
-                
+                }
+
                 let mut packet = ffmpeg::Packet::empty();
 
                 // Packet reading and sending to decoder logic
                 match packet.read(&mut ctx.input_ctx) {
                     Ok(_) => {
+                        // Update HLS timeline from packet timestamp if this is a video packet
                         if packet.stream() == ctx.video_stream_index {
+                            // Get packet timestamp and convert to microseconds
+                            let video_stream =
+                                ctx.input_ctx.stream(ctx.video_stream_index).unwrap();
+                            let time_base = video_stream.time_base();
+                            let time_base_us = (time_base.numerator() as i64 * 1000000)
+                                / time_base.denominator() as i64;
+
+                            let packet_ts = packet.pts().or(packet.dts());
+
+                            if let Some(ts) = packet_ts {
+                                let packet_timestamp_us = ts * time_base_us;
+                                ctx.timeline_ctx.update_from_packet(packet_timestamp_us);
+                            }
+
                             if let Err(err) = ctx.decoder.send_packet(&packet) {
                                 error!("Error sending packet to decoder: {}", err);
                             } else {
                                 let _ = self
-                                    .on_new_sample_rtsp(
+                                    .on_new_sample(
                                         &mut ctx.decoder,
                                         &mut ctx.scaler,
                                         &mark_frame_avb,
@@ -559,25 +982,138 @@ impl SoftwareDecoder {
         }
     }
 
-    pub fn seek(
-        &self,
-        timestamp_us: i64,
-    ) -> anyhow::Result<()> {
+    /// Seek to a specific timestamp in the stream.
+    ///
+    /// This method handles seeking for both HLS and standard streams using the
+    /// TimelineContext trait to abstract the differences:
+    ///
+    /// For HLS streams:
+    /// 1. Adjusts the timestamp to account for segment timeline
+    /// 2. Forces the stream to be seekable (clears AVFMT_FLAG_UNSEEKABLE)
+    /// 3. Performs the seek operation
+    /// 4. Falls back to backward seek if forward seek fails
+    ///
+    /// For standard streams:
+    /// 1. Uses the timestamp as-is
+    /// 2. Performs the seek operation
+    ///
+    /// # Arguments
+    /// * `timestamp_us` - Target timestamp in microseconds (relative to stream start)
+    ///
+    /// # Returns
+    /// * `Ok(())` if seek succeeded
+    /// * `Err` if seek failed after all retry attempts
+    ///
+    /// # Notes
+    /// - Flushes the decoder before seeking to avoid artifacts
+    /// - Resets frame synchronizer after seek
+    /// - Attempts both forward and backward seek for robustness
+    pub fn seek(&self, timestamp_us: i64) -> anyhow::Result<()> {
         let mut decoder_ctx = self
             .decoding_context
             .lock()
             .map_err(|e| anyhow::anyhow!("decoding_context mutex poisoned: {e}"))?;
-        info!(
-            "Performing seek to {} us (relative stream time)",
-            timestamp_us
-        );
-        if let Some(decoder_ctx) = decoder_ctx.as_mut(){
-            let position = timestamp_us.rescale((1, 1000000), ffmpeg::rescale::TIME_BASE);
-            if let Err(e) = decoder_ctx.input_ctx.seek(position, ..position) {
-                log::error!("Failed to seek {:?}", e);
-                return Err(anyhow::anyhow!("Failed to seek {:?}", e));
+
+        if let Some(ctx) = decoder_ctx.as_mut() {
+            // Validate and clamp timestamp to valid range
+            let clamped_timestamp = timestamp_us.max(0);
+
+            if timestamp_us < 0 {
+                warn!(
+                    "Seek timestamp {} us is negative, clamping to 0",
+                    timestamp_us
+                );
             }
+
+            // Check if timeline is initialized for HLS streams
+            if !ctx.timeline_ctx.is_seekable() {
+                return Err(anyhow::anyhow!(
+                    "Timeline not initialized yet. HLS streams need to receive packets before seeking is possible. Try again after playback starts."
+                ));
+            }
+
+            // Adjust timestamp based on stream type (HLS vs standard)
+            let adjusted_timestamp = ctx.timeline_ctx.adjust_seek_timestamp(clamped_timestamp);
+
+            info!(
+                "Performing seek to {} us (requested: {} us, clamped: {} us, adjusted: {} us, offset: {} us)",
+                adjusted_timestamp,
+                timestamp_us,
+                clamped_timestamp,
+                adjusted_timestamp,
+                ctx.timeline_ctx.get_time_offset()
+            );
+
+            // For HLS streams, force seekable flag
+            unsafe {
+                let fmt_ctx_ptr = ctx.input_ctx.as_ptr() as *mut ffi::AVFormatContext;
+                let fmt_ctx = &mut *fmt_ctx_ptr;
+
+                // Check if this is HLS
+                if !fmt_ctx.iformat.is_null() {
+                    let iformat = &*fmt_ctx.iformat;
+                    let name = std::ffi::CStr::from_ptr(iformat.name);
+                    if name.to_string_lossy() == "hls" {
+                        // Clear unseekable flag for HLS (forces seekable)
+                        fmt_ctx.ctx_flags &= !ffi::AVFMTCTX_UNSEEKABLE;
+                        info!("Forced HLS stream to be seekable");
+                    }
+                }
+            }
+
+            // Flush decoder before seeking
+            ctx.decoder.flush();
+
+            // Ensure position is non-negative for FFmpeg
+            let position = adjusted_timestamp
+                .max(0)
+                .rescale((1, 1000000), ffmpeg::rescale::TIME_BASE);
+
+            if position < 0 {
+                return Err(anyhow::anyhow!(
+                    "Adjusted timestamp {} resulted in negative position {} (AV_TIME_BASE units)",
+                    adjusted_timestamp,
+                    position
+                ));
+            }
+
+            debug!("Seeking to position {} (AV_TIME_BASE units)", position);
+
+            // Perform the seek
+            if let Err(e) = ctx.input_ctx.seek(position, ..position) {
+                warn!("Forward seek to position {} failed: {:?}", position, e);
+
+                // Try backward seek as fallback
+                match ctx.input_ctx.seek(position, position..) {
+                    Ok(_) => {
+                        info!("Fallback backward seek to position {} succeeded", position);
+                    }
+                    Err(e2) => {
+                        error!(
+                            "Both seek attempts failed for position {} ({} us): forward={:?}, backward={:?}",
+                            position, adjusted_timestamp, e, e2
+                        );
+                        return Err(anyhow::anyhow!(
+                            "Failed to seek to {} us (position {}). Forward seek: {:?}, Backward seek: {:?}. The stream may not support seeking or the position is out of range.",
+                            adjusted_timestamp,
+                            position,
+                            e,
+                            e2
+                        ));
+                    }
+                }
+            }
+
+            // Reset synchronizer after seek
+            if let Ok(mut sync) = self.synchronizer.lock() {
+                *sync = None;
+            }
+
+            info!("Seek completed successfully to {} us", adjusted_timestamp);
+        } else {
+            return Err(anyhow::anyhow!("Decoding context not initialized"));
         }
+
         Ok(())
     }
 
@@ -596,7 +1132,7 @@ impl SoftwareDecoder {
         }
     }
 
-    fn on_new_sample_rtsp<F>(
+    fn on_new_sample<F>(
         &self,
         decoder: &mut ffmpeg::decoder::Video,
         scaler: &mut ffmpeg::software::scaling::Context,
@@ -607,14 +1143,6 @@ impl SoftwareDecoder {
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
         while decoder.receive_frame(&mut decoded).is_ok() {
-            let time_base = decoder.time_base();
-            let time_base_seconds = time_base.numerator() as f64 / time_base.denominator() as f64;
-
-            let pts_seconds = decoded
-                .pts()
-                .map(|pts| pts as f64 * time_base_seconds)
-                .unwrap_or(0.0);
-
             let mut rgb_frame = ffmpeg::util::frame::Video::empty();
             scaler.run(&decoded, &mut rgb_frame)?;
 

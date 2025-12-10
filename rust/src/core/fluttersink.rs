@@ -18,7 +18,7 @@ use super::{software_decoder::SharedSendableTexture, types};
 
 pub fn init() -> anyhow::Result<()> {
     ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))?;
-    info!("ffmpeg initialized: version {}");
+    info!("ffmpeg initialized:\n{}", ffmpeg::version::version());
     ffmpeg::util::log::set_level(ffmpeg::util::log::Level::Fatal);
     Ok(())
 }

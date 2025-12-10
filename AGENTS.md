@@ -9,3 +9,7 @@ This is a library that focuses on realtime streams support for flutter using ffm
 ### commands
 - we use `fvm` for flutter commands
 - `flutter_rust_bridge_codegen generate` - generates rust bindings to dart, use this when you changed the api. (it uses fvm by default)
+
+### Development
+- avoid bloating up the code with comments and emojis, only use comments when strictly needed.
+- avoid creating markdown files for documenting code behaviours. if you think you have something everyone need to know about implementation details add them here on AGENTS.md
