@@ -6,7 +6,7 @@ use std::{
     fmt,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
@@ -164,47 +164,6 @@ impl fmt::Debug for DecodingContext {
     }
 }
 
-struct FrameSynchronizer {
-    start_system_time: Instant,
-    start_stream_time: f64,
-    frames_processed: u64,
-}
-
-impl FrameSynchronizer {
-    fn new(current_pts_seconds: f64) -> Self {
-        Self {
-            start_system_time: Instant::now(),
-            start_stream_time: current_pts_seconds,
-            frames_processed: 0,
-        }
-    }
-
-    /// Returns the duration the thread should sleep to synchronize with the video's PTS.
-    fn get_sleep_duration(&mut self, pts_seconds: f64, framerate: f64) -> Option<Duration> {
-        self.frames_processed += 1;
-
-        // If PTS is unreliable (e.g., stuck at 0), estimate the current time
-        // based on the frame rate.
-        let mut effective_time = pts_seconds;
-        if effective_time <= 0.001 && self.frames_processed > 1 {
-            if framerate > 0.0 {
-                effective_time = (self.frames_processed as f64) / framerate;
-            }
-        }
-
-        let stream_elapsed = effective_time - self.start_stream_time;
-        let system_elapsed = self.start_system_time.elapsed().as_secs_f64();
-
-        if stream_elapsed > system_elapsed {
-            let diff = stream_elapsed - system_elapsed;
-            if diff > 0.001 {
-                return Some(Duration::from_secs_f64(diff));
-            }
-        }
-        None
-    }
-}
-
 #[derive(Debug)]
 pub enum StreamExitResult {
     LegalExit,
@@ -223,7 +182,6 @@ pub struct SoftwareDecoder {
     seekable: Arc<AtomicBool>, // Whether the stream is seekable
     output_dimensions: Arc<Mutex<types::VideoDimensions>>, // Track current output dimensions
     sendable_texture: Arc<Mutex<Option<WeakSendableTexture>>>,
-    synchronizer: Mutex<Option<FrameSynchronizer>>, // For frame timing synchronization
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
@@ -306,7 +264,6 @@ impl SoftwareDecoder {
             seekable: Arc::new(AtomicBool::new(false)),
             output_dimensions: Arc::new(Mutex::new(video_info.dimensions.clone())),
             sendable_texture: Arc::new(Mutex::new(None)),
-            synchronizer: Mutex::new(None),
         });
         (self_, payload_holder)
     }
@@ -595,14 +552,6 @@ impl SoftwareDecoder {
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
         while decoder.receive_frame(&mut decoded).is_ok() {
-            let time_base = decoder.time_base();
-            let time_base_seconds = time_base.numerator() as f64 / time_base.denominator() as f64;
-
-            let pts_seconds = decoded
-                .pts()
-                .map(|pts| pts as f64 * time_base_seconds)
-                .unwrap_or(0.0);
-
             let mut rgb_frame = ffmpeg::util::frame::Video::empty();
             scaler.run(&decoded, &mut rgb_frame)?;
 

@@ -1,6 +1,5 @@
 use std::{collections::HashMap, thread};
 
-use gdk::glib::PropertyGet;
 use log::{debug, info, trace};
 
 use crate::{
