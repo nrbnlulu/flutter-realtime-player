@@ -22,7 +22,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 
 thread_local = "1.1.8"
-ffmpeg = { package="rffmpeg", path = "/home/dev/Desktop/oss/rffmpeg", default-features = false, features = ["codec", "filter", "format", "software-resampling", "software-scaling"] }
+ffmpeg = { package="rffmpeg", git = "https://github.com/nrbnlulu/rffmpeg.git", branch="main", default-features = false, features = ["codec", "filter", "format", "software-resampling", "software-scaling"] }
 
 log = "0.4"
 tracing-appender = "0.2.3"
