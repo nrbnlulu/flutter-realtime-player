@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_realtime_player/rust/core/types.dart'
+    show VideoDimensions;
 import 'package:flutter_realtime_player/video_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
+import 'dart:async';
+import 'package:flutter_realtime_player/rust/dart_types.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,8 +21,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
-        body: StreamControlWidget(),
+        appBar: AppBar(title: const Text('Flutter Realtime Player')),
+        body: const StreamControlWidget(),
       ),
     );
   }
@@ -128,12 +132,13 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       children: [
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(16.0),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 1.5,
+              crossAxisSpacing: 16.0,
+              mainAxisSpacing: 16.0,
+              childAspectRatio:
+                  16 / 11, // Adjusted to account for controls below video
             ),
             itemCount: _streams.length,
             addAutomaticKeepAlives: true,
@@ -153,7 +158,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(16.0),
           child: ElevatedButton.icon(
             icon: const Icon(Icons.add),
             label: const Text('Add Stream'),
@@ -217,9 +222,12 @@ class _StreamGridItemState extends State<_StreamGridItem>
     super.build(context);
     final stream = widget.stream;
     return Card(
+      elevation: 4.0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
       child: Padding(
-        padding: const EdgeInsets.all(8.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
@@ -227,7 +235,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                   child: TextField(
                     controller: stream.urlController,
                     decoration: const InputDecoration(
-                      labelText: 'Stream URL',
+                      labelText: 'Stream URL (e.g., rtsp://...)',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -239,69 +247,86 @@ class _StreamGridItemState extends State<_StreamGridItem>
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 120,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'FFmpeg Options:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    ...stream.ffmpegOptionControllers.asMap().entries.map((
-                      entry,
-                    ) {
-                      final idx = entry.key;
-                      final controllers = entry.value;
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: controllers.key,
-                              decoration: const InputDecoration(
-                                labelText: 'Key',
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: controllers.value,
-                              decoration: const InputDecoration(
-                                labelText: 'Value',
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed:
-                                () => widget.removeFfmpegOptionField(
-                                  widget.streamIdx,
-                                  idx,
-                                ),
-                            tooltip: 'Remove option',
-                          ),
-                        ],
-                      );
-                    }),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Option'),
-                        onPressed:
-                            () => widget.addFfmpegOptionField(widget.streamIdx),
-                      ),
-                    ),
-                  ],
-                ),
+            const SizedBox(height: 16.0),
+            ExpansionTile(
+              title: const Text('FFmpeg Options'),
+              childrenPadding: const EdgeInsets.only(
+                left: 16.0,
+                right: 16.0,
+                bottom: 16.0,
               ),
+              children: [
+                ...stream.ffmpegOptionControllers.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final controllers = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controllers.key,
+                            decoration: const InputDecoration(
+                              labelText: 'Option Key',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        Expanded(
+                          child: TextField(
+                            controller: controllers.value,
+                            decoration: const InputDecoration(
+                              labelText: 'Option Value',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed:
+                              () => widget.removeFfmpegOptionField(
+                                widget.streamIdx,
+                                idx,
+                              ),
+                          tooltip: 'Remove option',
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Option'),
+                    onPressed:
+                        () => widget.addFfmpegOptionField(widget.streamIdx),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16.0),
+            Expanded(
+              child:
+                  stream.isStreaming
+                      ? _VideoPlayerWithControls(
+                        url: stream.urlController.text,
+                        autoRestart: stream.autoRestart,
+                        ffmpegOptions: widget.collectFfmpegOptions(
+                          stream.ffmpegOptionControllers,
+                        ),
+                      )
+                      : const Center(
+                        child: Text(
+                          'Stream is stopped',
+                          style: TextStyle(fontSize: 16.0, color: Colors.grey),
+                        ),
+                      ),
+            ),
+            const SizedBox(height: 16.0),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 ElevatedButton(
                   onPressed: () => widget.toggleStream(widget.streamIdx),
@@ -309,35 +334,374 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     stream.isStreaming ? 'Stop Stream' : 'Start Stream',
                   ),
                 ),
+                Row(
+                  children: [
+                    Switch(
+                      value: stream.autoRestart,
+                      onChanged: (value) {
+                        setState(() {
+                          stream.autoRestart = value;
+                        });
+                      },
+                    ),
+                    const Text('Auto Restart'),
+                  ],
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              title: const Text('Auto Restart'),
-              value: stream.autoRestart,
-              onChanged: (value) {
-                setState(() {
-                  stream.autoRestart = value;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            stream.isStreaming
-                ? SizedBox(
-                  width: double.infinity,
-                  height: 240,
-                  child: VideoPlayer.fromConfig(
-                    url: stream.urlController.text,
-                    autoRestart: stream.autoRestart,
-                    ffmpegOptions: widget.collectFfmpegOptions(
-                      stream.ffmpegOptionControllers,
-                    ),
-                  ),
-                )
-                : const Text('Stream is stopped'),
           ],
         ),
       ),
     );
+  }
+}
+
+class _VideoPlayerWithControls extends StatefulWidget {
+  final String url;
+  final bool autoRestart;
+  final Map<String, String>? ffmpegOptions;
+
+  const _VideoPlayerWithControls({
+    required this.url,
+    required this.autoRestart,
+    this.ffmpegOptions,
+  });
+
+  @override
+  State<_VideoPlayerWithControls> createState() =>
+      _VideoPlayerWithControlsState();
+}
+
+class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
+  VideoController? _controller;
+  bool _isLoading = true;
+  Duration _position = Duration.zero;
+  final Duration _duration = Duration.zero;
+  Timer? _positionTimer;
+  bool _isSeeking = false;
+  bool _isSeekable = false;
+  final double _currentStreamTime = 0.0; // Stream time in seconds
+  int?
+  _streamStartTime; // Unix timestamp of stream start time (for HLS with EXT-X-PROGRAM-DATE-TIME)
+  final TextEditingController _iso8601Controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize with current time, will be updated when we have stream time
+    _iso8601Controller.text = DateTime.now().toIso8601String();
+    _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    // Use a standard HD resolution that maintains 16:9 aspect ratio
+    final dimensions = const VideoDimensions(
+      width: 1280,
+      height: 720,
+    ); // 16:9 aspect ratio for HD resolution
+
+    final result = await VideoController.create(
+      url: widget.url,
+      dimensions: dimensions,
+      autoRestart: widget.autoRestart,
+      ffmpegOptions: widget.ffmpegOptions,
+    );
+
+    setState(() {
+      _controller = result.$1;
+      _isLoading = false;
+    });
+
+    if (_controller != null) {
+      _controller!.stateBroadcast.listen((state) {
+        if (state is StreamState_Playing) {
+          setState(() {
+            _isSeekable = state.seekable;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionTimer?.cancel();
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_controller == null) {
+      return const Center(child: Text('Failed to load video'));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: AspectRatio(
+            aspectRatio: 16 / 9, // Standard video aspect ratio
+            child: VideoPlayer.fromController(
+              controller: _controller!,
+              autoDispose: false, // Don't auto dispose since we're managing it
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: Column(
+            children: [
+              // Time display
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Position: ${_formatDuration(Duration(seconds: _currentStreamTime.floor()))}',
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      // Show absolute time when stream has EXT-X-PROGRAM-DATE-TIME
+                      if (_streamStartTime != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Stream Start: ${_formatDateTime(DateTime.fromMillisecondsSinceEpoch(_streamStartTime! * 1000, isUtc: true))}',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontSize: 10,
+                          ),
+                        ),
+                        Text(
+                          'Current Time: ${_formatDateTime(DateTime.fromMillisecondsSinceEpoch((_streamStartTime! + _currentStreamTime.floor()) * 1000, isUtc: true))}',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (_isSeekable)
+                    const Text(
+                      '✓ Seekable',
+                      style: TextStyle(color: Colors.green, fontSize: 12),
+                    )
+                  else
+                    const Text(
+                      '✗ Not Seekable',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                ],
+              ),
+              // Seek bar - show for seekable streams with known duration
+              if (_isSeekable && _duration.inMilliseconds > 0) ...[
+                const SizedBox(height: 8),
+                Slider(
+                  value:
+                      _isSeeking
+                          ? _position.inMilliseconds.toDouble()
+                          : _position.inMilliseconds.toDouble(),
+                  onChanged: (value) {
+                    setState(() {
+                      _isSeeking = true;
+                      _position = Duration(milliseconds: value.round());
+                    });
+                  },
+                  onChangeEnd: (value) async {
+                    if (_controller != null) {
+                      await _controller!.seekTo(value.toInt());
+                    }
+                    setState(() {
+                      _isSeeking = false;
+                      _position = Duration(milliseconds: value.round());
+                    });
+                  },
+                  min: 0.0,
+                  max: _duration.inMilliseconds.toDouble(),
+                  label: _formatDuration(_position),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '0:00',
+                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                    ),
+                    Text(
+                      _formatDuration(_duration),
+                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ],
+              // Seeking controls for seekable streams
+              if (_isSeekable) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // Seek backward button
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.replay_10, size: 18),
+                      label: const Text('-10s'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                      onPressed: () async {
+                        if (_controller != null) {
+                          try {
+                            await _controller!.seekTo(-10);
+                          } catch (e) {
+                            debugPrint('Error seeking backward: $e');
+                          }
+                        }
+                      },
+                    ),
+                    // Seek forward button
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.forward_10, size: 18),
+                      label: const Text('+10s'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                      onPressed: () async {
+                        if (_controller != null) {
+                          try {
+                            await _controller!.seekTo(10);
+                          } catch (e) {
+                            debugPrint('Error seeking forward: $e');
+                          }
+                        }
+                      },
+                    ),
+                    // ISO 8601 time seeking for HLS streams with program date time
+                    if (_streamStartTime != null)
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.access_time, size: 18),
+                        label: const Text('Seek to Time'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                        ),
+                        onPressed: () => _showIso8601SeekDialog(context),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showIso8601SeekDialog(BuildContext context) {
+    // Pre-populate with current stream time
+    final currentDateTime =
+        _streamStartTime != null && _currentStreamTime >= 0
+            ? DateTime.fromMillisecondsSinceEpoch(
+              (_streamStartTime! + _currentStreamTime.floor()) * 1000,
+              isUtc: true,
+            )
+            : DateTime.now().toUtc();
+
+    _iso8601Controller.text = currentDateTime.toIso8601String();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Seek to Absolute Time'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Enter an ISO 8601 timestamp to seek to a specific absolute time in the stream:',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _iso8601Controller,
+                  decoration: const InputDecoration(
+                    labelText: 'ISO 8601 Timestamp',
+                    hintText: '2025-12-04T12:00:00Z',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        // Set to stream start
+                        if (_streamStartTime != null) {
+                          _iso8601Controller.text =
+                              DateTime.fromMillisecondsSinceEpoch(
+                                _streamStartTime! * 1000,
+                                isUtc: true,
+                              ).toIso8601String();
+                        }
+                      },
+                      child: const Text('Stream Start'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        // Set to current time
+                        if (_streamStartTime != null &&
+                            _currentStreamTime >= 0) {
+                          _iso8601Controller.text =
+                              DateTime.fromMillisecondsSinceEpoch(
+                                (_streamStartTime! +
+                                        _currentStreamTime.floor()) *
+                                    1000,
+                                isUtc: true,
+                              ).toIso8601String();
+                        }
+                      },
+                      child: const Text('Current'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  String _formatDateTime(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')} UTC';
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
   }
 }

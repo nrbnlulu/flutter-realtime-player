@@ -7,7 +7,10 @@ use std::{
 use log::{debug, info};
 
 use crate::{
-    core::{software_decoder::SoftwareDecoder, types::DartUpdateStream},
+    core::{
+        software_decoder::SoftwareDecoder,
+        types::{DartEventsStream, DartStateStream},
+    },
     utils::invoke_on_platform_main_thread,
 };
 
@@ -15,18 +18,29 @@ use super::{software_decoder::SharedSendableTexture, types};
 
 pub fn init() -> anyhow::Result<()> {
     ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))?;
+    info!("ffmpeg initialized: version {}", ffmpeg::version::version());
     ffmpeg::util::log::set_level(ffmpeg::util::log::Level::Fatal);
     Ok(())
 }
 
-struct SessionContext {
+pub struct SessionContext {
     pub decoder: Arc<SoftwareDecoder>,
     pub engine_handle: i64,
     pub sendable_texture: SharedSendableTexture,
     pub last_alive_mark: std::time::SystemTime,
+    pub events_sink: Option<DartEventsStream>,
+}
+impl SessionContext {
+    pub fn set_events_sink(&mut self, sink: DartEventsStream) {
+        self.events_sink = Some(sink)
+    }
+
+    pub fn seek(&self, ts: i64) -> anyhow::Result<()> {
+        self.decoder.seek(ts)
+    }
 }
 lazy_static::lazy_static! {
-static ref SESSION_CACHE: Mutex<HashMap<i64, SessionContext>> = Mutex::new(HashMap::new());
+pub static ref SESSION_CACHE: Mutex<HashMap<i64, SessionContext>> = Mutex::new(HashMap::new());
 }
 pub fn stream_alive_tester_task() {
     loop {
@@ -63,7 +77,7 @@ pub fn create_new_playable(
     session_id: i64,
     engine_handle: i64,
     video_info: types::VideoInfo,
-    update_stream: DartUpdateStream,
+    update_stream: DartStateStream,
     ffmpeg_options: Option<HashMap<String, String>>,
 ) -> anyhow::Result<()> {
     let (decoding_manager, payload_holder) =
@@ -77,6 +91,9 @@ pub fn create_new_playable(
             Ok((texture.into_sendable_texture(), texture_id))
         })?;
 
+    // Set the sendable texture reference in the decoder for immediate updates during resize
+    decoding_manager.set_sendable_texture(Arc::downgrade(&sendable_texture));
+
     SESSION_CACHE.lock().unwrap().insert(
         session_id,
         SessionContext {
@@ -84,6 +101,7 @@ pub fn create_new_playable(
             engine_handle,
             sendable_texture: sendable_texture.clone(),
             last_alive_mark: std::time::SystemTime::now(),
+            events_sink: None,
         },
     );
 
@@ -145,5 +163,14 @@ pub fn destroy_stream_session(session_id: i64) {
         });
     } else {
         info!("No stream session found for session id: {}", session_id);
+    }
+}
+
+pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
+    let session_cache = SESSION_CACHE.lock().unwrap();
+    if let Some(ctx) = session_cache.get(&session_id) {
+        ctx.decoder.resize_stream(width, height)
+    } else {
+        Err(anyhow::anyhow!("Session not found: {}", session_id))
     }
 }

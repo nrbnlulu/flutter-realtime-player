@@ -1,4 +1,7 @@
-use crate::{dart_types::StreamState, frb_generated::StreamSink};
+use crate::{
+    dart_types::{StreamEvent, StreamState},
+    frb_generated::StreamSink,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[flutter_rust_bridge::frb(sync)]
@@ -35,4 +38,5 @@ impl VideoInfo {
     }
 }
 
-pub type DartUpdateStream = StreamSink<StreamState>;
+pub type DartStateStream = StreamSink<StreamState>;
+pub type DartEventsStream = StreamSink<StreamEvent>;

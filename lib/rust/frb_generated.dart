@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 603167255;
+  int get rustContentHash => -933152703;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -104,6 +104,21 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiSimpleMarkSessionAlive({
     required PlatformInt64 sessionId,
+  });
+
+  Stream<StreamEvent> crateApiSimpleRegisterToStreamEventsSink({
+    required PlatformInt64 sessionId,
+  });
+
+  Future<void> crateApiSimpleResizeStreamSession({
+    required PlatformInt64 sessionId,
+    required int width,
+    required int height,
+  });
+
+  Future<void> crateApiSimpleSeekToTimestamp({
+    required PlatformInt64 sessionId,
+    required PlatformInt64 ts,
   });
 }
 
@@ -351,6 +366,116 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["sessionId"],
       );
 
+  @override
+  Stream<StreamEvent> crateApiSimpleRegisterToStreamEventsSink({
+    required PlatformInt64 sessionId,
+  }) {
+    final sink = RustStreamSink<StreamEvent>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_i_64(sessionId, serializer);
+            sse_encode_StreamSink_stream_event_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 8,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateApiSimpleRegisterToStreamEventsSinkConstMeta,
+          argValues: [sessionId, sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiSimpleRegisterToStreamEventsSinkConstMeta =>
+      const TaskConstMeta(
+        debugName: "register_to_stream_events_sink",
+        argNames: ["sessionId", "sink"],
+      );
+
+  @override
+  Future<void> crateApiSimpleResizeStreamSession({
+    required PlatformInt64 sessionId,
+    required int width,
+    required int height,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(sessionId, serializer);
+          sse_encode_u_32(width, serializer);
+          sse_encode_u_32(height, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSimpleResizeStreamSessionConstMeta,
+        argValues: [sessionId, width, height],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleResizeStreamSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "resize_stream_session",
+        argNames: ["sessionId", "width", "height"],
+      );
+
+  @override
+  Future<void> crateApiSimpleSeekToTimestamp({
+    required PlatformInt64 sessionId,
+    required PlatformInt64 ts,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(sessionId, serializer);
+          sse_encode_i_64(ts, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSimpleSeekToTimestampConstMeta,
+        argValues: [sessionId, ts],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleSeekToTimestampConstMeta =>
+      const TaskConstMeta(
+        debugName: "seek_to_timestamp",
+        argNames: ["sessionId", "ts"],
+      );
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -365,6 +490,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         raw,
       ).map((e) => MapEntry(e.$1, e.$2)),
     );
+  }
+
+  @protected
+  RustStreamSink<StreamEvent> dco_decode_StreamSink_stream_event_Sse(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
   }
 
   @protected
@@ -446,6 +579,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  StreamEvent dco_decode_stream_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return StreamEvent_Error(dco_decode_String(raw[1]));
+      case 1:
+        return StreamEvent_CurrentTime(dco_decode_i_64(raw[1]));
+      case 2:
+        return StreamEvent_OriginVideoSize(
+          width: dco_decode_u_64(raw[1]),
+          height: dco_decode_u_64(raw[2]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
   StreamState dco_decode_stream_state(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
@@ -454,7 +605,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 1:
         return StreamState_Loading();
       case 2:
-        return StreamState_Playing(textureId: dco_decode_i_64(raw[1]));
+        return StreamState_Playing(
+          textureId: dco_decode_i_64(raw[1]),
+          seekable: dco_decode_bool(raw[2]),
+        );
       case 3:
         return StreamState_Stopped();
       default:
@@ -466,6 +620,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int dco_decode_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
   }
 
   @protected
@@ -521,6 +681,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_record_string_string(deserializer);
     return Map.fromEntries(inner.map((e) => MapEntry(e.$1, e.$2)));
+  }
+
+  @protected
+  RustStreamSink<StreamEvent> sse_decode_StreamSink_stream_event_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
   }
 
   @protected
@@ -624,6 +792,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  StreamEvent sse_decode_stream_event(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_field0 = sse_decode_String(deserializer);
+        return StreamEvent_Error(var_field0);
+      case 1:
+        var var_field0 = sse_decode_i_64(deserializer);
+        return StreamEvent_CurrentTime(var_field0);
+      case 2:
+        var var_width = sse_decode_u_64(deserializer);
+        var var_height = sse_decode_u_64(deserializer);
+        return StreamEvent_OriginVideoSize(
+          width: var_width,
+          height: var_height,
+        );
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
   StreamState sse_decode_stream_state(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -636,7 +828,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return StreamState_Loading();
       case 2:
         var var_textureId = sse_decode_i_64(deserializer);
-        return StreamState_Playing(textureId: var_textureId);
+        var var_seekable = sse_decode_bool(deserializer);
+        return StreamState_Playing(
+          textureId: var_textureId,
+          seekable: var_seekable,
+        );
       case 3:
         return StreamState_Stopped();
       default:
@@ -648,6 +844,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
+  }
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
@@ -703,6 +905,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_record_string_string(
       self.entries.map((e) => (e.key, e.value)).toList(),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_StreamSink_stream_event_Sse(
+    RustStreamSink<StreamEvent> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_stream_event,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
       serializer,
     );
   }
@@ -819,6 +1038,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_stream_event(StreamEvent self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case StreamEvent_Error(field0: final field0):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(field0, serializer);
+      case StreamEvent_CurrentTime(field0: final field0):
+        sse_encode_i_32(1, serializer);
+        sse_encode_i_64(field0, serializer);
+      case StreamEvent_OriginVideoSize(
+        width: final width,
+        height: final height,
+      ):
+        sse_encode_i_32(2, serializer);
+        sse_encode_u_64(width, serializer);
+        sse_encode_u_64(height, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_stream_state(StreamState self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
@@ -827,9 +1066,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(field0, serializer);
       case StreamState_Loading():
         sse_encode_i_32(1, serializer);
-      case StreamState_Playing(textureId: final textureId):
+      case StreamState_Playing(
+        textureId: final textureId,
+        seekable: final seekable,
+      ):
         sse_encode_i_32(2, serializer);
         sse_encode_i_64(textureId, serializer);
+        sse_encode_bool(seekable, serializer);
       case StreamState_Stopped():
         sse_encode_i_32(3, serializer);
     }
@@ -839,6 +1082,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint32(self);
+  }
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
   }
 
   @protected

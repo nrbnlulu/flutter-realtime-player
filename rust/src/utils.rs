@@ -45,3 +45,10 @@ where
         }
     }
 }
+
+pub mod ffmpeg_compat {
+
+    pub fn av_q2d(a: ffmpeg::Rational) -> f64 {
+        a.numerator() as f64 / a.denominator() as f64
+    }
+}

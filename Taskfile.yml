@@ -1,19 +1,35 @@
 version: "3"
 
+vars:
+    DART_BIN:
+        sh: |
+            if command -v fvm &> /dev/null; then
+              echo "fvm dart"
+            else
+              echo "dart"
+            fi
+    FLUTTER_BIN:
+        sh: |
+            if command -v fvm &> /dev/null; then
+              echo "fvm flutter"
+            else
+              echo "flutter"
+            fi
+
 tasks:
-  codegen:
-    cmds:
-      - dart run build_runner build --delete-conflicting-outputs
-  test:
-    cmds:
-      - flutter test --fail-fast --reporter=compact --coverage
-  lint:
-    cmds:
-      - cargo fix --allow-dirty
-      - cargo check
-      - flutter analyze --disable-analytics ./lib
-      - dart fix --apply
-  fmt:
-    cmds:
-      - cargo fmt
-      - dart format ./lib ./example 
+    codegen:
+        cmds:
+            - "{{.DART_BIN}} run build_runner build --delete-conflicting-outputs"
+    test:
+        cmds:
+            - "{{.FLUTTER_BIN}} test --fail-fast --reporter=compact --coverage"
+    lint:
+        cmds:
+            - cargo fix --allow-dirty
+            - cargo check
+            - "{{.FLUTTER_BIN}} analyze --disable-analytics ./lib"
+            - "{{.DART_BIN}} fix --apply"
+    fmt:
+        cmds:
+            - cargo fmt
+            - "{{.DART_BIN}} format ./lib ./example"

@@ -21,7 +21,6 @@ Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
 Future<PlatformInt64> createNewSession() =>
     RustLib.instance.api.crateApiSimpleCreateNewSession();
 
-/// returns a session id that represents a playing session in rust
 Stream<StreamState> createNewPlayable({
   required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
@@ -32,6 +31,20 @@ Stream<StreamState> createNewPlayable({
   engineHandle: engineHandle,
   videoInfo: videoInfo,
   ffmpegOptions: ffmpegOptions,
+);
+
+Future<void> seekToTimestamp({
+  required PlatformInt64 sessionId,
+  required PlatformInt64 ts,
+}) => RustLib.instance.api.crateApiSimpleSeekToTimestamp(
+  sessionId: sessionId,
+  ts: ts,
+);
+
+Stream<StreamEvent> registerToStreamEventsSink({
+  required PlatformInt64 sessionId,
+}) => RustLib.instance.api.crateApiSimpleRegisterToStreamEventsSink(
+  sessionId: sessionId,
 );
 
 /// marks the session as required by the ui
@@ -47,3 +60,13 @@ Future<void> destroyStreamSession({required PlatformInt64 sessionId}) => RustLib
     .instance
     .api
     .crateApiSimpleDestroyStreamSession(sessionId: sessionId);
+
+Future<void> resizeStreamSession({
+  required PlatformInt64 sessionId,
+  required int width,
+  required int height,
+}) => RustLib.instance.api.crateApiSimpleResizeStreamSession(
+  sessionId: sessionId,
+  width: width,
+  height: height,
+);
