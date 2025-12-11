@@ -137,8 +137,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
               crossAxisCount: 2,
               crossAxisSpacing: 16.0,
               mainAxisSpacing: 16.0,
-              childAspectRatio:
-                  16 / 11, // Adjusted to account for controls below video
+              childAspectRatio: 1, // Square shape to allow flexible sizing
             ),
             itemCount: _streams.length,
             addAutomaticKeepAlives: true,
@@ -221,138 +220,243 @@ class _StreamGridItemState extends State<_StreamGridItem>
   Widget build(BuildContext context) {
     super.build(context);
     final stream = widget.stream;
-    return Card(
-      elevation: 4.0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+
+    if (stream.isStreaming) {
+      // When streaming, show only the video covering the whole grid item
+      return Card(
+        elevation: 4.0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: stream.urlController,
-                    decoration: const InputDecoration(
-                      labelText: 'Stream URL (e.g., rtsp://...)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: 'Remove this stream',
-                  onPressed: () => widget.removeStream(widget.streamIdx),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16.0),
-            ExpansionTile(
-              title: const Text('FFmpeg Options'),
-              childrenPadding: const EdgeInsets.only(
-                left: 16.0,
-                right: 16.0,
-                bottom: 16.0,
+            // Full-screen video player
+            _VideoPlayerWithControls(
+              url: stream.urlController.text,
+              autoRestart: stream.autoRestart,
+              ffmpegOptions: widget.collectFfmpegOptions(
+                stream.ffmpegOptionControllers,
               ),
-              children: [
-                ...stream.ffmpegOptionControllers.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final controllers = entry.value;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: controllers.key,
-                            decoration: const InputDecoration(
-                              labelText: 'Option Key',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Expanded(
-                          child: TextField(
-                            controller: controllers.value,
-                            decoration: const InputDecoration(
-                              labelText: 'Option Value',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline),
-                          onPressed:
-                              () => widget.removeFfmpegOptionField(
-                                widget.streamIdx,
-                                idx,
-                              ),
-                          tooltip: 'Remove option',
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Option'),
-                    onPressed:
-                        () => widget.addFfmpegOptionField(widget.streamIdx),
-                  ),
-                ),
-              ],
             ),
-            const SizedBox(height: 16.0),
-            Expanded(
-              child:
-                  stream.isStreaming
-                      ? _VideoPlayerWithControls(
-                        url: stream.urlController.text,
-                        autoRestart: stream.autoRestart,
-                        ffmpegOptions: widget.collectFfmpegOptions(
-                          stream.ffmpegOptionControllers,
-                        ),
-                      )
-                      : const Center(
-                        child: Text(
-                          'Stream is stopped',
-                          style: TextStyle(fontSize: 16.0, color: Colors.grey),
-                        ),
-                      ),
-            ),
-            const SizedBox(height: 16.0),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                ElevatedButton(
-                  onPressed: () => widget.toggleStream(widget.streamIdx),
-                  child: Text(
-                    stream.isStreaming ? 'Stop Stream' : 'Start Stream',
-                  ),
+            // Overlay controls
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                Row(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Switch(
-                      value: stream.autoRestart,
-                      onChanged: (value) {
-                        setState(() {
-                          stream.autoRestart = value;
-                        });
-                      },
+                    // Stop Stream Button
+                    IconButton(
+                      icon: const Icon(Icons.stop, color: Colors.white),
+                      tooltip: 'Stop Stream',
+                      onPressed: () => widget.toggleStream(widget.streamIdx),
                     ),
-                    const Text('Auto Restart'),
+                    // Remove Stream Button
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.white),
+                      tooltip: 'Remove Stream',
+                      onPressed: () => widget.removeStream(widget.streamIdx),
+                    ),
                   ],
                 ),
-              ],
+              ),
             ),
           ],
         ),
-      ),
-    );
+      );
+    } else {
+      // When not streaming, show full configuration interface
+      return Card(
+        elevation: 4.0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // URL input row with remove button
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: stream.urlController,
+                      decoration: const InputDecoration(
+                        labelText: 'Stream URL (e.g., rtsp://...)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Remove this stream',
+                    onPressed: () => widget.removeStream(widget.streamIdx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16.0),
+              // FFmpeg options expansion
+              ExpansionTile(
+                title: const Text('FFmpeg Options'),
+                childrenPadding: const EdgeInsets.only(
+                  left: 16.0,
+                  right: 16.0,
+                  bottom: 16.0,
+                ),
+                children: [
+                  ...stream.ffmpegOptionControllers.asMap().entries.map((
+                    entry,
+                  ) {
+                    final idx = entry.key;
+                    final controllers = entry.value;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: controllers.key,
+                              decoration: const InputDecoration(
+                                labelText: 'Option Key',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8.0),
+                          Expanded(
+                            child: TextField(
+                              controller: controllers.value,
+                              decoration: const InputDecoration(
+                                labelText: 'Option Value',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed:
+                                () => widget.removeFfmpegOptionField(
+                                  widget.streamIdx,
+                                  idx,
+                                ),
+                            tooltip: 'Remove option',
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Option'),
+                      onPressed:
+                          () => widget.addFfmpegOptionField(widget.streamIdx),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16.0),
+              // Video player area - takes maximum space
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Video player
+                    stream.isStreaming
+                        ? _VideoPlayerWithControls(
+                          url: stream.urlController.text,
+                          autoRestart: stream.autoRestart,
+                          ffmpegOptions: widget.collectFfmpegOptions(
+                            stream.ffmpegOptionControllers,
+                          ),
+                        )
+                        : const Center(
+                          child: Text(
+                            'Stream is stopped',
+                            style: TextStyle(
+                              fontSize: 16.0,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                    // Overlay buttons when video is playing
+                    if (stream.isStreaming)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Stop Stream Button
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.stop,
+                                  color: Colors.white,
+                                ),
+                                tooltip: 'Stop Stream',
+                                onPressed:
+                                    () => widget.toggleStream(widget.streamIdx),
+                              ),
+                              // Remove Stream Button
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete,
+                                  color: Colors.white,
+                                ),
+                                tooltip: 'Remove Stream',
+                                onPressed:
+                                    () => widget.removeStream(widget.streamIdx),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Controls at bottom when not streaming
+              if (!stream.isStreaming) const SizedBox(height: 16.0),
+              if (!stream.isStreaming)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => widget.toggleStream(widget.streamIdx),
+                      child: const Text('Start Stream'),
+                    ),
+                    Row(
+                      children: [
+                        Switch(
+                          value: stream.autoRestart,
+                          onChanged: (value) {
+                            setState(() {
+                              stream.autoRestart = value;
+                            });
+                          },
+                        ),
+                        const Text('Auto Restart'),
+                      ],
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -403,7 +507,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
     final result = await VideoController.create(
       url: widget.url,
       dimensions: dimensions,
-      autoRestart: widget.autoRestart,
+      autoRestart: true,
       ffmpegOptions: widget.ffmpegOptions,
     );
 

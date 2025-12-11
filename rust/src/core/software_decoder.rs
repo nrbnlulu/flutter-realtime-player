@@ -371,12 +371,12 @@ impl SoftwareDecoder {
 
             if let Err(e) = self.initialize_stream() {
                 let error_msg =
-                    format!("Stream initialization failed: {}, reinitializing in 2s", e);
+                    format!("Stream initialization failed: {}, reinitializing in 1s", e);
                 error!("{} for uri: {}", error_msg, &self.video_info.uri);
                 dart_update_stream
                     .add(StreamState::Error(error_msg))
                     .log_err();
-                thread::sleep(Duration::from_millis(2000));
+                thread::sleep(Duration::from_millis(1000));
                 continue;
             }
 
@@ -389,14 +389,14 @@ impl SoftwareDecoder {
                     if self.video_info.auto_restart {
                         dart_update_stream.add(StreamState::Stopped).log_err();
                         info!("Stream EOF, restarting...");
-                        thread::sleep(Duration::from_millis(800));
+                        thread::sleep(Duration::from_millis(100));
                     } else {
                         break;
                     }
                 }
                 StreamExitResult::Error => {
                     info!("Stream error, reinitializing...");
-                    thread::sleep(Duration::from_millis(2000));
+                    thread::sleep(Duration::from_millis(100));
                 }
             }
         }
@@ -443,7 +443,8 @@ impl SoftwareDecoder {
                     }
                 };
                 let framerate = ctx.framerate;
-                if framerate > 0 {
+                // for rtsp we don't need to sleep
+                if framerate > 0 && !self.video_info.uri.starts_with("rtsp") {
                     // 1. Calculate the total number of nanoseconds in one second: 1,000,000,000
                     // 2. Divide this by the framerate to get the duration per frame in nanoseconds.
                     let nanos_per_frame = 1_000_000_000 / framerate;
@@ -487,7 +488,6 @@ impl SoftwareDecoder {
                         errno: ffmpeg::error::EAGAIN,
                     }) => {
                         trace!("EAGAIN received, retrying packet read");
-                        thread::sleep(Duration::from_millis(10)); // Avoid busy-looping
                         continue;
                     }
                     Err(e) => {
