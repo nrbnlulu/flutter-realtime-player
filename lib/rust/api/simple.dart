@@ -33,6 +33,20 @@ Stream<StreamState> createNewPlayable({
   ffmpegOptions: ffmpegOptions,
 );
 
+Stream<StreamState> createTsdpPlayable({
+  required PlatformInt64 sessionId,
+  required PlatformInt64 engineHandle,
+  required TsdpEndpoint endpoint,
+  required VideoInfo videoInfo,
+  Map<String, String>? ffmpegOptions,
+}) => RustLib.instance.api.crateApiSimpleCreateTsdpPlayable(
+  sessionId: sessionId,
+  engineHandle: engineHandle,
+  endpoint: endpoint,
+  videoInfo: videoInfo,
+  ffmpegOptions: ffmpegOptions,
+);
+
 Future<void> seekToTimestamp({
   required PlatformInt64 sessionId,
   required PlatformInt64 ts,

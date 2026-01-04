@@ -5,7 +5,7 @@ use log::{debug, info, trace};
 use crate::{
     core::{
         fluttersink::{self, SESSION_CACHE},
-        types::VideoInfo,
+        types::{TsdpEndpoint, VideoInfo},
         IS_INITIALIZED,
     },
     dart_types::{StreamEvent, StreamState},
@@ -58,6 +58,31 @@ pub fn create_new_playable(
     crate::core::fluttersink::create_new_playable(
         session_id,
         engine_handle,
+        video_info,
+        sink.clone(),
+        ffmpeg_options,
+    )?;
+    Ok(())
+}
+
+pub fn create_tsdp_playable(
+    session_id: i64,
+    engine_handle: i64,
+    endpoint: TsdpEndpoint,
+    video_info: VideoInfo,
+    ffmpeg_options: Option<HashMap<String, String>>,
+    sink: StreamSink<StreamState>,
+) -> anyhow::Result<()> {
+    trace!(
+        "create_tsdp_playable was called with engine_handle: {}, source_id: {}, session_id: {}",
+        engine_handle,
+        endpoint.source_id.as_str(),
+        session_id
+    );
+    crate::core::fluttersink::create_tsdp_playable(
+        session_id,
+        engine_handle,
+        endpoint,
         video_info,
         sink.clone(),
         ffmpeg_options,

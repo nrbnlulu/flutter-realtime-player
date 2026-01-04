@@ -6,6 +6,31 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+class TsdpEndpoint {
+  final String baseUrl;
+  final String sourceId;
+  final int? clientPort;
+
+  const TsdpEndpoint({
+    required this.baseUrl,
+    required this.sourceId,
+    this.clientPort,
+  });
+
+  @override
+  int get hashCode =>
+      baseUrl.hashCode ^ sourceId.hashCode ^ clientPort.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TsdpEndpoint &&
+          runtimeType == other.runtimeType &&
+          baseUrl == other.baseUrl &&
+          sourceId == other.sourceId &&
+          clientPort == other.clientPort;
+}
+
 class VideoDimensions {
   final int width;
   final int height;

@@ -3,7 +3,8 @@
 use ffmpeg::Rescale;
 use std::{
     collections::HashMap,
-    fmt,
+    ffi::{c_void, CString},
+    fmt, ptr,
     sync::{atomic::AtomicBool, Arc, Mutex, Weak},
     thread,
     time::Duration,
@@ -148,9 +149,51 @@ struct DecodingContext {
     input_ctx: ffmpeg::format::context::Input,
     video_stream_index: usize,
     decoder: ffmpeg::decoder::Video,
-    scaler: ffmpeg::software::scaling::Context,
+    scaler: Option<ffmpeg::software::scaling::Context>,
     framerate: u32,
     stream_start_time: Option<i64>, // Unix timestamp in seconds when stream started (from #EXT-X-PROGRAM-DATE-TIME)
+    custom_io: Option<CustomIoHandle>,
+}
+
+struct SdpIoContext {
+    data: Arc<Vec<u8>>,
+    position: usize,
+}
+
+struct CustomIoHandle {
+    avio_ctx: *mut ffmpeg::ffi::AVIOContext,
+    opaque: *mut SdpIoContext,
+}
+
+impl Drop for CustomIoHandle {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.avio_ctx.is_null() {
+                ffmpeg::ffi::avio_context_free(&mut self.avio_ctx);
+            }
+            if !self.opaque.is_null() {
+                drop(Box::from_raw(self.opaque));
+                self.opaque = ptr::null_mut();
+            }
+        }
+    }
+}
+
+unsafe extern "C" fn read_packet(opaque: *mut c_void, buf: *mut u8, buf_size: i32) -> i32 {
+    if opaque.is_null() || buf.is_null() || buf_size <= 0 {
+        return ffmpeg::ffi::AVERROR_EOF;
+    }
+    let ctx = &mut *(opaque as *mut SdpIoContext);
+    let remaining = ctx.data.len().saturating_sub(ctx.position);
+    if remaining == 0 {
+        return ffmpeg::ffi::AVERROR_EOF;
+    }
+    let to_copy = remaining.min(buf_size as usize);
+    unsafe {
+        ptr::copy_nonoverlapping(ctx.data.as_ptr().add(ctx.position), buf, to_copy);
+    }
+    ctx.position += to_copy;
+    to_copy as i32
 }
 
 impl fmt::Debug for DecodingContext {
@@ -159,6 +202,7 @@ impl fmt::Debug for DecodingContext {
             .field("video_stream_index", &self.video_stream_index)
             .field("framerate", &self.framerate)
             .field("stream_start_time", &self.stream_start_time)
+            .field("custom_io", &self.custom_io.is_some())
             .field("decoder", &self.decoder.id())
             .finish()
     }
@@ -182,6 +226,7 @@ pub struct SoftwareDecoder {
     seekable: Arc<AtomicBool>, // Whether the stream is seekable
     output_dimensions: Arc<Mutex<types::VideoDimensions>>, // Track current output dimensions
     sendable_texture: Arc<Mutex<Option<WeakSendableTexture>>>,
+    sdp_data: Option<Arc<Vec<u8>>>,
 }
 unsafe impl Send for SoftwareDecoder {}
 unsafe impl Sync for SoftwareDecoder {}
@@ -252,6 +297,7 @@ impl SoftwareDecoder {
         video_info: &types::VideoInfo,
         session_id: i64,
         ffmpeg_options: Option<HashMap<String, String>>,
+        sdp_data: Option<Arc<Vec<u8>>>,
     ) -> (Arc<Self>, Arc<PayloadHolder>) {
         let payload_holder = Arc::new(PayloadHolder::new());
         let self_ = Arc::new(Self {
@@ -264,6 +310,7 @@ impl SoftwareDecoder {
             seekable: Arc::new(AtomicBool::new(false)),
             output_dimensions: Arc::new(Mutex::new(video_info.dimensions.clone())),
             sendable_texture: Arc::new(Mutex::new(None)),
+            sdp_data,
         });
         (self_, payload_holder)
     }
@@ -276,6 +323,92 @@ impl SoftwareDecoder {
         }
     }
 
+    fn open_input_with_sdp_data(
+        sdp_data: Arc<Vec<u8>>,
+        options: ffmpeg::Dictionary,
+    ) -> Result<(ffmpeg::format::context::Input, Option<CustomIoHandle>), ffmpeg::Error> {
+        unsafe {
+            info!(
+                "Initializing SDP input with custom IO ({} bytes)",
+                sdp_data.len()
+            );
+            let buffer_size = 4096;
+            let buffer = ffmpeg::ffi::av_malloc(buffer_size) as *mut u8;
+            if buffer.is_null() {
+                return Err(ffmpeg::Error::Unknown);
+            }
+
+            let opaque = Box::into_raw(Box::new(SdpIoContext {
+                data: sdp_data,
+                position: 0,
+            }));
+            let mut avio_ctx = ffmpeg::ffi::avio_alloc_context(
+                buffer,
+                buffer_size as i32,
+                0,
+                opaque as *mut c_void,
+                Some(read_packet),
+                None,
+                None,
+            );
+            if avio_ctx.is_null() {
+                ffmpeg::ffi::av_free(buffer as *mut c_void);
+                drop(Box::from_raw(opaque));
+                return Err(ffmpeg::Error::Unknown);
+            }
+
+            let mut fmt_ctx = ffmpeg::ffi::avformat_alloc_context();
+            if fmt_ctx.is_null() {
+                ffmpeg::ffi::avio_context_free(&mut avio_ctx);
+                drop(Box::from_raw(opaque));
+                return Err(ffmpeg::Error::Unknown);
+            }
+
+            (*fmt_ctx).pb = avio_ctx;
+            (*fmt_ctx).flags |= ffmpeg::ffi::AVFMT_FLAG_CUSTOM_IO;
+
+            let fmt_name = CString::new("sdp").unwrap();
+            let iformat = ffmpeg::ffi::av_find_input_format(fmt_name.as_ptr());
+            if iformat.is_null() {
+                error!("Failed to find SDP demuxer");
+                ffmpeg::ffi::avformat_free_context(fmt_ctx);
+                ffmpeg::ffi::avio_context_free(&mut avio_ctx);
+                drop(Box::from_raw(opaque));
+                return Err(ffmpeg::Error::InvalidData);
+            }
+
+            let mut opts = options.disown();
+            let res =
+                ffmpeg::ffi::avformat_open_input(&mut fmt_ctx, ptr::null(), iformat, &mut opts);
+            ffmpeg::Dictionary::own(opts);
+            if res < 0 {
+                error!(
+                    "avformat_open_input failed for SDP: {}",
+                    ffmpeg::Error::from(res)
+                );
+                ffmpeg::ffi::avformat_free_context(fmt_ctx);
+                ffmpeg::ffi::avio_context_free(&mut avio_ctx);
+                drop(Box::from_raw(opaque));
+                return Err(ffmpeg::Error::from(res));
+            }
+
+            let res_info = ffmpeg::ffi::avformat_find_stream_info(fmt_ctx, ptr::null_mut());
+            if res_info < 0 {
+                error!(
+                    "avformat_find_stream_info failed for SDP: {}",
+                    ffmpeg::Error::from(res_info)
+                );
+                ffmpeg::ffi::avformat_close_input(&mut fmt_ctx);
+                ffmpeg::ffi::avio_context_free(&mut avio_ctx);
+                drop(Box::from_raw(opaque));
+                return Err(ffmpeg::Error::from(res_info));
+            }
+
+            let handle = CustomIoHandle { avio_ctx, opaque };
+            Ok((ffmpeg::format::context::Input::wrap(fmt_ctx), Some(handle)))
+        }
+    }
+
     pub fn initialize_stream(&self) -> Result<(), ffmpeg::Error> {
         trace!("Starting ffmpeg session for {}", &self.video_info.uri);
         let mut option_dict = ffmpeg::Dictionary::new();
@@ -284,7 +417,17 @@ impl SoftwareDecoder {
                 option_dict.set(key, value);
             }
         }
-        let ictx = ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?;
+        if self.sdp_data.is_some() {
+            info!("Using SDP custom IO for {}", &self.video_info.uri);
+        }
+        let (ictx, custom_io) = if let Some(sdp_data) = self.sdp_data.as_ref() {
+            Self::open_input_with_sdp_data(Arc::clone(sdp_data), option_dict)?
+        } else {
+            (
+                ffmpeg::format::input_with_dictionary(&self.video_info.uri, option_dict)?,
+                None,
+            )
+        };
         let starttimerealtime = unsafe { (*ictx.as_ptr()).start_time_realtime } / 100_0000;
         let input = ictx
             .streams()
@@ -295,26 +438,42 @@ impl SoftwareDecoder {
         let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
 
         let decoder = context_decoder.decoder().video()?;
-        Self::validate_stream_compatibility(&decoder)?;
+        let decoder_width = decoder.width();
+        let decoder_height = decoder.height();
+        if decoder_width == 0 || decoder_height == 0 {
+            if self.sdp_data.is_none() {
+                error!(
+                    "Invalid frame dimensions during init: {}x{}",
+                    decoder_width, decoder_height
+                );
+                return Err(ffmpeg::Error::InvalidData);
+            }
+            warn!(
+                "Decoder dimensions unknown during init ({}x{}); will init scaler on first frame",
+                decoder_width, decoder_height
+            );
+        } else {
+            Self::validate_stream_compatibility(&decoder)?;
+        }
 
-        let src_format = decoder.format();
-        let dst_format = ffmpeg::format::Pixel::RGBA;
-        let src_width = decoder.width();
-        let src_height = decoder.height();
         let target_dims = self
             .output_dimensions
             .lock()
             .map(|d| d.clone())
             .unwrap_or_else(|_| self.video_info.dimensions.clone());
 
-        let scaler = Self::create_scaler_with_fallbacks(
-            src_format,
-            src_width,
-            src_height,
-            dst_format,
-            target_dims.width,
-            target_dims.height,
-        )?;
+        let scaler = if decoder_width == 0 || decoder_height == 0 {
+            None
+        } else {
+            Some(Self::create_scaler_with_fallbacks(
+                decoder.format(),
+                decoder_width,
+                decoder_height,
+                ffmpeg::format::Pixel::RGBA,
+                target_dims.width,
+                target_dims.height,
+            )?)
+        };
 
         let avg_frame_rate = input.avg_frame_rate();
         let frame_rate = if avg_frame_rate.denominator() != 0 {
@@ -330,6 +489,7 @@ impl SoftwareDecoder {
             scaler,
             framerate: frame_rate,
             stream_start_time: Some(starttimerealtime),
+            custom_io,
         };
         debug!(
             "Created context {:?} for url: {}",
@@ -461,11 +621,7 @@ impl SoftwareDecoder {
                                 error!("Error sending packet to decoder: {}", err);
                             } else {
                                 let _ = self
-                                    .on_new_sample_rtsp(
-                                        &mut ctx.decoder,
-                                        &mut ctx.scaler,
-                                        &mark_frame_avb,
-                                    )
+                                    .on_new_sample_rtsp(ctx, &mark_frame_avb)
                                     .inspect_err(|e| error!("on new sample err: {e}"));
                                 if !is_playing {
                                     dart_update_stream
@@ -543,17 +699,36 @@ impl SoftwareDecoder {
 
     fn on_new_sample_rtsp<F>(
         &self,
-        decoder: &mut ffmpeg::decoder::Video,
-        scaler: &mut ffmpeg::software::scaling::Context,
+        ctx: &mut DecodingContext,
         mark_frame_avb: &F,
     ) -> anyhow::Result<()>
     where
         F: Fn(),
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
-        while decoder.receive_frame(&mut decoded).is_ok() {
+        while ctx.decoder.receive_frame(&mut decoded).is_ok() {
+            if ctx.scaler.is_none() {
+                let target_dims = self
+                    .output_dimensions
+                    .lock()
+                    .map(|d| d.clone())
+                    .unwrap_or_else(|_| self.video_info.dimensions.clone());
+                let new_scaler = Self::create_scaler_with_fallbacks(
+                    decoded.format(),
+                    decoded.width(),
+                    decoded.height(),
+                    ffmpeg::format::Pixel::RGBA,
+                    target_dims.width,
+                    target_dims.height,
+                )?;
+                ctx.scaler = Some(new_scaler);
+            }
             let mut rgb_frame = ffmpeg::util::frame::Video::empty();
-            scaler.run(&decoded, &mut rgb_frame)?;
+            if let Some(ref mut scaler) = ctx.scaler {
+                scaler.run(&decoded, &mut rgb_frame)?;
+            } else {
+                return Err(anyhow::anyhow!("Scaler not initialized"));
+            }
 
             if let Some(payload_holder) = self.payload_holder.upgrade() {
                 payload_holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(rgb_frame)));
@@ -629,20 +804,29 @@ impl SoftwareDecoder {
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Decoding context not initialized"))?;
 
-        let new_scaler = Self::create_scaler_with_fallbacks(
-            ctx.decoder.format(),
-            ctx.decoder.width(),
-            ctx.decoder.height(),
-            ffmpeg::format::Pixel::RGBA,
-            new_width,
-            new_height,
-        )?;
-
-        ctx.scaler = new_scaler;
-        info!(
-            "Scaler updated to new dimensions: {}x{}",
-            new_width, new_height
-        );
+        let src_width = ctx.decoder.width();
+        let src_height = ctx.decoder.height();
+        if src_width == 0 || src_height == 0 {
+            ctx.scaler = None;
+            info!(
+                "Scaler deferred until first frame (target {}x{})",
+                new_width, new_height
+            );
+        } else {
+            let new_scaler = Self::create_scaler_with_fallbacks(
+                ctx.decoder.format(),
+                src_width,
+                src_height,
+                ffmpeg::format::Pixel::RGBA,
+                new_width,
+                new_height,
+            )?;
+            ctx.scaler = Some(new_scaler);
+            info!(
+                "Scaler updated to new dimensions: {}x{}",
+                new_width, new_height
+            );
+        }
         Ok(())
     }
 

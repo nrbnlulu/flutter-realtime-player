@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show VideoDimensions;
+    show TsdpEndpoint, VideoDimensions;
 import 'package:flutter_realtime_player/video_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
@@ -39,11 +39,17 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
   final List<_StreamConfig> _streams = [
     _StreamConfig(
       urlController: TextEditingController(text: "rtsp://your_stream_url_here"),
+      tsdpBaseUrlController: TextEditingController(
+        text: "https://your_backend_here",
+      ),
+      tsdpSourceIdController: TextEditingController(text: "source-id"),
+      tsdpClientPortController: TextEditingController(),
       ffmpegOptionControllers: [
         MapEntry(TextEditingController(), TextEditingController()),
       ],
       isStreaming: false,
       autoRestart: false,
+      useTsdp: false,
     ),
   ];
 
@@ -51,6 +57,9 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
   void dispose() {
     for (final stream in _streams) {
       stream.urlController.dispose();
+      stream.tsdpBaseUrlController.dispose();
+      stream.tsdpSourceIdController.dispose();
+      stream.tsdpClientPortController.dispose();
       for (final entry in stream.ffmpegOptionControllers) {
         entry.key.dispose();
         entry.value.dispose();
@@ -70,11 +79,15 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       _streams.add(
         _StreamConfig(
           urlController: TextEditingController(),
+          tsdpBaseUrlController: TextEditingController(),
+          tsdpSourceIdController: TextEditingController(),
+          tsdpClientPortController: TextEditingController(),
           ffmpegOptionControllers: [
             MapEntry(TextEditingController(), TextEditingController()),
           ],
           isStreaming: false,
           autoRestart: false,
+          useTsdp: false,
         ),
       );
     });
@@ -85,6 +98,9 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       if (_streams.length > 1) {
         final stream = _streams.removeAt(index);
         stream.urlController.dispose();
+        stream.tsdpBaseUrlController.dispose();
+        stream.tsdpSourceIdController.dispose();
+        stream.tsdpClientPortController.dispose();
         for (final entry in stream.ffmpegOptionControllers) {
           entry.key.dispose();
           entry.value.dispose();
@@ -171,16 +187,24 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
 
 class _StreamConfig {
   final TextEditingController urlController;
+  final TextEditingController tsdpBaseUrlController;
+  final TextEditingController tsdpSourceIdController;
+  final TextEditingController tsdpClientPortController;
   final List<MapEntry<TextEditingController, TextEditingController>>
   ffmpegOptionControllers;
   bool isStreaming;
   bool autoRestart;
+  bool useTsdp;
 
   _StreamConfig({
     required this.urlController,
+    required this.tsdpBaseUrlController,
+    required this.tsdpSourceIdController,
+    required this.tsdpClientPortController,
     required this.ffmpegOptionControllers,
     required this.isStreaming,
     required this.autoRestart,
+    required this.useTsdp,
   });
 }
 
@@ -238,6 +262,10 @@ class _StreamGridItemState extends State<_StreamGridItem>
               ffmpegOptions: widget.collectFfmpegOptions(
                 stream.ffmpegOptionControllers,
               ),
+              useTsdp: stream.useTsdp,
+              tsdpBaseUrl: stream.tsdpBaseUrlController.text,
+              tsdpSourceId: stream.tsdpSourceIdController.text,
+              tsdpClientPort: stream.tsdpClientPortController.text,
             ),
             // Overlay controls
             Positioned(
@@ -282,18 +310,18 @@ class _StreamGridItemState extends State<_StreamGridItem>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // URL input row with remove button
               Row(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: stream.urlController,
-                      decoration: const InputDecoration(
-                        labelText: 'Stream URL (e.g., rtsp://...)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+                  Switch(
+                    value: stream.useTsdp,
+                    onChanged: (value) {
+                      setState(() {
+                        stream.useTsdp = value;
+                      });
+                    },
                   ),
+                  const Text('Use TSDP'),
+                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
                     tooltip: 'Remove this stream',
@@ -301,6 +329,41 @@ class _StreamGridItemState extends State<_StreamGridItem>
                   ),
                 ],
               ),
+              const SizedBox(height: 12.0),
+              if (!stream.useTsdp)
+                TextField(
+                  controller: stream.urlController,
+                  decoration: const InputDecoration(
+                    labelText: 'Stream URL (e.g., rtsp://...)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              if (stream.useTsdp) ...[
+                TextField(
+                  controller: stream.tsdpBaseUrlController,
+                  decoration: const InputDecoration(
+                    labelText: 'TSDP Base URL (e.g., https://api.example)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12.0),
+                TextField(
+                  controller: stream.tsdpSourceIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'TSDP Source ID',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12.0),
+                TextField(
+                  controller: stream.tsdpClientPortController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'TSDP Client Port (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16.0),
               // FFmpeg options expansion
               ExpansionTile(
@@ -377,6 +440,10 @@ class _StreamGridItemState extends State<_StreamGridItem>
                           ffmpegOptions: widget.collectFfmpegOptions(
                             stream.ffmpegOptionControllers,
                           ),
+                          useTsdp: stream.useTsdp,
+                          tsdpBaseUrl: stream.tsdpBaseUrlController.text,
+                          tsdpSourceId: stream.tsdpSourceIdController.text,
+                          tsdpClientPort: stream.tsdpClientPortController.text,
                         )
                         : const Center(
                           child: Text(
@@ -464,11 +531,19 @@ class _VideoPlayerWithControls extends StatefulWidget {
   final String url;
   final bool autoRestart;
   final Map<String, String>? ffmpegOptions;
+  final bool useTsdp;
+  final String tsdpBaseUrl;
+  final String tsdpSourceId;
+  final String tsdpClientPort;
 
   const _VideoPlayerWithControls({
     required this.url,
     required this.autoRestart,
     this.ffmpegOptions,
+    required this.useTsdp,
+    required this.tsdpBaseUrl,
+    required this.tsdpSourceId,
+    required this.tsdpClientPort,
   });
 
   @override
@@ -504,12 +579,24 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
       height: 720,
     ); // 16:9 aspect ratio for HD resolution
 
-    final result = await VideoController.create(
-      url: widget.url,
-      dimensions: dimensions,
-      autoRestart: true,
-      ffmpegOptions: widget.ffmpegOptions,
-    );
+    final result =
+        widget.useTsdp
+            ? await VideoController.createTsdp(
+              endpoint: TsdpEndpoint(
+                baseUrl: widget.tsdpBaseUrl,
+                sourceId: widget.tsdpSourceId,
+                clientPort: int.tryParse(widget.tsdpClientPort.trim()),
+              ),
+              dimensions: dimensions,
+              autoRestart: true,
+              ffmpegOptions: widget.ffmpegOptions,
+            )
+            : await VideoController.create(
+              url: widget.url,
+              dimensions: dimensions,
+              autoRestart: true,
+              ffmpegOptions: widget.ffmpegOptions,
+            );
 
     setState(() {
       _controller = result.$1;

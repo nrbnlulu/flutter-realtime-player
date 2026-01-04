@@ -38,5 +38,13 @@ impl VideoInfo {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[flutter_rust_bridge::frb(sync)]
+pub struct TsdpEndpoint {
+    pub base_url: String,
+    pub source_id: String,
+    pub client_port: Option<u16>,
+}
+
 pub type DartStateStream = StreamSink<StreamState>;
 pub type DartEventsStream = StreamSink<StreamEvent>;

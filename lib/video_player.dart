@@ -91,6 +91,59 @@ class VideoController {
     }
   }
 
+  static Future<(VideoController?, String?)> createTsdp({
+    required TsdpEndpoint endpoint,
+    required VideoDimensions dimensions,
+    bool mute = true,
+    bool autoRestart = false,
+    Map<String, String>? ffmpegOptions,
+  }) async {
+    final handle = await EngineContext.instance.getEngineHandle();
+    final sessionId = await rlib.createNewSession();
+
+    try {
+      final stream = rlib.createTsdpPlayable(
+        sessionId: sessionId,
+        engineHandle: handle,
+        endpoint: endpoint,
+        ffmpegOptions: ffmpegOptions,
+        videoInfo: VideoInfo(
+          uri: '',
+          dimensions: dimensions,
+          mute: mute,
+          autoRestart: autoRestart,
+        ),
+      );
+      final bs = rx.BehaviorSubject<StreamState>.seeded(StreamState.loading());
+      final origSub = stream.listen(
+        bs.add,
+        onError: bs.addError,
+        onDone: () => bs.close(),
+      );
+      final ret = VideoController(
+        origSub,
+        sessionId: sessionId,
+        stateBroadcast: bs,
+        url: '${endpoint.baseUrl}/streams/${endpoint.sourceId}',
+        autoRestart: autoRestart,
+        ffmpegOptions: ffmpegOptions,
+        mute: mute,
+      );
+      ret._engineHandle = handle;
+      ret._running = true;
+
+      Future.microtask(() async {
+        while (ret._running) {
+          rlib.markSessionAlive(sessionId: sessionId);
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      });
+      return (ret, null);
+    } catch (e) {
+      return (null, e.toString());
+    }
+  }
+
   /// Seek to a specific time in seconds within the video
   Future<void> seekTo(int ts) async {
     await rlib.seekToTimestamp(sessionId: sessionId, ts: ts);
