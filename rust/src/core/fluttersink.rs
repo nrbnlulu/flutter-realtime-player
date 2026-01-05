@@ -82,9 +82,6 @@ fn apply_tsdp_ffmpeg_defaults(options: &mut HashMap<String, String>) {
     options
         .entry("probesize".to_string())
         .or_insert_with(|| "32".to_string());
-    options
-        .entry("sdp_flags".to_string())
-        .or_insert_with(|| "custom_io".to_string());
 }
 
 pub fn stream_alive_tester_task() {
@@ -159,6 +156,12 @@ pub fn create_tsdp_playable(
     video_info.uri = format!("tsdp://{}/{}", endpoint.base_url, endpoint.source_id);
     let mut options = ffmpeg_options.unwrap_or_default();
     apply_tsdp_ffmpeg_defaults(&mut options);
+    options
+        .entry("local_rtpport".to_string())
+        .or_insert_with(|| tsdp_setup.client_port.to_string());
+    options
+        .entry("local_rtcpport".to_string())
+        .or_insert_with(|| (tsdp_setup.client_port + 1).to_string());
 
     let (decoder, sendable_texture, texture_id) = match build_decoder(
         session_id,

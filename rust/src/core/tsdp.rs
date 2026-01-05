@@ -18,6 +18,7 @@ use super::{
 pub struct TsdpSetup {
     pub refresh_tx: mpsc::Sender<()>,
     pub sdp_data: Arc<Vec<u8>>,
+    pub client_port: u16,
 }
 
 impl TsdpSetup {
@@ -122,7 +123,7 @@ pub fn setup_tsdp_session(endpoint: &TsdpEndpoint) -> anyhow::Result<TsdpSetup> 
     let announce_port = if let Some(port) = endpoint.client_port {
         port
     } else {
-        let port = pick_ephemeral_port()?;
+        let port = pick_ephemeral_rtp_port()?;
         warn!(
             "TSDP client_port not provided; using {} for SDP/UDP holepunch. NAT may require explicit client_port.",
             port
@@ -146,25 +147,7 @@ pub fn setup_tsdp_session(endpoint: &TsdpEndpoint) -> anyhow::Result<TsdpSetup> 
     let server_addr =
         resolve_server_addr(&endpoint.base_url, response.server_port).context("resolve server")?;
 
-    if response.udp_holepunch_required {
-        if is_loopback_host(&endpoint.base_url) {
-            warn!(
-                "UDP holepunch requested but base_url is loopback; skipping holepunch for source {}",
-                endpoint.source_id
-            );
-        } else {
-            send_udp_holepunch(server_addr, &response.token, announce_port)?;
-            info!(
-                "Sent UDP holepunch to {} for source {}",
-                server_addr, endpoint.source_id
-            );
-        }
-    } else {
-        info!(
-            "UDP holepunch not required for source {}",
-            endpoint.source_id
-        );
-    }
+    send_udp_holepunch(server_addr, &response.token, announce_port)?;
 
     let refresh_url = build_url(
         &endpoint.base_url,
@@ -173,6 +156,9 @@ pub fn setup_tsdp_session(endpoint: &TsdpEndpoint) -> anyhow::Result<TsdpSetup> 
     let refresh_body = RefreshBody {
         token: response.token.clone(),
     };
+    if let Err(err) = send_refresh(&client, &refresh_url, &refresh_body) {
+        warn!("Initial refresh failed for {}: {}", refresh_url, err);
+    }
     let (refresh_tx, refresh_rx) = mpsc::channel();
     spawn_refresh_thread(
         client.clone(),
@@ -202,6 +188,7 @@ pub fn setup_tsdp_session(endpoint: &TsdpEndpoint) -> anyhow::Result<TsdpSetup> 
     Ok(TsdpSetup {
         refresh_tx,
         sdp_data,
+        client_port: announce_port,
     })
 }
 
@@ -214,22 +201,22 @@ fn ensure_sdp_line_endings(sdp_text: &str) -> Vec<u8> {
     normalized.into_bytes()
 }
 
+fn pick_ephemeral_rtp_port() -> anyhow::Result<u16> {
+    for _ in 0..20 {
+        let port = pick_ephemeral_port()?;
+        if port % 2 == 0 {
+            return Ok(port);
+        }
+    }
+    pick_ephemeral_port()
+}
+
 fn pick_ephemeral_port() -> anyhow::Result<u16> {
     if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
         return Ok(socket.local_addr().context("get local port")?.port());
     }
     let socket = UdpSocket::bind("[::]:0").context("binding ipv6 udp socket")?;
     Ok(socket.local_addr().context("get local port")?.port())
-}
-
-fn is_loopback_host(base_url: &str) -> bool {
-    let Ok(url) = reqwest::Url::parse(base_url) else {
-        return false;
-    };
-    match url.host_str() {
-        Some("localhost") | Some("127.0.0.1") | Some("::1") => true,
-        _ => false,
-    }
 }
 
 fn log_sdp_preview(sdp_text: &str) {
@@ -301,17 +288,40 @@ fn spawn_refresh_thread(
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
-            let result = client
-                .post(refresh_url.clone())
-                .json(&refresh_body)
-                .send()
-                .and_then(|resp| resp.error_for_status());
-            if let Err(err) = result {
-                warn!("Failed to refresh TSDP session at {}: {}", refresh_url, err);
-            } else {
-                debug!("Refreshed TSDP session at {}", refresh_url);
+            match send_refresh(&client, &refresh_url, &refresh_body) {
+                Ok(_) => debug!("Refreshed TSDP session at {}", refresh_url),
+                Err(err) => warn!("Failed to refresh TSDP session at {}: {}", refresh_url, err),
             }
         }
         debug!("Refresh thread exiting for {}", refresh_url);
     });
+}
+
+fn send_refresh(
+    client: &Client,
+    refresh_url: &reqwest::Url,
+    refresh_body: &RefreshBody,
+) -> Result<()> {
+    let response = client
+        .post(refresh_url.clone())
+        .json(refresh_body)
+        .send()
+        .context("sending refresh")?;
+    if response.status().is_success() {
+        return Ok(());
+    }
+    let status = response.status();
+    let body = response.text().unwrap_or_default();
+    warn!("Refresh HTTP {} from {}: {}", status, refresh_url, body);
+    let mut url_with_token = refresh_url.clone();
+    url_with_token
+        .query_pairs_mut()
+        .append_pair("token", &refresh_body.token);
+    client
+        .post(url_with_token)
+        .send()
+        .context("sending refresh with query token")?
+        .error_for_status()
+        .context("refresh status with query token")?;
+    Ok(())
 }
