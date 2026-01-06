@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 import 'dart:async';
 import 'package:flutter_realtime_player/rust/dart_types.dart';
+import 'trtp_seek_demo.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,9 +22,19 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Flutter Realtime Player')),
-        body: const StreamControlWidget(),
+      home: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Flutter Realtime Player'),
+            bottom: const TabBar(
+              tabs: [Tab(text: 'Streams'), Tab(text: 'TRTP Seek')],
+            ),
+          ),
+          body: const TabBarView(
+            children: [StreamControlWidget(), TrtpSeekDemo()],
+          ),
+        ),
       ),
     );
   }
@@ -238,8 +249,24 @@ class _StreamGridItem extends StatefulWidget {
 
 class _StreamGridItemState extends State<_StreamGridItem>
     with AutomaticKeepAliveClientMixin {
+  final GlobalKey<_VideoPlayerWithControlsState> _playerKey = GlobalKey();
+
   @override
   bool get wantKeepAlive => true;
+
+  Future<void> _stopStream() async {
+    await _playerKey.currentState?.stop();
+    if (mounted) {
+      widget.toggleStream(widget.streamIdx);
+    }
+  }
+
+  Future<void> _removeStream() async {
+    await _playerKey.currentState?.stop();
+    if (mounted) {
+      widget.removeStream(widget.streamIdx);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -258,6 +285,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
           children: [
             // Full-screen video player
             _VideoPlayerWithControls(
+              key: _playerKey,
               url: stream.urlController.text,
               autoRestart: stream.autoRestart,
               ffmpegOptions: widget.collectFfmpegOptions(
@@ -274,7 +302,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
               right: 8,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -284,13 +312,13 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     IconButton(
                       icon: const Icon(Icons.stop, color: Colors.white),
                       tooltip: 'Stop Stream',
-                      onPressed: () => widget.toggleStream(widget.streamIdx),
+                      onPressed: _stopStream,
                     ),
                     // Remove Stream Button
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.white),
                       tooltip: 'Remove Stream',
-                      onPressed: () => widget.removeStream(widget.streamIdx),
+                      onPressed: _removeStream,
                     ),
                   ],
                 ),
@@ -462,7 +490,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                         right: 8,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
+                            color: Colors.black.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
@@ -475,8 +503,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                                   color: Colors.white,
                                 ),
                                 tooltip: 'Stop Stream',
-                                onPressed:
-                                    () => widget.toggleStream(widget.streamIdx),
+                                onPressed: _stopStream,
                               ),
                               // Remove Stream Button
                               IconButton(
@@ -485,8 +512,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                                   color: Colors.white,
                                 ),
                                 tooltip: 'Remove Stream',
-                                onPressed:
-                                    () => widget.removeStream(widget.streamIdx),
+                                onPressed: _removeStream,
                               ),
                             ],
                           ),
@@ -538,6 +564,7 @@ class _VideoPlayerWithControls extends StatefulWidget {
   final String tsdpClientPort;
 
   const _VideoPlayerWithControls({
+    super.key,
     required this.url,
     required this.autoRestart,
     this.ffmpegOptions,
@@ -571,6 +598,21 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
     // Initialize with current time, will be updated when we have stream time
     _iso8601Controller.text = DateTime.now().toIso8601String();
     _initializeVideo();
+  }
+
+  Future<void> stop() async {
+    await _disposeController();
+  }
+
+  Future<void> _disposeController() async {
+    _positionTimer?.cancel();
+    _positionTimer = null;
+    final controller = _controller;
+    _controller = null;
+    debugPrint("flutter example: disposing session ${controller?.sessionId}");
+    if (controller != null) {
+      await controller.dispose();
+    }
   }
 
   Future<void> _initializeVideo() async {
@@ -617,8 +659,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
 
   @override
   void dispose() {
-    _positionTimer?.cancel();
-    _controller?.dispose();
+    _disposeController();
     super.dispose();
   }
 

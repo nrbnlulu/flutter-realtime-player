@@ -1,17 +1,21 @@
+pub mod registry;
+
 use std::{
-    sync::Arc,
+    sync::{mpsc, Arc},
     thread,
     time::SystemTime,
 };
 
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::{
-    core::{software_decoder::SoftwareDecoder, types::DartEventsStream},
+    core::{
+        input::VideoInput,
+        texture::{flutter::SharedSendableTexture, FlutterTextureSession},
+        types::DartEventsStream,
+    },
     utils::invoke_on_platform_main_thread,
 };
-
-use super::software_decoder::SharedSendableTexture;
 
 pub trait SessionLifecycle: Send {
     fn session_id(&self) -> i64;
@@ -25,81 +29,68 @@ pub trait SessionLifecycle: Send {
     fn destroy(self: Box<Self>);
 }
 
-pub struct BaseSession {
+pub struct FlutterVideoSession {
     session_id: i64,
-    decoder: Arc<SoftwareDecoder>,
     engine_handle: i64,
+    input: Arc<dyn VideoInput>,
+    texture_session: Arc<dyn FlutterTextureSession>,
     sendable_texture: SharedSendableTexture,
     last_alive_mark: SystemTime,
     events_sink: Option<DartEventsStream>,
+    refresh_tx: Option<mpsc::Sender<()>>,
 }
 
-impl BaseSession {
+impl FlutterVideoSession {
     pub fn new(
         session_id: i64,
-        decoder: Arc<SoftwareDecoder>,
         engine_handle: i64,
+        input: Arc<dyn VideoInput>,
+        texture_session: Arc<dyn FlutterTextureSession>,
         sendable_texture: SharedSendableTexture,
+        refresh_tx: Option<mpsc::Sender<()>>,
     ) -> Self {
         Self {
             session_id,
-            decoder,
             engine_handle,
+            input,
+            texture_session,
             sendable_texture,
             last_alive_mark: SystemTime::now(),
             events_sink: None,
+            refresh_tx,
         }
     }
 
-    pub fn session_id(&self) -> i64 {
-        self.session_id
-    }
-
-    pub fn engine_handle(&self) -> i64 {
-        self.engine_handle
-    }
-
-    pub fn last_alive_mark(&self) -> SystemTime {
-        self.last_alive_mark
-    }
-
-    pub fn make_alive(&mut self) {
-        self.last_alive_mark = SystemTime::now();
-    }
-
-    pub fn terminate(&mut self) {
-        self.decoder.destroy_stream();
-    }
-
-    pub fn set_events_sink(&mut self, sink: DartEventsStream) {
-        self.events_sink = Some(sink);
-    }
-
-    pub fn seek(&self, ts: i64) -> anyhow::Result<()> {
-        self.decoder.seek(ts)
-    }
-
-    pub fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        self.decoder.resize_stream(width, height)
-    }
-
-    pub fn finalize(self) {
-        self.decoder.destroy_stream();
+    fn finalize(mut self) {
+        debug!(
+            "Finalizing session {} (engine_handle={})",
+            self.session_id, self.engine_handle
+        );
+        self.terminate();
+        debug!("session {} terminated", self.session_id);
         let mut retry_count = 0;
         const MAX_RETRIES: usize = 50;
         while retry_count < MAX_RETRIES {
-            if Arc::strong_count(&self.decoder) == 1 {
+            let strong_count = Arc::strong_count(&self.sendable_texture);
+            debug!(
+                "Session {} texture strong_count={} attempt={}",
+                self.session_id, strong_count, retry_count
+            );
+            if strong_count == 1 {
                 break;
             }
             debug!(
-                "Waiting for all references to be dropped for session id: {}. attempt({})",
+                "Waiting for texture references to be dropped for session id: {}. attempt({})",
                 self.session_id, retry_count
             );
             thread::sleep(std::time::Duration::from_millis(500));
             retry_count += 1;
         }
         if retry_count == MAX_RETRIES {
-            log::error!("Forcefully dropped decoder for session id: {}, the texture is held somewhere else and may panic when unregistered if held on the wrong thread.", self.session_id);
+            warn!(
+                "Forcefully dropping texture for session id: {}, texture still held elsewhere.",
+                self.session_id
+            );
         }
         let sendable_texture = self.sendable_texture;
         let session_id = self.session_id;
@@ -110,40 +101,48 @@ impl BaseSession {
     }
 }
 
-impl SessionLifecycle for BaseSession {
+impl SessionLifecycle for FlutterVideoSession {
     fn session_id(&self) -> i64 {
-        self.session_id()
+        self.session_id
     }
 
     fn engine_handle(&self) -> i64 {
-        self.engine_handle()
+        self.engine_handle
     }
 
     fn last_alive_mark(&self) -> SystemTime {
-        self.last_alive_mark()
+        self.last_alive_mark
     }
 
     fn make_alive(&mut self) {
-        BaseSession::make_alive(self);
+        self.last_alive_mark = SystemTime::now();
     }
 
     fn terminate(&mut self) {
-        BaseSession::terminate(self);
+        debug!("Terminating session {}", self.session_id);
+        self.refresh_tx.take();
+        self.input.terminate();
+        self.texture_session.terminate();
     }
 
     fn set_events_sink(&mut self, sink: DartEventsStream) {
-        BaseSession::set_events_sink(self, sink);
+        self.events_sink = Some(sink);
     }
 
     fn seek(&self, ts: i64) -> anyhow::Result<()> {
-        BaseSession::seek(self, ts)
+        self.input.seek(ts)
     }
 
     fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        BaseSession::resize(self, width, height)
+        debug!("resizing input for session {}", self.session_id);
+        self.input.resize(width, height)?;
+        debug!("resizing texture session for session {}", self.session_id);
+        self.texture_session.resize(width, height)?;
+        Ok(())
     }
 
     fn destroy(self: Box<Self>) {
+        debug!("Destroying session {}", self.session_id);
         self.finalize();
     }
 }

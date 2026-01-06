@@ -10,140 +10,19 @@ use std::{
     time::Duration,
 };
 
-use irondash_texture::{BoxedPixelData, PayloadProvider, SendableTexture};
 use log::{debug, error, info, trace, warn};
 
-use crate::{core::types::DartStateStream, dart_types::StreamState, utils::LogErr};
+use crate::{
+    core::{
+        input::VideoInput,
+        texture::{payload::PayloadHolder, FlutterTextureSession},
+        types::{self, DartStateStream, VideoDimensions},
+    },
+    dart_types::StreamState,
+    utils::LogErr,
+};
 
-use super::types;
-
-#[derive(Clone)]
-pub struct FFmpegFrameWrapper(ffmpeg::util::frame::Video, Option<Vec<u8>>);
-
-impl irondash_texture::PixelDataProvider for FFmpegFrameWrapper {
-    fn get(&self) -> irondash_texture::PixelData<'_> {
-        let width = self.0.width() as usize;
-        let height = self.0.height() as usize;
-
-        if let Some(ref buffer) = self.1 {
-            irondash_texture::PixelData {
-                width: width as _,
-                height: height as _,
-                data: buffer.as_slice(),
-            }
-        } else {
-            irondash_texture::PixelData {
-                width: width as _,
-                height: height as _,
-                data: self.0.data(0),
-            }
-        }
-    }
-}
-
-impl FFmpegFrameWrapper {
-    /// Create a wrapper from a frame, copying data if stride doesn't match width.
-    /// ffmpeg frames may have padding at the end of each row, resulting in a stride
-    /// that is larger than `width * bytes_per_pixel`. This function handles such cases
-    /// by creating a tightly packed buffer.
-    fn from_frame(frame: ffmpeg::util::frame::Video) -> Self {
-        let width = frame.width() as usize;
-        let height = frame.height() as usize;
-        let stride = frame.stride(0);
-        let expected_stride = width * 4; // RGBA = 4 bytes per pixel
-
-        if stride == expected_stride {
-            // No padding, can use frame data directly.
-            Self(frame, None)
-        } else {
-            // Stride mismatch - copy data row by row to remove padding.
-            trace!(
-                "Stride mismatch! width: {}, expected stride: {}, actual stride: {}. Copying to contiguous buffer.",
-                width, expected_stride, stride
-            );
-
-            let mut buffer = Vec::with_capacity(width * height * 4);
-            let data = frame.data(0);
-
-            for y in 0..height {
-                let row_start = y * stride;
-                let row_end = row_start + expected_stride;
-                buffer.extend_from_slice(&data[row_start..row_end]);
-            }
-
-            Self(frame, Some(buffer))
-        }
-    }
-}
-
-pub struct PayloadHolder {
-    current_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
-    previous_frame: Mutex<Option<Box<FFmpegFrameWrapper>>>,
-}
-
-impl PayloadHolder {
-    pub fn new() -> Self {
-        Self {
-            current_frame: Mutex::new(None),
-            previous_frame: Mutex::new(None),
-        }
-    }
-
-    pub fn set_payload(&self, payload: Box<FFmpegFrameWrapper>) {
-        let mut curr_frame = match self.current_frame.lock() {
-            Ok(lock) => lock,
-            Err(e) => {
-                error!("current_frame mutex poisoned in set_payload: {}", e);
-                return;
-            }
-        };
-        let mut prev_frame = match self.previous_frame.lock() {
-            Ok(lock) => lock,
-            Err(e) => {
-                error!("previous_frame mutex poisoned in set_payload: {}", e);
-                return;
-            }
-        };
-        // Move current to previous before replacing.
-        *prev_frame = curr_frame.take();
-        *curr_frame = Some(payload);
-    }
-}
-
-impl PayloadProvider<BoxedPixelData> for PayloadHolder {
-    fn get_payload(&self) -> BoxedPixelData {
-        // Create a default frame to return on error or if no frame is available.
-        let default_frame = || {
-            debug!("No frame available, returning a default black frame.");
-            Box::new(FFmpegFrameWrapper::from_frame(
-                ffmpeg::util::frame::Video::new(ffmpeg::format::Pixel::RGBA, 640, 480),
-            ))
-        };
-
-        let curr_frame_lock = self.current_frame.lock();
-        if let Ok(curr_frame) = curr_frame_lock {
-            if let Some(ref frame) = *curr_frame {
-                // Clone instead of take to keep frame available for resize operations.
-                return frame.clone();
-            }
-        } else {
-            error!("current_frame mutex poisoned in get_payload");
-            return default_frame();
-        }
-
-        let prev_frame_lock = self.previous_frame.lock();
-        if let Ok(prev_frame) = prev_frame_lock {
-            if let Some(ref frame) = *prev_frame {
-                debug!("Returning previous frame");
-                return frame.clone();
-            }
-        } else {
-            error!("previous_frame mutex poisoned in get_payload");
-        }
-
-        default_frame()
-    }
-}
+use crate::core::texture::payload::FFmpegFrameWrapper;
 
 struct DecodingContext {
     input_ctx: ffmpeg::format::context::Input,
@@ -215,7 +94,7 @@ pub enum StreamExitResult {
     Error,
 }
 
-pub struct SoftwareDecoder {
+pub struct FfmpegVideoInput {
     video_info: types::VideoInfo,
     kill_sig: Arc<AtomicBool>,
     payload_holder: Weak<PayloadHolder>,
@@ -225,14 +104,12 @@ pub struct SoftwareDecoder {
     ffmpeg_options: Option<HashMap<String, String>>,
     seekable: Arc<AtomicBool>, // Whether the stream is seekable
     output_dimensions: Arc<Mutex<types::VideoDimensions>>, // Track current output dimensions
-    sendable_texture: Arc<Mutex<Option<WeakSendableTexture>>>,
+    texture_session: Weak<dyn FlutterTextureSession>,
     sdp_data: Option<Arc<Vec<u8>>>,
 }
-unsafe impl Send for SoftwareDecoder {}
-unsafe impl Sync for SoftwareDecoder {}
-pub type SharedSendableTexture = Arc<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
-type WeakSendableTexture = Weak<SendableTexture<Box<dyn irondash_texture::PixelDataProvider>>>;
-impl SoftwareDecoder {
+unsafe impl Send for FfmpegVideoInput {}
+unsafe impl Sync for FfmpegVideoInput {}
+impl FfmpegVideoInput {
     /// Validates if a stream is compatible with software scaling.
     fn validate_stream_compatibility(
         decoder: &ffmpeg::decoder::Video,
@@ -298,29 +175,21 @@ impl SoftwareDecoder {
         session_id: i64,
         ffmpeg_options: Option<HashMap<String, String>>,
         sdp_data: Option<Arc<Vec<u8>>>,
-    ) -> (Arc<Self>, Arc<PayloadHolder>) {
-        let payload_holder = Arc::new(PayloadHolder::new());
-        let self_ = Arc::new(Self {
+        payload_holder: Weak<PayloadHolder>,
+        texture_session: Weak<dyn FlutterTextureSession>,
+    ) -> Arc<Self> {
+        Arc::new(Self {
             video_info: video_info.clone(),
             kill_sig: Arc::new(AtomicBool::new(false)),
-            payload_holder: Arc::downgrade(&payload_holder),
+            payload_holder,
             session_id,
             decoding_context: Mutex::new(None),
             ffmpeg_options,
             seekable: Arc::new(AtomicBool::new(false)),
             output_dimensions: Arc::new(Mutex::new(video_info.dimensions.clone())),
-            sendable_texture: Arc::new(Mutex::new(None)),
+            texture_session,
             sdp_data,
-        });
-        (self_, payload_holder)
-    }
-
-    pub fn set_sendable_texture(&self, texture: WeakSendableTexture) {
-        if let Ok(mut texture_ref) = self.sendable_texture.lock() {
-            *texture_ref = Some(texture);
-        } else {
-            error!("sendable_texture mutex poisoned in set_sendable_texture");
-        }
+        })
     }
 
     fn open_input_with_sdp_data(
@@ -516,15 +385,24 @@ impl SoftwareDecoder {
         self.kill_sig.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    pub fn stream(
+    fn mark_frame_available(&self) {
+        if let Some(session) = self.texture_session.upgrade() {
+            session.mark_frame_available();
+        }
+    }
+
+    fn log_stream_exit(&self, reason: &str) {
+        debug!(
+            "Stream exit ({}) for uri={} session_id={}",
+            reason, self.video_info.uri, self.session_id
+        );
+    }
+
+    pub fn execute(
         &self,
-        sendable_texture: SharedSendableTexture,
         dart_update_stream: DartStateStream,
         texture_id: i64,
-    ) -> Result<(), StreamExitResult> {
-        let weak_sendable_texture: WeakSendableTexture = Arc::downgrade(&sendable_texture);
-        drop(sendable_texture); // Drop strong reference
-
+    ) -> anyhow::Result<()> {
         while !self.asked_for_termination() {
             trace!("FFmpeg session initializing for {}", &self.video_info.uri);
             dart_update_stream.add(StreamState::Loading).log_err();
@@ -542,7 +420,7 @@ impl SoftwareDecoder {
 
             info!("Stream initialized: {}", &self.video_info.uri);
 
-            let res = self.stream_impl(&weak_sendable_texture, &dart_update_stream, texture_id);
+            let res = self.stream_impl(&dart_update_stream, texture_id);
             match res {
                 StreamExitResult::LegalExit => break,
                 StreamExitResult::EOF => {
@@ -560,20 +438,22 @@ impl SoftwareDecoder {
                 }
             }
         }
+        if self.asked_for_termination() {
+            self.log_stream_exit("terminated");
+        } else {
+            self.log_stream_exit("loop-exit");
+        }
         dart_update_stream.add(StreamState::Stopped).log_err();
         Ok(())
     }
 
     fn stream_impl(
         &self,
-        sendable_weak: &WeakSendableTexture,
         dart_update_stream: &DartStateStream,
         texture_id: i64,
     ) -> StreamExitResult {
         let mark_frame_avb = || {
-            if let Some(sendable) = sendable_weak.upgrade() {
-                sendable.mark_frame_available();
-            }
+            self.mark_frame_available();
         };
 
         let mut is_playing = false;
@@ -638,6 +518,7 @@ impl SoftwareDecoder {
                     Err(ffmpeg::Error::Eof) => {
                         info!("Stream EOF: {}", &self.video_info.uri);
                         self.terminate(Some(ctx));
+                        self.log_stream_exit("ffmpeg-eof");
                         return StreamExitResult::EOF;
                     }
                     Err(ffmpeg::Error::Other {
@@ -784,12 +665,8 @@ impl SoftwareDecoder {
         self.update_texture_with_placeholder(&old_dims, new_width, new_height);
 
         // Immediately signal the texture that a new frame is available
-        if let Some(ref weak_texture) = *self.sendable_texture.lock().unwrap() {
-            if let Some(texture) = weak_texture.upgrade() {
-                texture.mark_frame_available();
-                info!("Marked frame available after resize");
-            }
-        }
+        self.mark_frame_available();
+        info!("Marked frame available after resize");
 
         Ok(())
     }
@@ -838,7 +715,7 @@ impl SoftwareDecoder {
         new_height: u32,
     ) {
         if let Some(holder) = self.payload_holder.upgrade() {
-            let prev_frame = holder.previous_frame.lock().ok().and_then(|g| g.clone());
+            let prev_frame = holder.previous_frame();
             if let Some(prev) = prev_frame {
                 if !self
                     .rescale_and_set_previous_frame(&holder, &prev, old_dims, new_width, new_height)
@@ -915,6 +792,31 @@ impl SoftwareDecoder {
         }
 
         holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(new_frame)));
+    }
+}
+
+impl VideoInput for FfmpegVideoInput {
+    fn execute(&self, update_stream: DartStateStream, texture_id: i64) -> anyhow::Result<()> {
+        FfmpegVideoInput::execute(self, update_stream, texture_id)
+    }
+
+    fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
+        self.resize_stream(width, height)
+    }
+
+    fn terminate(&self) {
+        self.destroy_stream();
+    }
+
+    fn seek(&self, ts: i64) -> anyhow::Result<()> {
+        FfmpegVideoInput::seek(self, ts)
+    }
+
+    fn output_dimensions(&self) -> VideoDimensions {
+        self.output_dimensions
+            .lock()
+            .map(|dims| dims.clone())
+            .unwrap_or_else(|_| self.video_info.dimensions.clone())
     }
 }
 

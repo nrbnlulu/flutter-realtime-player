@@ -4,7 +4,7 @@ use log::{debug, info, trace};
 
 use crate::{
     core::{
-        fluttersink::{self, SESSION_CACHE},
+        session::registry::{self},
         types::{TsdpEndpoint, VideoInfo},
         IS_INITIALIZED,
     },
@@ -25,8 +25,8 @@ pub fn flutter_realtime_player_init(ffi_ptr: i64) {
     }
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
 
-    fluttersink::init().log_err();
-    thread::spawn(crate::core::fluttersink::stream_alive_tester_task);
+    registry::init().log_err();
+    thread::spawn(crate::core::session::registry::stream_alive_tester_task);
     debug!("Done initializing flutter gstreamer");
     *is_initialized = true;
 }
@@ -55,7 +55,7 @@ pub fn create_new_playable(
         video_info,
         session_id
     );
-    crate::core::fluttersink::create_new_playable(
+    crate::core::session::registry::create_new_playable(
         session_id,
         engine_handle,
         video_info,
@@ -79,7 +79,7 @@ pub fn create_tsdp_playable(
         endpoint.source_id.as_str(),
         session_id
     );
-    crate::core::fluttersink::create_tsdp_playable(
+    crate::core::session::registry::create_tsdp_playable(
         session_id,
         engine_handle,
         endpoint,
@@ -91,26 +91,19 @@ pub fn create_tsdp_playable(
 }
 
 pub fn seek_to_timestamp(session_id: i64, ts: i64) -> anyhow::Result<()> {
-    let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(session) = session_cache.get_mut(&session_id) {
-        info!("seeking to {ts}");
-        session.seek(ts)?;
-    }
-    Ok(())
+    info!("seeking to {ts}");
+    registry::seek_session(session_id, ts)
 }
 
 pub fn register_to_stream_events_sink(session_id: i64, sink: StreamSink<StreamEvent>) {
-    let mut session_cache = SESSION_CACHE.lock().unwrap();
-    if let Some(session) = session_cache.get_mut(&session_id) {
-        session.set_events_sink(sink);
-    }
+    registry::register_events_sink(session_id, sink);
 }
 
 /// marks the session as required by the ui
 /// if the ui won't call this every 2 seconds
 /// this session will terminate itself.
 pub fn mark_session_alive(session_id: i64) {
-    crate::core::fluttersink::mark_session_alive(session_id);
+    crate::core::session::registry::mark_session_alive(session_id);
 }
 
 pub fn destroy_engine_streams(engine_id: i64) {
@@ -118,14 +111,14 @@ pub fn destroy_engine_streams(engine_id: i64) {
     // it is important to call this on the platform main thread
     // because irondash will unregister the texture on Drop, and drop must occur
     // on the platform main thread
-    crate::core::fluttersink::destroy_engine_streams(engine_id);
+    crate::core::session::registry::destroy_engine_streams(engine_id);
 }
 
 pub fn destroy_stream_session(session_id: i64) {
     trace!("destroy_stream_session was called");
-    crate::core::fluttersink::destroy_stream_session(session_id)
+    crate::core::session::registry::destroy_stream_session(session_id)
 }
 
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
-    crate::core::fluttersink::resize_stream_session(session_id, width, height)
+    crate::core::session::registry::resize_stream_session(session_id, width, height)
 }

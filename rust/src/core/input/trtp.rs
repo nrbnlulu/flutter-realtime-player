@@ -10,10 +10,7 @@ use log::{debug, info, warn};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    session::{BaseSession, SessionLifecycle},
-    types::{DartEventsStream, TsdpEndpoint},
-};
+use crate::core::types::TsdpEndpoint;
 
 pub struct TsdpSetup {
     pub refresh_tx: mpsc::Sender<()>,
@@ -24,61 +21,6 @@ pub struct TsdpSetup {
 impl TsdpSetup {
     pub fn cleanup(self) {
         drop(self.refresh_tx);
-    }
-}
-
-pub struct TsdpSession {
-    base: BaseSession,
-    refresh_tx: Option<mpsc::Sender<()>>,
-}
-
-impl TsdpSession {
-    pub fn new(base: BaseSession, setup: TsdpSetup) -> Self {
-        Self {
-            base,
-            refresh_tx: Some(setup.refresh_tx),
-        }
-    }
-}
-
-impl SessionLifecycle for TsdpSession {
-    fn session_id(&self) -> i64 {
-        self.base.session_id()
-    }
-
-    fn engine_handle(&self) -> i64 {
-        self.base.engine_handle()
-    }
-
-    fn last_alive_mark(&self) -> std::time::SystemTime {
-        self.base.last_alive_mark()
-    }
-
-    fn make_alive(&mut self) {
-        self.base.make_alive();
-    }
-
-    fn terminate(&mut self) {
-        self.refresh_tx.take();
-        self.base.terminate();
-    }
-
-    fn set_events_sink(&mut self, sink: DartEventsStream) {
-        self.base.set_events_sink(sink);
-    }
-
-    fn seek(&self, ts: i64) -> anyhow::Result<()> {
-        self.base.seek(ts)
-    }
-
-    fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        self.base.resize(width, height)
-    }
-
-    fn destroy(self: Box<Self>) {
-        let mut session = *self;
-        session.terminate();
-        session.base.finalize();
     }
 }
 
