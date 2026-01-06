@@ -1,20 +1,12 @@
 pub mod registry;
 
-use std::{
-    sync::{mpsc, Arc},
-    thread,
-    time::SystemTime,
-};
+use std::{sync::mpsc, time::SystemTime};
 
-use log::{debug, info, warn};
+use log::{debug, warn};
 
-use crate::{
-    core::{
-        input::VideoInput,
-        texture::{flutter::SharedSendableTexture, FlutterTextureSession},
-        types::DartEventsStream,
-    },
-    utils::invoke_on_platform_main_thread,
+use crate::core::{
+    output::flutter_pixelbuffer::{FlutterPixelBufferHandle, OutputCommand},
+    types::DartEventsStream,
 };
 
 pub trait SessionLifecycle: Send {
@@ -32,9 +24,7 @@ pub trait SessionLifecycle: Send {
 pub struct FlutterVideoSession {
     session_id: i64,
     engine_handle: i64,
-    input: Arc<dyn VideoInput>,
-    texture_session: Arc<dyn FlutterTextureSession>,
-    sendable_texture: SharedSendableTexture,
+    output: FlutterPixelBufferHandle,
     last_alive_mark: SystemTime,
     events_sink: Option<DartEventsStream>,
     refresh_tx: Option<mpsc::Sender<()>>,
@@ -44,60 +34,17 @@ impl FlutterVideoSession {
     pub fn new(
         session_id: i64,
         engine_handle: i64,
-        input: Arc<dyn VideoInput>,
-        texture_session: Arc<dyn FlutterTextureSession>,
-        sendable_texture: SharedSendableTexture,
+        output: FlutterPixelBufferHandle,
         refresh_tx: Option<mpsc::Sender<()>>,
     ) -> Self {
         Self {
             session_id,
             engine_handle,
-            input,
-            texture_session,
-            sendable_texture,
+            output,
             last_alive_mark: SystemTime::now(),
             events_sink: None,
             refresh_tx,
         }
-    }
-
-    fn finalize(mut self) {
-        debug!(
-            "Finalizing session {} (engine_handle={})",
-            self.session_id, self.engine_handle
-        );
-        self.terminate();
-        debug!("session {} terminated", self.session_id);
-        let mut retry_count = 0;
-        const MAX_RETRIES: usize = 50;
-        while retry_count < MAX_RETRIES {
-            let strong_count = Arc::strong_count(&self.sendable_texture);
-            debug!(
-                "Session {} texture strong_count={} attempt={}",
-                self.session_id, strong_count, retry_count
-            );
-            if strong_count == 1 {
-                break;
-            }
-            debug!(
-                "Waiting for texture references to be dropped for session id: {}. attempt({})",
-                self.session_id, retry_count
-            );
-            thread::sleep(std::time::Duration::from_millis(500));
-            retry_count += 1;
-        }
-        if retry_count == MAX_RETRIES {
-            warn!(
-                "Forcefully dropping texture for session id: {}, texture still held elsewhere.",
-                self.session_id
-            );
-        }
-        let sendable_texture = self.sendable_texture;
-        let session_id = self.session_id;
-        invoke_on_platform_main_thread(move || {
-            drop(sendable_texture);
-            info!("Destroyed stream session for session id: {}", session_id);
-        });
     }
 }
 
@@ -121,8 +68,12 @@ impl SessionLifecycle for FlutterVideoSession {
     fn terminate(&mut self) {
         debug!("Terminating session {}", self.session_id);
         self.refresh_tx.take();
-        self.input.terminate();
-        self.texture_session.terminate();
+        if let Err(err) = self.output.send(OutputCommand::Terminate) {
+            warn!(
+                "Failed to terminate output for session {}: {}",
+                self.session_id, err
+            );
+        }
     }
 
     fn set_events_sink(&mut self, sink: DartEventsStream) {
@@ -130,19 +81,17 @@ impl SessionLifecycle for FlutterVideoSession {
     }
 
     fn seek(&self, ts: i64) -> anyhow::Result<()> {
-        self.input.seek(ts)
+        self.output.send(OutputCommand::Seek { ts })
     }
 
     fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        debug!("resizing input for session {}", self.session_id);
-        self.input.resize(width, height)?;
-        debug!("resizing texture session for session {}", self.session_id);
-        self.texture_session.resize(width, height)?;
-        Ok(())
+        debug!("resizing session {}", self.session_id);
+        self.output.send(OutputCommand::Resize { width, height })
     }
 
     fn destroy(self: Box<Self>) {
         debug!("Destroying session {}", self.session_id);
-        self.finalize();
+        let mut session = *self;
+        session.terminate();
     }
 }

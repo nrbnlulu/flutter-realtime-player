@@ -7,18 +7,14 @@ use std::{
 
 use log::{debug, info};
 
-use crate::{
-    core::{
-        input::{ffmpeg::FfmpegVideoInput, trtp, VideoInput},
-        session::{FlutterVideoSession, SessionLifecycle},
-        texture::{
-            flutter::{SharedSendableTexture, TextureSession},
-            payload::PayloadHolder,
-            FlutterTextureSession,
-        },
-        types::{self, DartStateStream},
+use crate::core::{
+    input::{
+        ffmpeg::FfmpegVideoInput, trtp, InputCommandReceiver, InputCommandSender,
+        InputEventReceiver, InputEventSender, VideoInput,
     },
-    utils::invoke_on_platform_main_thread,
+    output::flutter_pixelbuffer::{create_flutter_pixelbuffer, FlutterPixelBufferHandle},
+    session::{FlutterVideoSession, SessionLifecycle},
+    types::{self, DartStateStream},
 };
 
 pub fn init() -> anyhow::Result<()> {
@@ -88,38 +84,32 @@ fn remove_session(session_id: i64) -> Option<Arc<SessionHolder>> {
     session_cache.remove(&session_id)
 }
 
-fn build_input_and_texture(
+fn build_input_and_output(
     session_id: i64,
     engine_handle: i64,
     video_info: types::VideoInfo,
+    update_stream: DartStateStream,
     ffmpeg_options: Option<HashMap<String, String>>,
     sdp_data: Option<Arc<Vec<u8>>>,
 ) -> anyhow::Result<(
     Arc<dyn VideoInput>,
-    Arc<dyn FlutterTextureSession>,
-    SharedSendableTexture,
+    FlutterPixelBufferHandle,
+    InputCommandReceiver,
+    InputEventSender,
     i64,
 )> {
-    let payload_holder = Arc::new(PayloadHolder::new());
-    let payload_holder_weak = Arc::downgrade(&payload_holder);
-    let payload_holder_for_texture = Arc::clone(&payload_holder);
+    let (input_event_tx, input_event_rx): (InputEventSender, InputEventReceiver) =
+        flume::unbounded();
+    let (input_command_tx, input_command_rx): (InputCommandSender, InputCommandReceiver) =
+        flume::unbounded();
 
-    let (sendable_texture, texture_id) =
-        invoke_on_platform_main_thread(move || -> anyhow::Result<_> {
-            let texture = irondash_texture::Texture::new_with_provider(
-                engine_handle,
-                payload_holder_for_texture,
-            )?;
-            let texture_id = texture.id();
-            Ok((texture.into_sendable_texture(), texture_id))
-        })?;
-
-    let texture_session = Arc::new(TextureSession::new(
-        texture_id,
-        Arc::downgrade(&sendable_texture),
-        payload_holder_weak.clone(),
-    ));
-    let texture_session: Arc<dyn FlutterTextureSession> = texture_session;
+    let (output_handle, payload_holder_weak, texture_id) = create_flutter_pixelbuffer(
+        session_id,
+        engine_handle,
+        update_stream,
+        input_event_rx,
+        input_command_tx,
+    )?;
 
     let input = FfmpegVideoInput::new(
         &video_info,
@@ -127,20 +117,26 @@ fn build_input_and_texture(
         ffmpeg_options,
         sdp_data,
         payload_holder_weak,
-        Arc::downgrade(&texture_session),
     );
     let input: Arc<dyn VideoInput> = input;
 
-    Ok((input, texture_session, sendable_texture, texture_id))
+    Ok((
+        input,
+        output_handle,
+        input_command_rx,
+        input_event_tx,
+        texture_id,
+    ))
 }
 
 fn spawn_stream_thread(
     input: Arc<dyn VideoInput>,
-    update_stream: DartStateStream,
+    input_event_tx: InputEventSender,
+    input_command_rx: InputCommandReceiver,
     texture_id: i64,
 ) {
     thread::spawn(move || {
-        let _ = input.execute(update_stream, texture_id);
+        let _ = input.execute(input_event_tx, input_command_rx, texture_id);
     });
 }
 
@@ -208,22 +204,22 @@ pub fn create_new_playable(
         "Creating new playable: session_id={}, engine_handle={}",
         session_id, engine_handle
     );
-    let (input, texture_session, sendable_texture, texture_id) =
-        build_input_and_texture(session_id, engine_handle, video_info, ffmpeg_options, None)?;
+    let (input, output_handle, input_command_rx, input_event_tx, texture_id) =
+        build_input_and_output(
+            session_id,
+            engine_handle,
+            video_info,
+            update_stream,
+            ffmpeg_options,
+            None,
+        )?;
 
-    let session = FlutterVideoSession::new(
-        session_id,
-        engine_handle,
-        Arc::clone(&input),
-        Arc::clone(&texture_session),
-        sendable_texture,
-        None,
-    );
+    let session = FlutterVideoSession::new(session_id, engine_handle, output_handle, None);
     {
         insert_session(session_id, Box::new(session));
     }
 
-    spawn_stream_thread(input, update_stream, texture_id);
+    spawn_stream_thread(input, input_event_tx, input_command_rx, texture_id);
 
     Ok(())
 }
@@ -253,14 +249,15 @@ pub fn create_tsdp_playable(
         .entry("local_rtcpport".to_string())
         .or_insert_with(|| (tsdp_setup.client_port + 1).to_string());
 
-    let build_result = build_input_and_texture(
+    let build_result = build_input_and_output(
         session_id,
         engine_handle,
         video_info,
+        update_stream,
         Some(options),
         Some(Arc::clone(&sdp_data)),
     );
-    let (input, texture_session, sendable_texture, texture_id) = match build_result {
+    let (input, output_handle, input_command_rx, input_event_tx, texture_id) = match build_result {
         Ok(value) => value,
         Err(err) => {
             tsdp_setup.cleanup();
@@ -271,15 +268,13 @@ pub fn create_tsdp_playable(
     let session = FlutterVideoSession::new(
         session_id,
         engine_handle,
-        Arc::clone(&input),
-        Arc::clone(&texture_session),
-        sendable_texture,
+        output_handle,
         Some(tsdp_setup.refresh_tx),
     );
     {
         insert_session(session_id, Box::new(session));
     }
-    spawn_stream_thread(input, update_stream, texture_id);
+    spawn_stream_thread(input, input_event_tx, input_command_rx, texture_id);
 
     Ok(())
 }
@@ -322,9 +317,12 @@ pub fn destroy_stream_session(session_id: i64) {
     debug!("Active sessions at destroy: {:?}", active_sessions);
     let session = remove_session(session_id);
     if let Some(holder) = session {
-        info!("Session {} removed from cache, destroying in a new thread", session_id);
+        info!(
+            "Session {} removed from cache, destroying in a new thread",
+            session_id
+        );
         if let Some(session) = holder.take() {
-           thread::spawn(move || session.destroy());
+            thread::spawn(move || session.destroy());
         }
         return;
     }
@@ -334,9 +332,7 @@ pub fn destroy_stream_session(session_id: i64) {
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
     get_session_mut(session_id, |session| session.resize(width, height))
         .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
-    
 }
-
 
 pub fn seek_session(session_id: i64, ts: i64) -> anyhow::Result<()> {
     get_session_mut(session_id, |session| session.seek(ts))

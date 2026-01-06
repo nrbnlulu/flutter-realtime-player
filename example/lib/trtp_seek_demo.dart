@@ -370,11 +370,7 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
     // Adding a small buffer to ensure server treats it as "live" switch
     await _client!.seekToTimestamp(now + 1000);
     setState(() {
-      _sessionMode = SessionMode(
-        isLive: true,
-        currentTimeMs: now,
-        speed: 1.0,
-      );
+      _sessionMode = SessionMode(isLive: true, currentTimeMs: now, speed: 1.0);
     });
   }
 
@@ -646,7 +642,8 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
                   // Pause/Play (Speed 0 vs 1)
                   IconButton.filled(
                     onPressed:
-                        () => _setSpeed((_sessionMode?.speed ?? 1) == 0 ? 1 : 0),
+                        () =>
+                            _setSpeed((_sessionMode?.speed ?? 1) == 0 ? 1 : 0),
                     icon: Icon(
                       (_sessionMode?.speed ?? 1) == 0
                           ? Icons.play_arrow

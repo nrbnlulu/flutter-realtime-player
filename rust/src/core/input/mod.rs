@@ -3,12 +3,32 @@ pub mod trtp;
 
 use anyhow::Result;
 
-use crate::core::types::{DartStateStream, VideoDimensions};
+use crate::{core::types::VideoDimensions, dart_types::StreamState};
+
+#[derive(Debug, Clone)]
+pub enum InputCommand {
+    Resize { width: u32, height: u32 },
+    Terminate,
+    Seek { ts: i64 },
+}
+
+#[derive(Debug, Clone)]
+pub enum InputEvent {
+    FrameAvailable,
+    State(StreamState),
+}
+
+pub type InputCommandSender = flume::Sender<InputCommand>;
+pub type InputCommandReceiver = flume::Receiver<InputCommand>;
+pub type InputEventSender = flume::Sender<InputEvent>;
+pub type InputEventReceiver = flume::Receiver<InputEvent>;
 
 pub trait VideoInput: Send + Sync {
-    fn execute(&self, update_stream: DartStateStream, texture_id: i64) -> Result<()>;
-    fn resize(&self, width: u32, height: u32) -> Result<()>;
-    fn terminate(&self);
-    fn seek(&self, ts: i64) -> Result<()>;
+    fn execute(
+        &self,
+        event_tx: InputEventSender,
+        command_rx: InputCommandReceiver,
+        texture_id: i64,
+    ) -> Result<()>;
     fn output_dimensions(&self) -> VideoDimensions;
 }

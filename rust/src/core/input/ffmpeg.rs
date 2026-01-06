@@ -14,12 +14,11 @@ use log::{debug, error, info, trace, warn};
 
 use crate::{
     core::{
-        input::VideoInput,
-        texture::{payload::PayloadHolder, FlutterTextureSession},
-        types::{self, DartStateStream, VideoDimensions},
+        input::{InputCommand, InputCommandReceiver, InputEvent, InputEventSender, VideoInput},
+        texture::payload::PayloadHolder,
+        types::{self, VideoDimensions},
     },
     dart_types::StreamState,
-    utils::LogErr,
 };
 
 use crate::core::texture::payload::FFmpegFrameWrapper;
@@ -104,7 +103,6 @@ pub struct FfmpegVideoInput {
     ffmpeg_options: Option<HashMap<String, String>>,
     seekable: Arc<AtomicBool>, // Whether the stream is seekable
     output_dimensions: Arc<Mutex<types::VideoDimensions>>, // Track current output dimensions
-    texture_session: Weak<dyn FlutterTextureSession>,
     sdp_data: Option<Arc<Vec<u8>>>,
 }
 unsafe impl Send for FfmpegVideoInput {}
@@ -176,7 +174,6 @@ impl FfmpegVideoInput {
         ffmpeg_options: Option<HashMap<String, String>>,
         sdp_data: Option<Arc<Vec<u8>>>,
         payload_holder: Weak<PayloadHolder>,
-        texture_session: Weak<dyn FlutterTextureSession>,
     ) -> Arc<Self> {
         Arc::new(Self {
             video_info: video_info.clone(),
@@ -187,7 +184,6 @@ impl FfmpegVideoInput {
             ffmpeg_options,
             seekable: Arc::new(AtomicBool::new(false)),
             output_dimensions: Arc::new(Mutex::new(video_info.dimensions.clone())),
-            texture_session,
             sdp_data,
         })
     }
@@ -385,12 +381,6 @@ impl FfmpegVideoInput {
         self.kill_sig.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    fn mark_frame_available(&self) {
-        if let Some(session) = self.texture_session.upgrade() {
-            session.mark_frame_available();
-        }
-    }
-
     fn log_stream_exit(&self, reason: &str) {
         debug!(
             "Stream exit ({}) for uri={} session_id={}",
@@ -398,34 +388,75 @@ impl FfmpegVideoInput {
         );
     }
 
+    fn send_event(event_tx: &InputEventSender, event: InputEvent) {
+        if let Err(err) = event_tx.send(event) {
+            error!("Failed to send input event: {}", err);
+        }
+    }
+
+    fn drain_commands(
+        &self,
+        command_rx: &InputCommandReceiver,
+        event_tx: &InputEventSender,
+    ) -> bool {
+        let mut should_terminate = false;
+        loop {
+            match command_rx.try_recv() {
+                Ok(command) => match command {
+                    InputCommand::Resize { width, height } => {
+                        if let Err(err) = self.resize_stream(width, height) {
+                            error!("Resize failed: {}", err);
+                        } else {
+                            Self::send_event(event_tx, InputEvent::FrameAvailable);
+                        }
+                    }
+                    InputCommand::Terminate => {
+                        self.destroy_stream();
+                        should_terminate = true;
+                    }
+                    InputCommand::Seek { ts } => {
+                        if let Err(err) = self.seek(ts) {
+                            error!("Seek failed: {}", err);
+                        }
+                    }
+                },
+                Err(flume::TryRecvError::Empty) => break,
+                Err(flume::TryRecvError::Disconnected) => break,
+            }
+        }
+        should_terminate
+    }
+
     pub fn execute(
         &self,
-        dart_update_stream: DartStateStream,
+        event_tx: InputEventSender,
+        command_rx: InputCommandReceiver,
         texture_id: i64,
     ) -> anyhow::Result<()> {
         while !self.asked_for_termination() {
+            if self.drain_commands(&command_rx, &event_tx) {
+                break;
+            }
             trace!("FFmpeg session initializing for {}", &self.video_info.uri);
-            dart_update_stream.add(StreamState::Loading).log_err();
+            Self::send_event(&event_tx, InputEvent::State(StreamState::Loading));
 
             if let Err(e) = self.initialize_stream() {
                 let error_msg =
                     format!("Stream initialization failed: {}, reinitializing in 1s", e);
                 error!("{} for uri: {}", error_msg, &self.video_info.uri);
-                dart_update_stream
-                    .add(StreamState::Error(error_msg))
-                    .log_err();
+                Self::send_event(&event_tx, InputEvent::State(StreamState::Error(error_msg)));
                 thread::sleep(Duration::from_millis(1000));
                 continue;
             }
 
             info!("Stream initialized: {}", &self.video_info.uri);
 
-            let res = self.stream_impl(&dart_update_stream, texture_id);
+            let res = self.stream_impl(&event_tx, &command_rx, texture_id);
             match res {
                 StreamExitResult::LegalExit => break,
                 StreamExitResult::EOF => {
                     if self.video_info.auto_restart {
-                        dart_update_stream.add(StreamState::Stopped).log_err();
+                        Self::send_event(&event_tx, InputEvent::State(StreamState::Stopped));
                         info!("Stream EOF, restarting...");
                         thread::sleep(Duration::from_millis(100));
                     } else {
@@ -443,23 +474,28 @@ impl FfmpegVideoInput {
         } else {
             self.log_stream_exit("loop-exit");
         }
-        dart_update_stream.add(StreamState::Stopped).log_err();
+        Self::send_event(&event_tx, InputEvent::State(StreamState::Stopped));
         Ok(())
     }
 
     fn stream_impl(
         &self,
-        dart_update_stream: &DartStateStream,
+        event_tx: &InputEventSender,
+        command_rx: &InputCommandReceiver,
         texture_id: i64,
     ) -> StreamExitResult {
         let mark_frame_avb = || {
-            self.mark_frame_available();
+            Self::send_event(event_tx, InputEvent::FrameAvailable);
         };
 
         let mut is_playing = false;
 
         loop {
             if self.asked_for_termination() {
+                self.terminate(None);
+                return StreamExitResult::LegalExit;
+            }
+            if self.drain_commands(command_rx, event_tx) {
                 self.terminate(None);
                 return StreamExitResult::LegalExit;
             }
@@ -504,12 +540,15 @@ impl FfmpegVideoInput {
                                     .on_new_sample_rtsp(ctx, &mark_frame_avb)
                                     .inspect_err(|e| error!("on new sample err: {e}"));
                                 if !is_playing {
-                                    dart_update_stream
-                                        .add(StreamState::Playing {
+                                    let seekable =
+                                        self.seekable.load(std::sync::atomic::Ordering::Relaxed);
+                                    Self::send_event(
+                                        event_tx,
+                                        InputEvent::State(StreamState::Playing {
                                             texture_id,
-                                            seekable: true,
-                                        })
-                                        .log_err();
+                                            seekable,
+                                        }),
+                                    );
                                     is_playing = true;
                                 }
                             }
@@ -529,9 +568,10 @@ impl FfmpegVideoInput {
                     }
                     Err(e) => {
                         error!("Failed to read frame: {}", e);
-                        dart_update_stream
-                            .add(StreamState::Error("Stream corrupted".to_owned()))
-                            .log_err();
+                        Self::send_event(
+                            event_tx,
+                            InputEvent::State(StreamState::Error("Stream corrupted".to_owned())),
+                        );
                         return StreamExitResult::Error;
                     }
                 }
@@ -664,10 +704,6 @@ impl FfmpegVideoInput {
 
         self.update_texture_with_placeholder(&old_dims, new_width, new_height);
 
-        // Immediately signal the texture that a new frame is available
-        self.mark_frame_available();
-        info!("Marked frame available after resize");
-
         Ok(())
     }
 
@@ -677,9 +713,13 @@ impl FfmpegVideoInput {
             .decoding_context
             .lock()
             .map_err(|e| anyhow::anyhow!("decoding_context mutex poisoned: {}", e))?;
-        let ctx = ctx_guard
-            .as_mut()
-            .ok_or_else(|| anyhow::anyhow!("Decoding context not initialized"))?;
+        let ctx = match ctx_guard.as_mut() {
+            Some(ctx) => ctx,
+            None => {
+                info!("Decoding context not initialized; deferring scaler update");
+                return Ok(());
+            }
+        };
 
         let src_width = ctx.decoder.width();
         let src_height = ctx.decoder.height();
@@ -796,20 +836,13 @@ impl FfmpegVideoInput {
 }
 
 impl VideoInput for FfmpegVideoInput {
-    fn execute(&self, update_stream: DartStateStream, texture_id: i64) -> anyhow::Result<()> {
-        FfmpegVideoInput::execute(self, update_stream, texture_id)
-    }
-
-    fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        self.resize_stream(width, height)
-    }
-
-    fn terminate(&self) {
-        self.destroy_stream();
-    }
-
-    fn seek(&self, ts: i64) -> anyhow::Result<()> {
-        FfmpegVideoInput::seek(self, ts)
+    fn execute(
+        &self,
+        event_tx: InputEventSender,
+        command_rx: InputCommandReceiver,
+        texture_id: i64,
+    ) -> anyhow::Result<()> {
+        FfmpegVideoInput::execute(self, event_tx, command_rx, texture_id)
     }
 
     fn output_dimensions(&self) -> VideoDimensions {
