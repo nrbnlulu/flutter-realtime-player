@@ -489,6 +489,7 @@ impl FfmpegVideoInput {
         };
 
         let mut is_playing = false;
+        let mut stalled = false;
 
         loop {
             if self.asked_for_termination() {
@@ -501,6 +502,8 @@ impl FfmpegVideoInput {
             }
 
             let mut sleep_duration: Option<Duration> = None; // Declare sleep duration outside the guard scope
+            let mut retry_sleep: Option<Duration> = None;
+            let mut retry_loop = false;
 
             {
                 // Scope to hold the decoding_context lock briefly
@@ -540,6 +543,10 @@ impl FfmpegVideoInput {
                                     .on_new_sample_rtsp(ctx, &mark_frame_avb)
                                     .inspect_err(|e| error!("on new sample err: {e}"));
                                 if !is_playing {
+                                    if stalled {
+                                        info!("Stream data resumed: {}", &self.video_info.uri);
+                                        stalled = false;
+                                    }
                                     let seekable =
                                         self.seekable.load(std::sync::atomic::Ordering::Relaxed);
                                     Self::send_event(
@@ -566,6 +573,21 @@ impl FfmpegVideoInput {
                         trace!("EAGAIN received, retrying packet read");
                         continue;
                     }
+                    Err(ffmpeg::Error::Other {
+                        errno: ffmpeg::error::ETIMEDOUT,
+                    }) => {
+                        if !stalled {
+                            warn!(
+                                "Stream read timed out, waiting for frames: {}",
+                                &self.video_info.uri
+                            );
+                            Self::send_event(event_tx, InputEvent::State(StreamState::Loading));
+                            stalled = true;
+                            is_playing = false;
+                        }
+                        retry_sleep = Some(Duration::from_millis(200));
+                        retry_loop = true;
+                    }
                     Err(e) => {
                         error!("Failed to read frame: {}", e);
                         Self::send_event(
@@ -578,6 +600,12 @@ impl FfmpegVideoInput {
             } // ctx_guard is dropped here, releasing the decoding_context lock
 
             // Perform the sleep outside the lock
+            if let Some(duration) = retry_sleep {
+                thread::sleep(duration);
+            }
+            if retry_loop {
+                continue;
+            }
             if let Some(duration) = sleep_duration {
                 thread::sleep(duration);
             }

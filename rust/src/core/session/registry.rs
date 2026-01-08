@@ -145,6 +145,9 @@ fn apply_trtp_ffmpeg_defaults(options: &mut HashMap<String, String>) {
         .entry("protocol_whitelist".to_string())
         .or_insert_with(|| "file,udp,rtp".to_string());
     options
+        .entry("listen_timeout".to_string())
+        .or_insert_with(|| "2147483647".to_string());
+    options
         .entry("fflags".to_string())
         .or_insert_with(|| "nobuffer".to_string());
     options
