@@ -243,6 +243,142 @@ as BigInt,
 }
 
 /// @nodoc
+
+
+class StreamEvent_TrtpSessionMode extends StreamEvent {
+  const StreamEvent_TrtpSessionMode({required this.isLive, required this.currentTimeMs, required this.speed}): super._();
+  
+
+ final  bool isLive;
+ final  PlatformInt64 currentTimeMs;
+ final  double speed;
+
+/// Create a copy of StreamEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$StreamEvent_TrtpSessionModeCopyWith<StreamEvent_TrtpSessionMode> get copyWith => _$StreamEvent_TrtpSessionModeCopyWithImpl<StreamEvent_TrtpSessionMode>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamEvent_TrtpSessionMode&&(identical(other.isLive, isLive) || other.isLive == isLive)&&(identical(other.currentTimeMs, currentTimeMs) || other.currentTimeMs == currentTimeMs)&&(identical(other.speed, speed) || other.speed == speed));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,isLive,currentTimeMs,speed);
+
+@override
+String toString() {
+  return 'StreamEvent.trtpSessionMode(isLive: $isLive, currentTimeMs: $currentTimeMs, speed: $speed)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $StreamEvent_TrtpSessionModeCopyWith<$Res> implements $StreamEventCopyWith<$Res> {
+  factory $StreamEvent_TrtpSessionModeCopyWith(StreamEvent_TrtpSessionMode value, $Res Function(StreamEvent_TrtpSessionMode) _then) = _$StreamEvent_TrtpSessionModeCopyWithImpl;
+@useResult
+$Res call({
+ bool isLive, PlatformInt64 currentTimeMs, double speed
+});
+
+
+
+
+}
+/// @nodoc
+class _$StreamEvent_TrtpSessionModeCopyWithImpl<$Res>
+    implements $StreamEvent_TrtpSessionModeCopyWith<$Res> {
+  _$StreamEvent_TrtpSessionModeCopyWithImpl(this._self, this._then);
+
+  final StreamEvent_TrtpSessionMode _self;
+  final $Res Function(StreamEvent_TrtpSessionMode) _then;
+
+/// Create a copy of StreamEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? isLive = null,Object? currentTimeMs = null,Object? speed = null,}) {
+  return _then(StreamEvent_TrtpSessionMode(
+isLive: null == isLive ? _self.isLive : isLive // ignore: cast_nullable_to_non_nullable
+as bool,currentTimeMs: null == currentTimeMs ? _self.currentTimeMs : currentTimeMs // ignore: cast_nullable_to_non_nullable
+as PlatformInt64,speed: null == speed ? _self.speed : speed // ignore: cast_nullable_to_non_nullable
+as double,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class StreamEvent_TrtpStreamState extends StreamEvent {
+  const StreamEvent_TrtpStreamState(this.field0): super._();
+  
+
+ final  String field0;
+
+/// Create a copy of StreamEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$StreamEvent_TrtpStreamStateCopyWith<StreamEvent_TrtpStreamState> get copyWith => _$StreamEvent_TrtpStreamStateCopyWithImpl<StreamEvent_TrtpStreamState>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamEvent_TrtpStreamState&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'StreamEvent.trtpStreamState(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $StreamEvent_TrtpStreamStateCopyWith<$Res> implements $StreamEventCopyWith<$Res> {
+  factory $StreamEvent_TrtpStreamStateCopyWith(StreamEvent_TrtpStreamState value, $Res Function(StreamEvent_TrtpStreamState) _then) = _$StreamEvent_TrtpStreamStateCopyWithImpl;
+@useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$StreamEvent_TrtpStreamStateCopyWithImpl<$Res>
+    implements $StreamEvent_TrtpStreamStateCopyWith<$Res> {
+  _$StreamEvent_TrtpStreamStateCopyWithImpl(this._self, this._then);
+
+  final StreamEvent_TrtpStreamState _self;
+  final $Res Function(StreamEvent_TrtpStreamState) _then;
+
+/// Create a copy of StreamEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(StreamEvent_TrtpStreamState(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
 mixin _$StreamState {
 
 

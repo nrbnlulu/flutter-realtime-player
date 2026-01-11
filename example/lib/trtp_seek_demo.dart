@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show VideoDimensions;
+    show TsdpEndpoint, VideoDimensions;
+import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:flutter_realtime_player/video_player.dart';
 
 class SessionMode {
@@ -17,200 +17,6 @@ class SessionMode {
     required this.currentTimeMs,
     required this.speed,
   });
-
-  factory SessionMode.fromJson(Map<String, dynamic> json) {
-    return SessionMode(
-      isLive: json['is_live'] as bool,
-      currentTimeMs: json['current_time_ms'] as int,
-      speed: (json['speed'] as num).toDouble(),
-    );
-  }
-}
-
-class TrtpClient {
-  TrtpClient({required String baseUrl, required this.sourceId})
-    : _baseUri = Uri.parse(baseUrl);
-
-  final Uri _baseUri;
-  final String sourceId;
-  final HttpClient _httpClient = HttpClient();
-
-  String? token;
-  int? serverPort;
-  int? clientPort;
-  bool _connected = false;
-  Timer? _refreshTimer;
-
-  Future<void> connect({int? requestedClientPort}) async {
-    if (_connected) {
-      return;
-    }
-
-    final announcePort = requestedClientPort ?? await _pickEphemeralPort();
-    final registerUri = _buildUri('/streams/$sourceId/rtp');
-    final registerBody = <String, dynamic>{'client_port': announcePort};
-    final registerResp = await _postJson(registerUri, registerBody);
-    if (registerResp.statusCode < 200 || registerResp.statusCode >= 300) {
-      throw Exception('TRTP register failed: ${registerResp.body}');
-    }
-
-    final data = jsonDecode(registerResp.body) as Map<String, dynamic>;
-    token = data['token']?.toString();
-    serverPort = _readInt(data['server_port']);
-    clientPort = announcePort;
-    final refreshIntervalSecs = _readInt(
-      data['refresh_interval_secs'] ??
-          data['refresh_interval_sec'] ??
-          data['keepalive_interval_secs'] ??
-          data['keepalive_interval_sec'],
-    );
-
-    if (token == null || serverPort == null) {
-      throw Exception('TRTP register response missing token/server_port');
-    }
-
-    await _sendHolepunch(announcePort);
-    _connected = true;
-    _startRefreshTimer(refreshIntervalSecs ?? 10);
-  }
-
-  Future<String> fetchSdp() async {
-    if (token == null) {
-      throw Exception('TRTP not connected');
-    }
-    final sdpUri = _buildUri(
-      '/streams/$sourceId/rtp/sdp',
-      queryParameters: {'token': token!},
-    );
-    final resp = await _get(sdpUri);
-    if (resp.statusCode != 200) {
-      throw Exception('Failed to fetch SDP: ${resp.body}');
-    }
-    return _normalizeSdp(resp.body);
-  }
-
-  Future<void> refresh() async {
-    if (token == null) {
-      return;
-    }
-    final refreshUri = _buildUri('/streams/$sourceId/rtp/refresh');
-    await _postJson(refreshUri, {'token': token});
-  }
-
-  Future<void> seekToTimestamp(int timestampMs) async {
-    if (token == null) {
-      throw Exception('TRTP not connected');
-    }
-    final seekUri = _buildUri('/streams/$sourceId/rtp/$token/seek');
-    final resp = await _postJson(seekUri, {'timestamp': timestampMs});
-    if (resp.statusCode != 200) {
-      throw Exception('Seek failed: ${resp.body}');
-    }
-  }
-
-  Future<void> setSpeed(double speed) async {
-    if (token == null) throw Exception('TRTP not connected');
-    final uri = _buildUri('/streams/$sourceId/rtp/$token/speed');
-    final resp = await _postJson(uri, {'speed': speed});
-    if (resp.statusCode != 200) {
-      throw Exception('Set speed failed: ${resp.body}');
-    }
-  }
-
-  Future<SessionMode> getStatus() async {
-    if (token == null) throw Exception('TRTP not connected');
-    final uri = _buildUri('/streams/$sourceId/rtp/$token/status');
-    final resp = await _get(uri);
-    if (resp.statusCode != 200) {
-      throw Exception('Get status failed: ${resp.body}');
-    }
-    return SessionMode.fromJson(jsonDecode(resp.body));
-  }
-
-  void disconnect() {
-    _refreshTimer?.cancel();
-    _refreshTimer = null;
-    _connected = false;
-    token = null;
-  }
-
-  void dispose() {
-    disconnect();
-    _httpClient.close(force: true);
-  }
-
-  Future<int> _pickEphemeralPort() async {
-    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-    final port = socket.port;
-    socket.close();
-    return port;
-  }
-
-  Future<void> _sendHolepunch(int port) async {
-    if (token == null || serverPort == null) {
-      return;
-    }
-    final addresses = await InternetAddress.lookup(_baseUri.host);
-    final target = addresses.first;
-    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port);
-    final payload = 't5rtp $token $port';
-    socket.send(utf8.encode(payload), target, serverPort!);
-    await Future.delayed(const Duration(milliseconds: 100));
-    socket.close();
-  }
-
-  void _startRefreshTimer(int intervalSecs) {
-    _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(
-      Duration(seconds: intervalSecs.clamp(1, 3600)),
-      (_) => refresh(),
-    );
-  }
-
-  Uri _buildUri(String path, {Map<String, String>? queryParameters}) {
-    return _baseUri.replace(path: path, queryParameters: queryParameters);
-  }
-
-  Future<_HttpResponse> _get(Uri uri) async {
-    final request = await _httpClient.getUrl(uri);
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
-    return _HttpResponse(response.statusCode, body);
-  }
-
-  Future<_HttpResponse> _postJson(Uri uri, Map<String, dynamic> body) async {
-    final request = await _httpClient.postUrl(uri);
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode(body));
-    final response = await request.close();
-    final payload = await response.transform(utf8.decoder).join();
-    return _HttpResponse(response.statusCode, payload);
-  }
-
-  int? _readInt(dynamic value) {
-    if (value is int) {
-      return value;
-    }
-    if (value is String) {
-      return int.tryParse(value);
-    }
-    return null;
-  }
-
-  String _normalizeSdp(String sdp) {
-    var normalized = sdp.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n');
-    if (!normalized.endsWith('\r\n')) {
-      normalized = '$normalized\r\n';
-    }
-    return normalized;
-  }
-}
-
-class _HttpResponse {
-  _HttpResponse(this.statusCode, this.body);
-
-  final int statusCode;
-  final String body;
 }
 
 class TrtpSeekDemo extends StatefulWidget {
@@ -229,17 +35,16 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
   );
   final TextEditingController _clientPortController = TextEditingController();
 
-  TrtpClient? _client;
   VideoController? _controller;
-  File? _sdpFile;
+  int? _sessionId;
   bool _isConnecting = false;
   String? _errorMessage;
-  Timer? _statusTimer;
   SessionMode? _sessionMode;
+  StreamSubscription<StreamEvent>? _eventsSub;
 
   @override
   void dispose() {
-    _statusTimer?.cancel();
+    _eventsSub?.cancel();
     _stopPlayback();
     _baseUrlController.dispose();
     _sourceIdController.dispose();
@@ -257,35 +62,17 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
 
     await _stopPlayback();
 
-    final client = TrtpClient(
-      baseUrl: _baseUrlController.text.trim(),
-      sourceId: _sourceIdController.text.trim(),
-    );
-
     try {
       final requestedPort = int.tryParse(_clientPortController.text.trim());
-      await client.connect(requestedClientPort: requestedPort);
-      final sdp = await client.fetchSdp();
-      final sdpFile = await _writeSdpFile(sdp, client.token ?? 'unknown');
-
       final dimensions = const VideoDimensions(width: 1280, height: 720);
-      final ffmpegOptions = <String, String>{
-        'protocol_whitelist': 'file,udp,rtp',
-        'fflags': 'nobuffer',
-        'flags': 'low_delay',
-        'analyzeduration': '0',
-        'probesize': '32',
-        if (client.clientPort != null)
-          'local_rtpport': client.clientPort.toString(),
-        if (client.clientPort != null)
-          'local_rtcpport': '${client.clientPort! + 1}',
-      };
-
-      final result = await VideoController.create(
-        url: sdpFile.path,
+      final result = await VideoController.createTsdp(
+        endpoint: TsdpEndpoint(
+          baseUrl: _baseUrlController.text.trim(),
+          sourceId: _sourceIdController.text.trim(),
+          clientPort: requestedPort,
+        ),
         dimensions: dimensions,
         autoRestart: true,
-        ffmpegOptions: ffmpegOptions,
       );
 
       if (result.$1 == null) {
@@ -294,15 +81,18 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
 
       if (mounted) {
         setState(() {
-          _client = client;
           _controller = result.$1;
-          _sdpFile = sdpFile;
+          _sessionId = result.$1!.sessionId;
           _isConnecting = false;
+          _sessionMode = SessionMode(
+            isLive: true,
+            currentTimeMs: DateTime.now().millisecondsSinceEpoch,
+            speed: 1.0,
+          );
         });
-        _startStatusPolling();
+        _startEventListener();
       }
     } catch (e) {
-      client.dispose();
       if (mounted) {
         setState(() {
           _errorMessage = e.toString();
@@ -312,84 +102,74 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
     }
   }
 
-  void _startStatusPolling() {
-    _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      if (_client == null || !_client!._connected) {
-        timer.cancel();
+  void _startEventListener() {
+    _eventsSub?.cancel();
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    _eventsSub = rlib.registerToStreamEventsSink(sessionId: sessionId).listen((
+      event,
+    ) {
+      if (_sessionId != sessionId) return;
+      if (event is StreamEvent_Error) {
+        debugPrint('TRTP error: ${event.field0}');
         return;
       }
-      try {
-        final status = await _client!.getStatus();
-        if (mounted) {
-          setState(() {
-            _sessionMode = status;
-          });
-        }
-      } catch (e) {
-        debugPrint('Status poll failed: $e');
+      if (event is StreamEvent_TrtpStreamState) {
+        debugPrint('TRTP state: ${event.field0}');
+        return;
+      }
+      if (event is StreamEvent_TrtpSessionMode) {
+        if (!mounted) return;
+        setState(() {
+          _sessionMode = SessionMode(
+            isLive: event.isLive,
+            currentTimeMs: event.currentTimeMs,
+            speed: event.speed,
+          );
+        });
       }
     });
   }
 
   Future<void> _stopPlayback() async {
-    _statusTimer?.cancel();
-    _statusTimer = null;
+    _eventsSub?.cancel();
+    _eventsSub = null;
     await _controller?.dispose();
     _controller = null;
-    _client?.dispose();
-    _client = null;
-    if (_sdpFile != null) {
-      try {
-        await _sdpFile!.delete();
-      } catch (_) {}
-    }
-    _sdpFile = null;
+    _sessionId = null;
     _sessionMode = null;
     if (mounted) setState(() {});
   }
 
   Future<void> _seekRelative(int seconds) async {
-    if (_sessionMode == null || _client == null) return;
-    final current = _sessionMode!.currentTimeMs;
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    final current =
+        _sessionMode?.currentTimeMs ?? DateTime.now().millisecondsSinceEpoch;
     final target = current + (seconds * 1000);
-    await _client!.seekToTimestamp(target);
-    // Instant optimistic update
+    await rlib.seekToTimestamp(sessionId: sessionId, ts: target);
+    if (!mounted) return;
     setState(() {
       _sessionMode = SessionMode(
         isLive: false,
         currentTimeMs: target,
-        speed: _sessionMode!.speed,
+        speed: _sessionMode?.speed ?? 1.0,
       );
     });
   }
 
   Future<void> _seekToNow() async {
-    if (_client == null) return;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    // Adding a small buffer to ensure server treats it as "live" switch
-    await _client!.seekToTimestamp(now + 1000);
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    await rlib.trtpGoLive(sessionId: sessionId);
+    if (!mounted) return;
     setState(() {
-      _sessionMode = SessionMode(isLive: true, currentTimeMs: now, speed: 1.0);
+      _sessionMode = SessionMode(
+        isLive: true,
+        currentTimeMs: DateTime.now().millisecondsSinceEpoch,
+        speed: _sessionMode?.speed ?? 1.0,
+      );
     });
-  }
-
-  Future<void> _setSpeed(double speed) async {
-    if (_client == null) return;
-    try {
-      await _client!.setSpeed(speed);
-      setState(() {
-        if (_sessionMode != null) {
-          _sessionMode = SessionMode(
-            isLive: _sessionMode!.isLive,
-            currentTimeMs: _sessionMode!.currentTimeMs,
-            speed: speed,
-          );
-        }
-      });
-    } catch (e) {
-      debugPrint("Set speed failed: $e");
-    }
   }
 
   Future<void> _pickDateTime() async {
@@ -416,14 +196,30 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
       time.hour,
       time.minute,
     );
-    await _client!.seekToTimestamp(dt.millisecondsSinceEpoch);
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    await rlib.seekToTimestamp(
+      sessionId: sessionId,
+      ts: dt.millisecondsSinceEpoch,
+    );
+    if (!mounted) return;
+    setState(() {
+      _sessionMode = SessionMode(
+        isLive: false,
+        currentTimeMs: dt.millisecondsSinceEpoch,
+        speed: _sessionMode?.speed ?? 1.0,
+      );
+    });
   }
 
-  Future<File> _writeSdpFile(String sdp, String token) async {
-    final dir = await Directory.systemTemp.createTemp('trtp_sdp_');
-    final file = File('${dir.path}/trtp_$token.sdp');
-    await file.writeAsString(sdp);
-    return file;
+  Future<void> _setSpeed(double speed) async {
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    try {
+      await rlib.setSpeed(sessionId: sessionId, speed: speed);
+    } catch (e) {
+      debugPrint("Set speed failed: $e");
+    }
   }
 
   String _formatTime(int ms) {
@@ -436,7 +232,7 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
 
   @override
   Widget build(BuildContext context) {
-    if (_client == null) {
+    if (_controller == null) {
       return _buildConnectionForm();
     }
     return _buildPlayerInterface();
@@ -555,12 +351,6 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
                 style: const TextStyle(color: Colors.white70),
               ),
               const Spacer(),
-              if (_client != null)
-                Text(
-                  'Token: ${_client!.token?.substring(0, 8)}...',
-                  style: const TextStyle(color: Colors.white30, fontSize: 10),
-                ),
-              const SizedBox(width: 12),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.white),
                 onPressed: _stopPlayback,
@@ -636,20 +426,6 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
                     onPressed: isLive ? null : _seekToNow,
                     icon: const Icon(Icons.fiber_dvr, color: Colors.red),
                     label: const Text('GO LIVE'),
-                  ),
-                  const SizedBox(width: 16),
-
-                  // Pause/Play (Speed 0 vs 1)
-                  IconButton.filled(
-                    onPressed:
-                        () =>
-                            _setSpeed((_sessionMode?.speed ?? 1) == 0 ? 1 : 0),
-                    icon: Icon(
-                      (_sessionMode?.speed ?? 1) == 0
-                          ? Icons.play_arrow
-                          : Icons.pause,
-                    ),
-                    iconSize: 32,
                   ),
                   const SizedBox(width: 16),
 

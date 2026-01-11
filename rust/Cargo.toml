@@ -21,7 +21,10 @@ lazy_static = "1.5.0"
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12.7", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 flume = "0.12"
+tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+url = "2.5"
 
 
 thread_local = "1.1.8"
@@ -30,6 +33,7 @@ ffmpeg = { package="rffmpeg", git = "https://github.com/nrbnlulu/rffmpeg.git", b
 log = "0.4"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+media-server-api-models = { version = "0.1.0", path = "../../../t5hob/Backend/rust/media-server-api-models" }
 
 
 [target.'cfg(target_os = "windows")'.dependencies.windows]

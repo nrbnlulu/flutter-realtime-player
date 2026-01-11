@@ -1,20 +1,8 @@
 version: "3"
 
 vars:
-    DART_BIN:
-        sh: |
-            if command -v fvm &> /dev/null; then
-              echo "fvm dart"
-            else
-              echo "dart"
-            fi
-    FLUTTER_BIN:
-        sh: |
-            if command -v fvm &> /dev/null; then
-              echo "fvm flutter"
-            else
-              echo "flutter"
-            fi
+    DART_BIN: "fvm exec dart"
+    FLUTTER_BIN: "fvm exec flutter"
 
 tasks:
     codegen:

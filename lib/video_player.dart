@@ -149,6 +149,18 @@ class VideoController {
     await rlib.seekToTimestamp(sessionId: sessionId, ts: ts);
   }
 
+  Future<void> seekToTimestampMs(int tsMs) async {
+    await rlib.seekToTimestamp(sessionId: sessionId, ts: tsMs);
+  }
+
+  Future<void> trtpGoLive() async {
+    await rlib.trtpGoLive(sessionId: sessionId);
+  }
+
+  Future<void> setSpeed(double speed) async {
+    await rlib.setSpeed(sessionId: sessionId, speed: speed);
+  }
+
   /// Resize the video stream with new dimensions
   Future<void> resizeStream(VideoDimensions newDimensions) async {
     try {

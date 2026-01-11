@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -2009445357;
+  int get rustContentHash => 1274329839;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -128,6 +128,13 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 sessionId,
     required PlatformInt64 ts,
   });
+
+  Future<void> crateApiSimpleSetSpeed({
+    required PlatformInt64 sessionId,
+    required double speed,
+  });
+
+  Future<void> crateApiSimpleTrtpGoLive({required PlatformInt64 sessionId});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -544,6 +551,68 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["sessionId", "ts"],
       );
 
+  @override
+  Future<void> crateApiSimpleSetSpeed({
+    required PlatformInt64 sessionId,
+    required double speed,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(sessionId, serializer);
+          sse_encode_f_64(speed, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSimpleSetSpeedConstMeta,
+        argValues: [sessionId, speed],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleSetSpeedConstMeta => const TaskConstMeta(
+    debugName: "set_speed",
+    argNames: ["sessionId", "speed"],
+  );
+
+  @override
+  Future<void> crateApiSimpleTrtpGoLive({required PlatformInt64 sessionId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(sessionId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSimpleTrtpGoLiveConstMeta,
+        argValues: [sessionId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleTrtpGoLiveConstMeta =>
+      const TaskConstMeta(debugName: "trtp_go_live", argNames: ["sessionId"]);
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -613,6 +682,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double dco_decode_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
   int dco_decode_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -677,6 +752,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           width: dco_decode_u_64(raw[1]),
           height: dco_decode_u_64(raw[2]),
         );
+      case 3:
+        return StreamEvent_TrtpSessionMode(
+          isLive: dco_decode_bool(raw[1]),
+          currentTimeMs: dco_decode_i_64(raw[2]),
+          speed: dco_decode_f_64(raw[3]),
+        );
+      case 4:
+        return StreamEvent_TrtpStreamState(dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -844,6 +927,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat64();
+  }
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
@@ -940,6 +1029,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           width: var_width,
           height: var_height,
         );
+      case 3:
+        var var_isLive = sse_decode_bool(deserializer);
+        var var_currentTimeMs = sse_decode_i_64(deserializer);
+        var var_speed = sse_decode_f_64(deserializer);
+        return StreamEvent_TrtpSessionMode(
+          isLive: var_isLive,
+          currentTimeMs: var_currentTimeMs,
+          speed: var_speed,
+        );
+      case 4:
+        var var_field0 = sse_decode_String(deserializer);
+        return StreamEvent_TrtpStreamState(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -1135,6 +1236,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat64(self);
+  }
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
@@ -1228,6 +1335,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(2, serializer);
         sse_encode_u_64(width, serializer);
         sse_encode_u_64(height, serializer);
+      case StreamEvent_TrtpSessionMode(
+        isLive: final isLive,
+        currentTimeMs: final currentTimeMs,
+        speed: final speed,
+      ):
+        sse_encode_i_32(3, serializer);
+        sse_encode_bool(isLive, serializer);
+        sse_encode_i_64(currentTimeMs, serializer);
+        sse_encode_f_64(speed, serializer);
+      case StreamEvent_TrtpStreamState(field0: final field0):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(field0, serializer);
     }
   }
 

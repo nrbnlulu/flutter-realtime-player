@@ -55,6 +55,17 @@ Future<void> seekToTimestamp({
   ts: ts,
 );
 
+Future<void> trtpGoLive({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleTrtpGoLive(sessionId: sessionId);
+
+Future<void> setSpeed({
+  required PlatformInt64 sessionId,
+  required double speed,
+}) => RustLib.instance.api.crateApiSimpleSetSpeed(
+  sessionId: sessionId,
+  speed: speed,
+);
+
 Stream<StreamEvent> registerToStreamEventsSink({
   required PlatformInt64 sessionId,
 }) => RustLib.instance.api.crateApiSimpleRegisterToStreamEventsSink(

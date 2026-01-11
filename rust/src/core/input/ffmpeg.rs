@@ -540,7 +540,7 @@ impl FfmpegVideoInput {
                                 error!("Error sending packet to decoder: {}", err);
                             } else {
                                 let _ = self
-                                    .on_new_sample_rtsp(ctx, &mark_frame_avb)
+                                    .on_new_sample(ctx, &mark_frame_avb)
                                     .inspect_err(|e| error!("on new sample err: {e}"));
                                 if !is_playing {
                                     if stalled {
@@ -646,7 +646,7 @@ impl FfmpegVideoInput {
         }
     }
 
-    fn on_new_sample_rtsp<F>(
+    fn on_new_sample<F>(
         &self,
         ctx: &mut DecodingContext,
         mark_frame_avb: &F,
@@ -655,6 +655,7 @@ impl FfmpegVideoInput {
         F: Fn(),
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
+        log::debug!("got new sample");
         while ctx.decoder.receive_frame(&mut decoded).is_ok() {
             if ctx.scaler.is_none() {
                 let target_dims = self

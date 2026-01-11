@@ -95,6 +95,14 @@ pub fn seek_to_timestamp(session_id: i64, ts: i64) -> anyhow::Result<()> {
     registry::seek_session(session_id, ts)
 }
 
+pub fn trtp_go_live(session_id: i64) -> anyhow::Result<()> {
+    registry::trtp_live_session(session_id)
+}
+
+pub fn set_speed(session_id: i64, speed: f64) -> anyhow::Result<()> {
+    registry::set_speed_session(session_id, speed)
+}
+
 pub fn register_to_stream_events_sink(session_id: i64, sink: StreamSink<StreamEvent>) {
     registry::register_events_sink(session_id, sink);
 }

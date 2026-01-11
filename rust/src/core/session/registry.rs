@@ -13,7 +13,7 @@ use crate::core::{
         InputEventReceiver, InputEventSender, VideoInput,
     },
     output::flutter_pixelbuffer::{create_flutter_pixelbuffer, FlutterPixelBufferHandle},
-    session::{FlutterVideoSession, SessionLifecycle},
+    session::{RawVideoSession, TrtpVideoSession, VideoSession},
     types::{self, DartStateStream},
 };
 
@@ -25,11 +25,11 @@ pub fn init() -> anyhow::Result<()> {
 }
 
 pub struct SessionHolder {
-    inner: Mutex<Option<Box<dyn SessionLifecycle>>>,
+    inner: Mutex<Option<Box<dyn VideoSession>>>,
 }
 
 impl SessionHolder {
-    fn new(session: Box<dyn SessionLifecycle>) -> Self {
+    fn new(session: Box<dyn VideoSession>) -> Self {
         Self {
             inner: Mutex::new(Some(session)),
         }
@@ -37,13 +37,13 @@ impl SessionHolder {
 
     fn with_session_mut<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(&mut dyn SessionLifecycle) -> R,
+        F: FnOnce(&mut dyn VideoSession) -> R,
     {
         let mut guard = self.inner.lock().unwrap();
         guard.as_mut().map(|session| f(session.as_mut()))
     }
 
-    fn take(&self) -> Option<Box<dyn SessionLifecycle>> {
+    fn take(&self) -> Option<Box<dyn VideoSession>> {
         let mut guard = self.inner.lock().unwrap();
         guard.take()
     }
@@ -66,13 +66,13 @@ pub fn get_session(session_id: i64) -> Option<Arc<SessionHolder>> {
 
 pub fn get_session_mut<F, R>(session_id: i64, f: F) -> Option<R>
 where
-    F: FnOnce(&mut dyn SessionLifecycle) -> R,
+    F: FnOnce(&mut dyn VideoSession) -> R,
 {
     let holder = get_session(session_id)?;
     holder.with_session_mut(f)
 }
 
-pub fn insert_session(session_id: i64, session: Box<dyn SessionLifecycle>) {
+pub fn insert_session(session_id: i64, session: Box<dyn VideoSession>) {
     SESSION_CACHE
         .write()
         .unwrap()
@@ -217,7 +217,13 @@ pub fn create_new_playable(
             None,
         )?;
 
-    let session = FlutterVideoSession::new(session_id, engine_handle, output_handle, None);
+    let events_sink = Arc::new(Mutex::new(None));
+    let session = RawVideoSession::new(
+        session_id,
+        engine_handle,
+        output_handle,
+        Arc::clone(&events_sink),
+    );
     {
         insert_session(session_id, Box::new(session));
     }
@@ -239,18 +245,24 @@ pub fn create_tsdp_playable(
         "Creating TRTP playable: session_id={}, engine_handle={}, source_id={}",
         session_id, engine_handle, endpoint.source_id
     );
-    let tsdp_setup = trtp::setup_tsdp_session(&endpoint)?;
-
-    let sdp_data = Arc::clone(&tsdp_setup.sdp_data);
+    let events_sink = Arc::new(Mutex::new(None));
+    let tsdp_setup = trtp::setup_tsdp_session(&endpoint, Arc::clone(&events_sink))?;
+    let trtp::TsdpSetup {
+        sdp_data,
+        client_port,
+        trtp_control,
+        cleanup,
+    } = tsdp_setup;
+    let mut session_cleanup = Some(cleanup);
     video_info.uri = format!("tsdp://{}/{}", endpoint.base_url, endpoint.source_id);
     let mut options = ffmpeg_options.unwrap_or_default();
     apply_trtp_ffmpeg_defaults(&mut options);
     options
         .entry("local_rtpport".to_string())
-        .or_insert_with(|| tsdp_setup.client_port.to_string());
+        .or_insert_with(|| client_port.to_string());
     options
         .entry("local_rtcpport".to_string())
-        .or_insert_with(|| (tsdp_setup.client_port + 1).to_string());
+        .or_insert_with(|| (client_port + 1).to_string());
 
     let build_result = build_input_and_output(
         session_id,
@@ -263,16 +275,21 @@ pub fn create_tsdp_playable(
     let (input, output_handle, input_command_rx, input_event_tx, texture_id) = match build_result {
         Ok(value) => value,
         Err(err) => {
-            tsdp_setup.cleanup();
+            if let Some(cleanup) = session_cleanup.take() {
+                cleanup.cleanup();
+            }
             return Err(err);
         }
     };
 
-    let session = FlutterVideoSession::new(
+    let trtp_cleanup = session_cleanup.take().expect("TRTP cleanup missing");
+    let session = TrtpVideoSession::new(
         session_id,
         engine_handle,
         output_handle,
-        Some(tsdp_setup.refresh_tx),
+        Arc::clone(&events_sink),
+        trtp_cleanup,
+        trtp_control,
     );
     {
         insert_session(session_id, Box::new(session));
@@ -339,6 +356,16 @@ pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow
 
 pub fn seek_session(session_id: i64, ts: i64) -> anyhow::Result<()> {
     get_session_mut(session_id, |session| session.seek(ts))
+        .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
+}
+
+pub fn trtp_live_session(session_id: i64) -> anyhow::Result<()> {
+    get_session_mut(session_id, |session| session.go_to_live_stream())
+        .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
+}
+
+pub fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()> {
+    get_session_mut(session_id, |session| session.set_speed(speed))
         .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
 }
 

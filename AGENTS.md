@@ -10,7 +10,7 @@ This is a library that focuses on realtime streams support for flutter using ffm
 
 ### commands
 - most commands are in `./Taskfile.yml`
-- `flutter_rust_bridge_codegen generate` - generates rust bindings to dart, use this when you changed the api. (it uses fvm by default)
+- `fvm exec flutter_rust_bridge_codegen generate` - generates rust bindings to dart, use this when you changed the api.
 
 ## Knowledge memory
 - Session lifecycle is now command/event channel driven; avoid direct resize/terminate calls on inputs.
@@ -18,6 +18,6 @@ This is a library that focuses on realtime streams support for flutter using ffm
 - Flume channels are used for input/output command/event paths; prefer `Selector` for blocking waits.
 
 ### Trtp
-- TRTP setup runs in `rust/src/core/input/trtp.rs` and returns `TsdpSetup` with `sdp_data` and a `refresh_tx`.
-- `refresh_tx` is dropped on session terminate to stop the refresh thread.
-- `create_tsdp_playable` applies TRTP-specific ffmpeg defaults and passes SDP via custom IO.
+- TRTP setup runs in `rust/src/core/input/trtp.rs` and returns `TsdpSetup` with `sdp_data` and TRTP control/cleanup handles.
+- TRTP control uses a WebSocket channel (`/streams/{source_id}/trtp`) for init, SDP push, and DVR commands (seek/live/speed).
+- `create_tsdp_playable` applies TRTP-specific ffmpeg defaults, passes SDP via custom IO, and delegates session teardown to the WS lifecycle.
