@@ -65,7 +65,7 @@ pub fn create_new_playable(
     Ok(())
 }
 
-pub fn create_tsdp_playable(
+pub fn create_wsc_rtp_playable(
     session_id: i64,
     engine_handle: i64,
     endpoint: TsdpEndpoint,
@@ -74,12 +74,12 @@ pub fn create_tsdp_playable(
     sink: StreamSink<StreamState>,
 ) -> anyhow::Result<()> {
     trace!(
-        "create_tsdp_playable was called with engine_handle: {}, source_id: {}, session_id: {}",
+        "create_wsc_rtp_playable was called with engine_handle: {}, source_id: {}, session_id: {}",
         engine_handle,
         endpoint.source_id.as_str(),
         session_id
     );
-    crate::core::session::registry::create_tsdp_playable(
+    crate::core::session::registry::create_wsc_rtp_playable(
         session_id,
         engine_handle,
         endpoint,
@@ -95,8 +95,8 @@ pub fn seek_to_timestamp(session_id: i64, ts: i64) -> anyhow::Result<()> {
     registry::seek_session(session_id, ts)
 }
 
-pub fn trtp_go_live(session_id: i64) -> anyhow::Result<()> {
-    registry::trtp_live_session(session_id)
+pub fn wsc_rtp_go_live(session_id: i64) -> anyhow::Result<()> {
+    registry::wsc_rtp_live_session(session_id)
 }
 
 pub fn set_speed(session_id: i64, speed: f64) -> anyhow::Result<()> {

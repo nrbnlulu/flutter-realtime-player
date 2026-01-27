@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 1274329839;
+  int get rustContentHash => -1203113781;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -88,7 +88,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<PlatformInt64> crateApiSimpleCreateNewSession();
 
-  Stream<StreamState> crateApiSimpleCreateTsdpPlayable({
+  Stream<StreamState> crateApiSimpleCreateWscRtpPlayable({
     required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
     required TsdpEndpoint endpoint,
@@ -134,7 +134,7 @@ abstract class RustLibApi extends BaseApi {
     required double speed,
   });
 
-  Future<void> crateApiSimpleTrtpGoLive({required PlatformInt64 sessionId});
+  Future<void> crateApiSimpleWscRtpGoLive({required PlatformInt64 sessionId});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -223,7 +223,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "create_new_session", argNames: []);
 
   @override
-  Stream<StreamState> crateApiSimpleCreateTsdpPlayable({
+  Stream<StreamState> crateApiSimpleCreateWscRtpPlayable({
     required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
     required TsdpEndpoint endpoint,
@@ -253,7 +253,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             decodeSuccessData: sse_decode_unit,
             decodeErrorData: sse_decode_AnyhowException,
           ),
-          constMeta: kCrateApiSimpleCreateTsdpPlayableConstMeta,
+          constMeta: kCrateApiSimpleCreateWscRtpPlayableConstMeta,
           argValues: [
             sessionId,
             engineHandle,
@@ -269,9 +269,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return sink.stream;
   }
 
-  TaskConstMeta get kCrateApiSimpleCreateTsdpPlayableConstMeta =>
+  TaskConstMeta get kCrateApiSimpleCreateWscRtpPlayableConstMeta =>
       const TaskConstMeta(
-        debugName: "create_tsdp_playable",
+        debugName: "create_wsc_rtp_playable",
         argNames: [
           "sessionId",
           "engineHandle",
@@ -586,7 +586,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<void> crateApiSimpleTrtpGoLive({required PlatformInt64 sessionId}) {
+  Future<void> crateApiSimpleWscRtpGoLive({required PlatformInt64 sessionId}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -603,15 +603,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kCrateApiSimpleTrtpGoLiveConstMeta,
+        constMeta: kCrateApiSimpleWscRtpGoLiveConstMeta,
         argValues: [sessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiSimpleTrtpGoLiveConstMeta =>
-      const TaskConstMeta(debugName: "trtp_go_live", argNames: ["sessionId"]);
+  TaskConstMeta get kCrateApiSimpleWscRtpGoLiveConstMeta => const TaskConstMeta(
+    debugName: "wsc_rtp_go_live",
+    argNames: ["sessionId"],
+  );
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -753,13 +755,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           height: dco_decode_u_64(raw[2]),
         );
       case 3:
-        return StreamEvent_TrtpSessionMode(
+        return StreamEvent_WscRtpSessionMode(
           isLive: dco_decode_bool(raw[1]),
           currentTimeMs: dco_decode_i_64(raw[2]),
           speed: dco_decode_f_64(raw[3]),
         );
       case 4:
-        return StreamEvent_TrtpStreamState(dco_decode_String(raw[1]));
+        return StreamEvent_WscRtpStreamState(dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -1033,14 +1035,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_isLive = sse_decode_bool(deserializer);
         var var_currentTimeMs = sse_decode_i_64(deserializer);
         var var_speed = sse_decode_f_64(deserializer);
-        return StreamEvent_TrtpSessionMode(
+        return StreamEvent_WscRtpSessionMode(
           isLive: var_isLive,
           currentTimeMs: var_currentTimeMs,
           speed: var_speed,
         );
       case 4:
         var var_field0 = sse_decode_String(deserializer);
-        return StreamEvent_TrtpStreamState(var_field0);
+        return StreamEvent_WscRtpStreamState(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -1335,7 +1337,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(2, serializer);
         sse_encode_u_64(width, serializer);
         sse_encode_u_64(height, serializer);
-      case StreamEvent_TrtpSessionMode(
+      case StreamEvent_WscRtpSessionMode(
         isLive: final isLive,
         currentTimeMs: final currentTimeMs,
         speed: final speed,
@@ -1344,7 +1346,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_bool(isLive, serializer);
         sse_encode_i_64(currentTimeMs, serializer);
         sse_encode_f_64(speed, serializer);
-      case StreamEvent_TrtpStreamState(field0: final field0):
+      case StreamEvent_WscRtpStreamState(field0: final field0):
         sse_encode_i_32(4, serializer);
         sse_encode_String(field0, serializer);
     }

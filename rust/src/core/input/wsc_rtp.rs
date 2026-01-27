@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use flume::{Receiver, Sender};
+use flume::Sender;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use tungstenite::{connect, Message};
@@ -14,61 +14,133 @@ use url::Url;
 
 use crate::{core::types::TsdpEndpoint, dart_types::StreamEvent, utils::LogErr};
 
-pub struct TsdpSetup {
+pub struct WscRtpSetup {
     pub sdp_data: Arc<Vec<u8>>,
     pub client_port: u16,
-    pub trtp_control: TrtpControl,
-    pub cleanup: TsdpSessionCleanup,
+    pub wsc_rtp_control: WscRtpControl,
+    pub cleanup: WscRtpSessionCleanup,
 }
 
-impl TsdpSetup {
+impl WscRtpSetup {
     pub fn cleanup(self) {
         self.cleanup.cleanup();
     }
 }
 
 #[derive(Clone)]
-pub struct TrtpControl {
-    command_tx: Sender<TrtpCommand>,
+pub struct WscRtpControl {
+    base_url: String,
+    source_id: String,
+    token: Arc<Mutex<Option<String>>>,
+    http_client: reqwest::blocking::Client,
+    events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
 }
 
-impl TrtpControl {
+#[derive(Debug, Deserialize)]
+struct SessionModeResponse {
+    is_live: bool,
+    current_time_ms: Option<u64>,
+    speed: f64,
+}
+
+impl WscRtpControl {
+    fn get_control_url(&self, endpoint: &str) -> Result<String> {
+        let token_guard = self.token.lock().unwrap();
+        let token = token_guard
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("WSC-RTP session token not yet available"))?;
+
+        // base_url usually looks like "http://host:port" or "https://host:port"
+        // We need to construct: http://{host}:{port}/streams/{source_id}/wsc-rtp/{token}/{endpoint}
+
+        let mut url = Url::parse(&self.base_url)?;
+        url.set_path(&format!(
+            "/streams/{}/wsc-rtp/{}/{}",
+            self.source_id, token, endpoint
+        ));
+
+        Ok(url.to_string())
+    }
+
+    fn handle_response(&self, response: reqwest::blocking::Response) -> Result<()> {
+        let status = response.status();
+        if !status.is_success() {
+            return Err(anyhow::anyhow!(
+                "WSC-RTP request failed with status: {}",
+                status
+            ));
+        }
+
+        let mode: SessionModeResponse = response.json().context("parsing WSC-RTP response")?;
+
+        push_event(
+            &self.events_sink,
+            StreamEvent::WscRtpSessionMode {
+                is_live: mode.is_live,
+                current_time_ms: mode.current_time_ms.unwrap_or(0) as i64,
+                speed: mode.speed,
+            },
+        );
+        Ok(())
+    }
+
     pub fn seek(&self, timestamp_ms: i64) -> Result<()> {
-        self.command_tx
-            .send(TrtpCommand::Seek { timestamp_ms })
-            .map_err(|err| anyhow::anyhow!("trtp seek send failed: {}", err))
+        let url = self.get_control_url("seek")?;
+        let body = serde_json::json!({ "timestamp": timestamp_ms });
+
+        let response = self
+            .http_client
+            .post(url)
+            .json(&body)
+            .send()
+            .context("WSC-RTP seek request failed")?;
+
+        self.handle_response(response)
+            .context("WSC-RTP seek response error")
     }
 
     pub fn live(&self) -> Result<()> {
-        self.command_tx
-            .send(TrtpCommand::Live)
-            .map_err(|err| anyhow::anyhow!("trtp live send failed: {}", err))
+        let url = self.get_control_url("live")?;
+
+        let response = self
+            .http_client
+            .post(url)
+            .send()
+            .context("WSC-RTP live request failed")?;
+
+        self.handle_response(response)
+            .context("WSC-RTP live response error")
     }
 
     pub fn set_speed(&self, speed: f64) -> Result<()> {
-        self.command_tx
-            .send(TrtpCommand::SetSpeed { speed })
-            .map_err(|err| anyhow::anyhow!("trtp set_speed send failed: {}", err))
+        let url = self.get_control_url("speed")?;
+        let body = serde_json::json!({ "speed": speed });
+
+        let response = self
+            .http_client
+            .post(url)
+            .json(&body)
+            .send()
+            .context("WSC-RTP set_speed request failed")?;
+
+        self.handle_response(response)
+            .context("WSC-RTP set_speed response error")
     }
 }
 
-pub struct TsdpSessionCleanup {
-    command_tx: Sender<TrtpCommand>,
+pub struct WscRtpSessionCleanup {
+    command_tx: Sender<WscRtpCommand>,
 }
 
-impl TsdpSessionCleanup {
+impl WscRtpSessionCleanup {
     pub fn cleanup(self) {
-        let _ = self.command_tx.send(TrtpCommand::Terminate);
+        let _ = self.command_tx.send(WscRtpCommand::Terminate);
     }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum ClientMessage {
-    Init { client_port: Option<u16> },
-    Seek { timestamp: u64 },
-    Live,
-    SetSpeed { speed: f64 },
     Ping,
 }
 
@@ -87,11 +159,6 @@ enum ServerMessage {
     StreamState {
         state: String,
     },
-    SessionMode {
-        is_live: bool,
-        current_time_ms: u64,
-        speed: f64,
-    },
     Error {
         message: String,
     },
@@ -99,20 +166,17 @@ enum ServerMessage {
 }
 
 #[derive(Debug)]
-enum TrtpCommand {
-    Seek { timestamp_ms: i64 },
-    Live,
-    SetSpeed { speed: f64 },
+enum WscRtpCommand {
     Terminate,
 }
 
-pub fn setup_tsdp_session(
+pub fn setup_wsc_rtp_session(
     endpoint: &TsdpEndpoint,
     events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
-) -> anyhow::Result<TsdpSetup> {
+) -> anyhow::Result<WscRtpSetup> {
     let _base_url = Url::parse(&endpoint.base_url).context("invalid base_url")?;
     info!(
-        "TRTP setup: base_url={}, source_id={}, client_port={:?}",
+        "WSC-RTP setup: base_url={}, source_id={}, client_port={:?}",
         endpoint.base_url, endpoint.source_id, endpoint.client_port
     );
 
@@ -121,32 +185,37 @@ pub fn setup_tsdp_session(
     } else {
         let port = pick_ephemeral_rtp_port()?;
         warn!(
-            "TRTP client_port not provided; using {} for SDP/UDP holepunch. NAT may require explicit client_port.",
+            "WSC-RTP client_port not provided; using {} for SDP/UDP holepunch. NAT may require explicit client_port.",
             port
         );
         port
     };
 
-    let trtp_url = build_trtp_url(&endpoint.base_url, &endpoint.source_id)?;
+    let wsc_rtp_url = build_wsc_rtp_url(&endpoint.base_url, &endpoint.source_id)?;
     let (command_tx, command_rx) = flume::unbounded();
     let (sdp_tx, sdp_rx) = mpsc::channel();
+
+    // Shared token container
+    let token = Arc::new(Mutex::new(None));
 
     let base_url = endpoint.base_url.clone();
     let source_id = endpoint.source_id.clone();
     let events_sink_clone = Arc::clone(&events_sink);
+    let token_clone = Arc::clone(&token);
 
     thread::spawn(move || {
-        if let Err(err) = run_trtp_session(
-            trtp_url,
+        if let Err(err) = run_wsc_rtp_session(
+            wsc_rtp_url,
             &base_url,
             &source_id,
             announce_port,
             command_rx,
             sdp_tx,
             events_sink_clone,
+            token_clone,
         ) {
             warn!(
-                "TRTP session thread error: base_url={}, source_id={}, error={}",
+                "WSC-RTP session thread error: base_url={}, source_id={}, error={}",
                 base_url, source_id, err
             );
         }
@@ -154,42 +223,42 @@ pub fn setup_tsdp_session(
 
     let sdp_text = sdp_rx
         .recv_timeout(Duration::from_secs(15))
-        .context("waiting for TRTP SDP")??;
+        .context("waiting for WSC-RTP SDP")??;
     log_sdp_preview(&sdp_text);
 
     let sdp_data = Arc::new(ensure_sdp_line_endings(&sdp_text));
-    info!("TRTP SDP length: {} bytes", sdp_data.len());
+    info!("WSC-RTP SDP length: {} bytes", sdp_data.len());
 
-    Ok(TsdpSetup {
+    Ok(WscRtpSetup {
         sdp_data,
         client_port: announce_port,
-        trtp_control: TrtpControl {
-            command_tx: command_tx.clone(),
+        wsc_rtp_control: WscRtpControl {
+            base_url: endpoint.base_url.clone(),
+            source_id: endpoint.source_id.clone(),
+            token,
+            http_client: reqwest::blocking::Client::new(),
+            events_sink: Arc::clone(&events_sink),
         },
-        cleanup: TsdpSessionCleanup { command_tx },
+        cleanup: WscRtpSessionCleanup { command_tx },
     })
 }
 
-fn run_trtp_session(
-    trtp_url: Url,
+fn run_wsc_rtp_session(
+    wsc_rtp_url: Url,
     base_url: &str,
-    source_id: &str,
+    _source_id: &str,
     announce_port: u16,
-    command_rx: Receiver<TrtpCommand>,
+    command_rx: flume::Receiver<WscRtpCommand>,
     sdp_tx: mpsc::Sender<anyhow::Result<String>>,
     events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
+    token_shared: Arc<Mutex<Option<String>>>,
 ) -> Result<()> {
-    let (mut socket, _) = connect(trtp_url.to_string()).context("connecting to TRTP ws")?;
+    let (mut socket, _) = connect(wsc_rtp_url.to_string()).context("connecting to WSC-RTP ws")?;
     set_nonblocking(&mut socket);
 
-    send_message(
-        &mut socket,
-        ClientMessage::Init {
-            client_port: Some(announce_port),
-        },
-    )?;
+    // Initial Init message from client is removed per new spec.
+    // Client waits for server Init message.
 
-    let mut token: Option<String> = None;
     let mut server_port: Option<u16> = None;
     let mut sdp_sent = false;
     let mut last_ping = Instant::now();
@@ -197,21 +266,7 @@ fn run_trtp_session(
     loop {
         while let Ok(cmd) = command_rx.try_recv() {
             match cmd {
-                TrtpCommand::Seek { timestamp_ms } => {
-                    send_message(
-                        &mut socket,
-                        ClientMessage::Seek {
-                            timestamp: timestamp_ms.max(0) as u64,
-                        },
-                    )?;
-                }
-                TrtpCommand::Live => {
-                    send_message(&mut socket, ClientMessage::Live)?;
-                }
-                TrtpCommand::SetSpeed { speed } => {
-                    send_message(&mut socket, ClientMessage::SetSpeed { speed })?;
-                }
-                TrtpCommand::Terminate => {
+                WscRtpCommand::Terminate => {
                     let _ = socket.close(None);
                     return Ok(());
                 }
@@ -229,7 +284,7 @@ fn run_trtp_session(
                             server_message,
                             base_url,
                             announce_port,
-                            &mut token,
+                            &token_shared,
                             &mut server_port,
                             &mut sdp_sent,
                             &sdp_tx,
@@ -245,7 +300,7 @@ fn run_trtp_session(
             Err(err) => return Err(err.into()),
         }
 
-        if last_ping.elapsed() >= Duration::from_secs(15) {
+        if last_ping.elapsed() >= Duration::from_secs(2) {
             let _ = send_message(&mut socket, ClientMessage::Ping);
             last_ping = Instant::now();
         }
@@ -258,7 +313,7 @@ fn handle_server_message(
     message: ServerMessage,
     base_url: &str,
     announce_port: u16,
-    token: &mut Option<String>,
+    token_shared: &Arc<Mutex<Option<String>>>,
     server_port: &mut Option<u16>,
     sdp_sent: &mut bool,
     sdp_tx: &mpsc::Sender<anyhow::Result<String>>,
@@ -270,7 +325,10 @@ fn handle_server_message(
             server_port: init_server_port,
             udp_holepunch_required,
         } => {
-            *token = Some(init_token.clone());
+            {
+                let mut guard = token_shared.lock().unwrap();
+                *guard = Some(init_token.clone());
+            }
             *server_port = Some(init_server_port);
             if udp_holepunch_required {
                 send_udp_holepunch(base_url, init_server_port, &init_token, announce_port)?;
@@ -283,26 +341,12 @@ fn handle_server_message(
             }
         }
         ServerMessage::StreamState { state } => {
-            push_event(events_sink, StreamEvent::TrtpStreamState(state));
-        }
-        ServerMessage::SessionMode {
-            is_live,
-            current_time_ms,
-            speed,
-        } => {
-            push_event(
-                events_sink,
-                StreamEvent::TrtpSessionMode {
-                    is_live,
-                    current_time_ms: current_time_ms as i64,
-                    speed,
-                },
-            );
+            push_event(events_sink, StreamEvent::WscRtpStreamState(state));
         }
         ServerMessage::Error { message } => {
             push_event(events_sink, StreamEvent::Error(message.clone()));
             if !*sdp_sent {
-                let _ = sdp_tx.send(Err(anyhow::anyhow!("TRTP error: {}", message)));
+                let _ = sdp_tx.send(Err(anyhow::anyhow!("WSC-RTP error: {}", message)));
                 *sdp_sent = true;
             }
         }
@@ -325,10 +369,10 @@ fn push_event(
 fn decode_message(message: Message) -> Result<Option<ServerMessage>> {
     match message {
         Message::Text(text) => Ok(Some(
-            serde_json::from_str(&text).context("parsing TRTP message")?,
+            serde_json::from_str(&text).context("parsing WSC-RTP message")?,
         )),
         Message::Binary(data) => Ok(Some(
-            serde_json::from_slice(&data).context("parsing TRTP binary message")?,
+            serde_json::from_slice(&data).context("parsing WSC-RTP binary message")?,
         )),
         Message::Pong(_) => Ok(Some(ServerMessage::Pong)),
         Message::Close(_) => Ok(None),
@@ -340,10 +384,10 @@ fn send_message(
     socket: &mut tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>,
     message: ClientMessage,
 ) -> Result<()> {
-    let payload = serde_json::to_string(&message).context("serializing TRTP message")?;
+    let payload = serde_json::to_string(&message).context("serializing WSC-RTP message")?;
     socket
         .send(Message::Text(payload))
-        .context("sending TRTP message")?;
+        .context("sending WSC-RTP message")?;
     Ok(())
 }
 
@@ -362,7 +406,7 @@ fn set_nonblocking(
     }
 }
 
-fn build_trtp_url(base_url: &str, source_id: &str) -> Result<Url> {
+fn build_wsc_rtp_url(base_url: &str, source_id: &str) -> Result<Url> {
     let mut url = Url::parse(base_url).context("invalid base_url")?;
     let scheme = match url.scheme() {
         "https" => "wss",
@@ -372,7 +416,7 @@ fn build_trtp_url(base_url: &str, source_id: &str) -> Result<Url> {
     .to_string();
     url.set_scheme(&scheme)
         .map_err(|_| anyhow::anyhow!("invalid base_url scheme"))?;
-    url.set_path(&format!("/streams/{}/trtp", source_id));
+    url.set_path(&format!("/streams/{}/wsc-rtp", source_id));
     url.set_query(None);
     Ok(url)
 }
@@ -407,10 +451,10 @@ fn pick_ephemeral_port() -> anyhow::Result<u16> {
 fn log_sdp_preview(sdp_text: &str) {
     let preview: Vec<&str> = sdp_text.lines().take(8).collect();
     if preview.is_empty() {
-        warn!("TRTP SDP preview is empty");
+        warn!("WSC-RTP SDP preview is empty");
         return;
     }
-    info!("TRTP SDP preview:\n{}", preview.join("\n"));
+    info!("WSC-RTP SDP preview:\n{}", preview.join("\n"));
 }
 
 fn resolve_server_addr(base_url: &str, port: u16) -> Result<SocketAddr> {

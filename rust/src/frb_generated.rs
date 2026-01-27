@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1274329839;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1203113781;
 
 // Section: executor
 
@@ -126,7 +126,7 @@ fn wire__crate__api__simple__create_new_session_impl(
         },
     )
 }
-fn wire__crate__api__simple__create_tsdp_playable_impl(
+fn wire__crate__api__simple__create_wsc_rtp_playable_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -134,7 +134,7 @@ fn wire__crate__api__simple__create_tsdp_playable_impl(
 ) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "create_tsdp_playable",
+            debug_name: "create_wsc_rtp_playable",
             port: Some(port_),
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
@@ -162,7 +162,7 @@ fn wire__crate__api__simple__create_tsdp_playable_impl(
             move |context| {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
-                        let output_ok = crate::api::simple::create_tsdp_playable(
+                        let output_ok = crate::api::simple::create_wsc_rtp_playable(
                             api_session_id,
                             api_engine_handle,
                             api_endpoint,
@@ -507,7 +507,7 @@ fn wire__crate__api__simple__set_speed_impl(
         },
     )
 }
-fn wire__crate__api__simple__trtp_go_live_impl(
+fn wire__crate__api__simple__wsc_rtp_go_live_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -515,7 +515,7 @@ fn wire__crate__api__simple__trtp_go_live_impl(
 ) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "trtp_go_live",
+            debug_name: "wsc_rtp_go_live",
             port: Some(port_),
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
@@ -534,7 +534,7 @@ fn wire__crate__api__simple__trtp_go_live_impl(
             move |context| {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
-                        let output_ok = crate::api::simple::trtp_go_live(api_session_id)?;
+                        let output_ok = crate::api::simple::wsc_rtp_go_live(api_session_id)?;
                         Ok(output_ok)
                     })(),
                 )
@@ -710,7 +710,7 @@ impl SseDecode for crate::dart_types::StreamEvent {
                 let mut var_isLive = <bool>::sse_decode(deserializer);
                 let mut var_currentTimeMs = <i64>::sse_decode(deserializer);
                 let mut var_speed = <f64>::sse_decode(deserializer);
-                return crate::dart_types::StreamEvent::TrtpSessionMode {
+                return crate::dart_types::StreamEvent::WscRtpSessionMode {
                     is_live: var_isLive,
                     current_time_ms: var_currentTimeMs,
                     speed: var_speed,
@@ -718,7 +718,7 @@ impl SseDecode for crate::dart_types::StreamEvent {
             }
             4 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::dart_types::StreamEvent::TrtpStreamState(var_field0);
+                return crate::dart_types::StreamEvent::WscRtpStreamState(var_field0);
             }
             _ => {
                 unimplemented!("");
@@ -845,7 +845,12 @@ fn pde_ffi_dispatcher_primary_impl(
     match func_id {
         1 => wire__crate__api__simple__create_new_playable_impl(port, ptr, rust_vec_len, data_len),
         2 => wire__crate__api__simple__create_new_session_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__simple__create_tsdp_playable_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__simple__create_wsc_rtp_playable_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         4 => {
             wire__crate__api__simple__destroy_engine_streams_impl(port, ptr, rust_vec_len, data_len)
         }
@@ -871,7 +876,7 @@ fn pde_ffi_dispatcher_primary_impl(
         }
         11 => wire__crate__api__simple__seek_to_timestamp_impl(port, ptr, rust_vec_len, data_len),
         12 => wire__crate__api__simple__set_speed_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__simple__trtp_go_live_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__simple__wsc_rtp_go_live_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -906,7 +911,7 @@ impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamEvent {
                 height.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            crate::dart_types::StreamEvent::TrtpSessionMode {
+            crate::dart_types::StreamEvent::WscRtpSessionMode {
                 is_live,
                 current_time_ms,
                 speed,
@@ -917,7 +922,7 @@ impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamEvent {
                 speed.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            crate::dart_types::StreamEvent::TrtpStreamState(field0) => {
+            crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
                 [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             _ => {
@@ -1179,7 +1184,7 @@ impl SseEncode for crate::dart_types::StreamEvent {
                 <u64>::sse_encode(width, serializer);
                 <u64>::sse_encode(height, serializer);
             }
-            crate::dart_types::StreamEvent::TrtpSessionMode {
+            crate::dart_types::StreamEvent::WscRtpSessionMode {
                 is_live,
                 current_time_ms,
                 speed,
@@ -1189,7 +1194,7 @@ impl SseEncode for crate::dart_types::StreamEvent {
                 <i64>::sse_encode(current_time_ms, serializer);
                 <f64>::sse_encode(speed, serializer);
             }
-            crate::dart_types::StreamEvent::TrtpStreamState(field0) => {
+            crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
                 <i32>::sse_encode(4, serializer);
                 <String>::sse_encode(field0, serializer);
             }

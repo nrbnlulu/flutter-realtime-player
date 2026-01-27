@@ -33,13 +33,13 @@ Stream<StreamState> createNewPlayable({
   ffmpegOptions: ffmpegOptions,
 );
 
-Stream<StreamState> createTsdpPlayable({
+Stream<StreamState> createWscRtpPlayable({
   required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
   required TsdpEndpoint endpoint,
   required VideoInfo videoInfo,
   Map<String, String>? ffmpegOptions,
-}) => RustLib.instance.api.crateApiSimpleCreateTsdpPlayable(
+}) => RustLib.instance.api.crateApiSimpleCreateWscRtpPlayable(
   sessionId: sessionId,
   engineHandle: engineHandle,
   endpoint: endpoint,
@@ -55,8 +55,8 @@ Future<void> seekToTimestamp({
   ts: ts,
 );
 
-Future<void> trtpGoLive({required PlatformInt64 sessionId}) =>
-    RustLib.instance.api.crateApiSimpleTrtpGoLive(sessionId: sessionId);
+Future<void> wscRtpGoLive({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleWscRtpGoLive(sessionId: sessionId);
 
 Future<void> setSpeed({
   required PlatformInt64 sessionId,

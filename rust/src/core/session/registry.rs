@@ -9,11 +9,11 @@ use log::{debug, info};
 
 use crate::core::{
     input::{
-        ffmpeg::FfmpegVideoInput, trtp, InputCommandReceiver, InputCommandSender,
+        ffmpeg::FfmpegVideoInput, wsc_rtp, InputCommandReceiver, InputCommandSender,
         InputEventReceiver, InputEventSender, VideoInput,
     },
     output::flutter_pixelbuffer::{create_flutter_pixelbuffer, FlutterPixelBufferHandle},
-    session::{RawVideoSession, TrtpVideoSession, VideoSession},
+    session::{RawVideoSession, VideoSession, WscRtpVideoSession},
     types::{self, DartStateStream},
 };
 
@@ -140,7 +140,7 @@ fn spawn_stream_thread(
     });
 }
 
-fn apply_trtp_ffmpeg_defaults(options: &mut HashMap<String, String>) {
+fn apply_wsc_rtp_ffmpeg_defaults(options: &mut HashMap<String, String>) {
     options
         .entry("protocol_whitelist".to_string())
         .or_insert_with(|| "file,udp,rtp".to_string());
@@ -233,7 +233,7 @@ pub fn create_new_playable(
     Ok(())
 }
 
-pub fn create_tsdp_playable(
+pub fn create_wsc_rtp_playable(
     session_id: i64,
     engine_handle: i64,
     endpoint: types::TsdpEndpoint,
@@ -242,21 +242,21 @@ pub fn create_tsdp_playable(
     ffmpeg_options: Option<HashMap<String, String>>,
 ) -> anyhow::Result<()> {
     info!(
-        "Creating TRTP playable: session_id={}, engine_handle={}, source_id={}",
+        "Creating WSC-RTP playable: session_id={}, engine_handle={}, source_id={}",
         session_id, engine_handle, endpoint.source_id
     );
     let events_sink = Arc::new(Mutex::new(None));
-    let tsdp_setup = trtp::setup_tsdp_session(&endpoint, Arc::clone(&events_sink))?;
-    let trtp::TsdpSetup {
+    let wsc_rtp_setup = wsc_rtp::setup_wsc_rtp_session(&endpoint, Arc::clone(&events_sink))?;
+    let wsc_rtp::WscRtpSetup {
         sdp_data,
         client_port,
-        trtp_control,
+        wsc_rtp_control,
         cleanup,
-    } = tsdp_setup;
+    } = wsc_rtp_setup;
     let mut session_cleanup = Some(cleanup);
-    video_info.uri = format!("tsdp://{}/{}", endpoint.base_url, endpoint.source_id);
+    video_info.uri = format!("wsc-rtp://{}/{}", endpoint.base_url, endpoint.source_id);
     let mut options = ffmpeg_options.unwrap_or_default();
-    apply_trtp_ffmpeg_defaults(&mut options);
+    apply_wsc_rtp_ffmpeg_defaults(&mut options);
     options
         .entry("local_rtpport".to_string())
         .or_insert_with(|| client_port.to_string());
@@ -282,14 +282,14 @@ pub fn create_tsdp_playable(
         }
     };
 
-    let trtp_cleanup = session_cleanup.take().expect("TRTP cleanup missing");
-    let session = TrtpVideoSession::new(
+    let wsc_rtp_cleanup = session_cleanup.take().expect("WSC-RTP cleanup missing");
+    let session = WscRtpVideoSession::new(
         session_id,
         engine_handle,
         output_handle,
         Arc::clone(&events_sink),
-        trtp_cleanup,
-        trtp_control,
+        wsc_rtp_cleanup,
+        wsc_rtp_control,
     );
     {
         insert_session(session_id, Box::new(session));
@@ -359,7 +359,7 @@ pub fn seek_session(session_id: i64, ts: i64) -> anyhow::Result<()> {
         .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
 }
 
-pub fn trtp_live_session(session_id: i64) -> anyhow::Result<()> {
+pub fn wsc_rtp_live_session(session_id: i64) -> anyhow::Result<()> {
     get_session_mut(session_id, |session| session.go_to_live_stream())
         .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
 }

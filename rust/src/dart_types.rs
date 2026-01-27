@@ -15,10 +15,10 @@ pub enum StreamEvent {
         width: u64,
         height: u64,
     },
-    TrtpSessionMode {
+    WscRtpSessionMode {
         is_live: bool,
         current_time_ms: i64,
         speed: f64,
     },
-    TrtpStreamState(String),
+    WscRtpStreamState(String),
 }

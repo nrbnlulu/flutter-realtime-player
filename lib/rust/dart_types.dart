@@ -19,13 +19,13 @@ sealed class StreamEvent with _$StreamEvent {
     required BigInt width,
     required BigInt height,
   }) = StreamEvent_OriginVideoSize;
-  const factory StreamEvent.trtpSessionMode({
+  const factory StreamEvent.wscRtpSessionMode({
     required bool isLive,
     required PlatformInt64 currentTimeMs,
     required double speed,
-  }) = StreamEvent_TrtpSessionMode;
-  const factory StreamEvent.trtpStreamState(String field0) =
-      StreamEvent_TrtpStreamState;
+  }) = StreamEvent_WscRtpSessionMode;
+  const factory StreamEvent.wscRtpStreamState(String field0) =
+      StreamEvent_WscRtpStreamState;
 }
 
 @freezed

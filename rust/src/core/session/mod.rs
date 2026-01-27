@@ -8,7 +8,7 @@ use std::{
 use log::{debug, warn};
 
 use crate::core::{
-    input::trtp::{TrtpControl, TsdpSessionCleanup},
+    input::wsc_rtp::{WscRtpControl, WscRtpSessionCleanup},
     output::flutter_pixelbuffer::{FlutterPixelBufferHandle, OutputCommand},
     types::DartEventsStream,
 };
@@ -22,7 +22,7 @@ pub trait VideoSession: Send {
     fn set_events_sink(&mut self, sink: DartEventsStream);
     fn seek(&self, ts: i64) -> anyhow::Result<()>;
     fn resize(&self, width: u32, height: u32) -> anyhow::Result<()>;
-    /// only valid for TRTP sessions
+    /// only valid for WSC-RTP sessions
     fn go_to_live_stream(&self) -> anyhow::Result<()>;
     fn set_speed(&self, speed: f64) -> anyhow::Result<()>;
     fn destroy(self: Box<Self>);
@@ -116,7 +116,7 @@ impl VideoSession for RawVideoSession {
     }
 
     fn go_to_live_stream(&self) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("TRTP live not supported for session"))
+        Err(anyhow::anyhow!("WSC-RTP live not supported for session"))
     }
 
     fn set_speed(&self, speed: f64) -> anyhow::Result<()> {
@@ -137,30 +137,30 @@ impl VideoSession for RawVideoSession {
     }
 }
 
-pub struct TrtpVideoSession {
+pub struct WscRtpVideoSession {
     common: CommonSession,
-    trtp_cleanup: Option<TsdpSessionCleanup>,
-    trtp_control: TrtpControl,
+    wsc_rtp_cleanup: Option<WscRtpSessionCleanup>,
+    wsc_rtp_control: WscRtpControl,
 }
 
-impl TrtpVideoSession {
+impl WscRtpVideoSession {
     pub fn new(
         session_id: i64,
         engine_handle: i64,
         output: FlutterPixelBufferHandle,
         events_sink: Arc<Mutex<Option<DartEventsStream>>>,
-        trtp_cleanup: TsdpSessionCleanup,
-        trtp_control: TrtpControl,
+        wsc_rtp_cleanup: WscRtpSessionCleanup,
+        wsc_rtp_control: WscRtpControl,
     ) -> Self {
         Self {
             common: CommonSession::new(session_id, engine_handle, output, events_sink),
-            trtp_cleanup: Some(trtp_cleanup),
-            trtp_control,
+            wsc_rtp_cleanup: Some(wsc_rtp_cleanup),
+            wsc_rtp_control,
         }
     }
 }
 
-impl VideoSession for TrtpVideoSession {
+impl VideoSession for WscRtpVideoSession {
     fn session_id(&self) -> i64 {
         self.common.session_id
     }
@@ -178,8 +178,8 @@ impl VideoSession for TrtpVideoSession {
     }
 
     fn terminate(&mut self) {
-        debug!("Terminating TRTP session {}", self.common.session_id);
-        if let Some(cleanup) = self.trtp_cleanup.take() {
+        debug!("Terminating WSC-RTP session {}", self.common.session_id);
+        if let Some(cleanup) = self.wsc_rtp_cleanup.take() {
             cleanup.cleanup();
         }
         if let Err(err) = self.common.output.send(OutputCommand::Terminate) {
@@ -197,27 +197,31 @@ impl VideoSession for TrtpVideoSession {
     }
 
     fn seek(&self, ts: i64) -> anyhow::Result<()> {
-        log::debug!("Seeking TRTP session {} to {}", self.common.session_id, ts);
-        self.trtp_control.seek(ts)
+        log::debug!(
+            "Seeking WSC-RTP session {} to {}",
+            self.common.session_id,
+            ts
+        );
+        self.wsc_rtp_control.seek(ts)
     }
 
     fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        debug!("Resizing TRTP session {}", self.common.session_id);
+        debug!("Resizing WSC-RTP session {}", self.common.session_id);
         self.common
             .output
             .send(OutputCommand::Resize { width, height })
     }
 
     fn go_to_live_stream(&self) -> anyhow::Result<()> {
-        self.trtp_control.live()
+        self.wsc_rtp_control.live()
     }
 
     fn set_speed(&self, speed: f64) -> anyhow::Result<()> {
-        self.trtp_control.set_speed(speed)
+        self.wsc_rtp_control.set_speed(speed)
     }
 
     fn destroy(self: Box<Self>) {
-        debug!("Destroying TRTP session {}", self.common.session_id);
+        debug!("Destroying WSC-RTP session {}", self.common.session_id);
         let mut session = *self;
         session.terminate();
     }

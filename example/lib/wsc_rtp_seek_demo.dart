@@ -19,14 +19,14 @@ class SessionMode {
   });
 }
 
-class TrtpSeekDemo extends StatefulWidget {
-  const TrtpSeekDemo({super.key});
+class WscRtpSeekDemo extends StatefulWidget {
+  const WscRtpSeekDemo({super.key});
 
   @override
-  State<TrtpSeekDemo> createState() => _TrtpSeekDemoState();
+  State<WscRtpSeekDemo> createState() => _WscRtpSeekDemoState();
 }
 
-class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
+class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
   final TextEditingController _baseUrlController = TextEditingController(
     text: 'http://localhost:8009',
   );
@@ -65,7 +65,7 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
     try {
       final requestedPort = int.tryParse(_clientPortController.text.trim());
       final dimensions = const VideoDimensions(width: 1280, height: 720);
-      final result = await VideoController.createTsdp(
+      final result = await VideoController.createWscRtp(
         endpoint: TsdpEndpoint(
           baseUrl: _baseUrlController.text.trim(),
           sourceId: _sourceIdController.text.trim(),
@@ -111,14 +111,14 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
     ) {
       if (_sessionId != sessionId) return;
       if (event is StreamEvent_Error) {
-        debugPrint('TRTP error: ${event.field0}');
+        debugPrint('WSC-RTP error: ${event.field0}');
         return;
       }
-      if (event is StreamEvent_TrtpStreamState) {
-        debugPrint('TRTP state: ${event.field0}');
+      if (event is StreamEvent_WscRtpStreamState) {
+        debugPrint('WSC-RTP state: ${event.field0}');
         return;
       }
-      if (event is StreamEvent_TrtpSessionMode) {
+      if (event is StreamEvent_WscRtpSessionMode) {
         if (!mounted) return;
         setState(() {
           _sessionMode = SessionMode(
@@ -161,7 +161,7 @@ class _TrtpSeekDemoState extends State<TrtpSeekDemo> {
   Future<void> _seekToNow() async {
     final sessionId = _sessionId;
     if (sessionId == null) return;
-    await rlib.trtpGoLive(sessionId: sessionId);
+    await rlib.wscRtpGoLive(sessionId: sessionId);
     if (!mounted) return;
     setState(() {
       _sessionMode = SessionMode(

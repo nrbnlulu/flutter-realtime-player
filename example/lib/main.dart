@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 import 'package:flutter_realtime_player/rust/core/types.dart'
     show TsdpEndpoint, VideoDimensions;
 import 'package:flutter_realtime_player/video_player.dart';
@@ -8,7 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 import 'dart:async';
 import 'package:flutter_realtime_player/rust/dart_types.dart';
-import 'trtp_seek_demo.dart';
+import 'wsc_rtp_seek_demo.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,11 +28,11 @@ class MyApp extends StatelessWidget {
           appBar: AppBar(
             title: const Text('Flutter Realtime Player'),
             bottom: const TabBar(
-              tabs: [Tab(text: 'Streams'), Tab(text: 'TRTP Seek')],
+              tabs: [Tab(text: 'Streams'), Tab(text: 'WSC-RTP Seek')],
             ),
           ),
           body: const TabBarView(
-            children: [StreamControlWidget(), TrtpSeekDemo()],
+            children: [StreamControlWidget(), WscRtpSeekDemo()],
           ),
         ),
       ),
@@ -625,7 +624,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
 
     final result =
         widget.useTsdp
-            ? await VideoController.createTsdp(
+            ? await VideoController.createWscRtp(
               endpoint: TsdpEndpoint(
                 baseUrl: widget.tsdpBaseUrl,
                 sourceId: widget.tsdpSourceId,

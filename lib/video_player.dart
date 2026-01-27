@@ -91,7 +91,7 @@ class VideoController {
     }
   }
 
-  static Future<(VideoController?, String?)> createTsdp({
+  static Future<(VideoController?, String?)> createWscRtp({
     required TsdpEndpoint endpoint,
     required VideoDimensions dimensions,
     bool mute = true,
@@ -102,7 +102,7 @@ class VideoController {
     final sessionId = await rlib.createNewSession();
 
     try {
-      final stream = rlib.createTsdpPlayable(
+      final stream = rlib.createWscRtpPlayable(
         sessionId: sessionId,
         engineHandle: handle,
         endpoint: endpoint,
@@ -153,8 +153,8 @@ class VideoController {
     await rlib.seekToTimestamp(sessionId: sessionId, ts: tsMs);
   }
 
-  Future<void> trtpGoLive() async {
-    await rlib.trtpGoLive(sessionId: sessionId);
+  Future<void> wscRtpGoLive() async {
+    await rlib.wscRtpGoLive(sessionId: sessionId);
   }
 
   Future<void> setSpeed(double speed) async {

@@ -1,5 +1,5 @@
 pub mod ffmpeg;
-pub mod trtp;
+pub mod wsc_rtp;
 
 use anyhow::Result;
 
