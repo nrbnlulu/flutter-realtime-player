@@ -1541,6 +1541,7 @@ dependencies = [
 [[package]]
 name = "media-server-api-models"
 version = "0.1.0"
+source = "git+https://github.com/nrbnlulu/media-server.git#93162f64a6d94dc451a904fb8a5140fbc40c1b8b"
 dependencies = [
  "serde",
  "utoipa",

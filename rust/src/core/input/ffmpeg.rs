@@ -538,26 +538,28 @@ impl FfmpegVideoInput {
                         if packet.stream() == ctx.video_stream_index {
                             if let Err(err) = ctx.decoder.send_packet(&packet) {
                                 error!("Error sending packet to decoder: {}", err);
-                            } else {
-                                let _ = self
-                                    .on_new_sample(ctx, &mark_frame_avb)
-                                    .inspect_err(|e| error!("on new sample err: {e}"));
-                                if !is_playing {
-                                    if stalled {
-                                        info!("Stream data resumed: {}", &self.video_info.uri);
-                                        stalled = false;
-                                    }
-                                    let seekable =
-                                        self.seekable.load(std::sync::atomic::Ordering::Relaxed);
-                                    Self::send_event(
-                                        event_tx,
-                                        InputEvent::State(StreamState::Playing {
-                                            texture_id,
-                                            seekable,
-                                        }),
-                                    );
-                                    is_playing = true;
+                            }
+                            // Always try to receive frames, even after send errors.
+                            // When the backing stream changes (e.g., camera disconnect -> fallback),
+                            // on_new_sample handles flushing the decoder internally.
+                            let _ = self
+                                .on_new_sample(ctx, &mark_frame_avb)
+                                .inspect_err(|e| error!("on new sample err: {e}"));
+                            if !is_playing {
+                                if stalled {
+                                    info!("Stream data resumed: {}", &self.video_info.uri);
+                                    stalled = false;
                                 }
+                                let seekable =
+                                    self.seekable.load(std::sync::atomic::Ordering::Relaxed);
+                                Self::send_event(
+                                    event_tx,
+                                    InputEvent::State(StreamState::Playing {
+                                        texture_id,
+                                        seekable,
+                                    }),
+                                );
+                                is_playing = true;
                             }
                         }
                     }
@@ -646,23 +648,42 @@ impl FfmpegVideoInput {
         }
     }
 
-    fn on_new_sample<F>(
-        &self,
-        ctx: &mut DecodingContext,
-        mark_frame_avb: &F,
-    ) -> anyhow::Result<()>
+    fn on_new_sample<F>(&self, ctx: &mut DecodingContext, mark_frame_avb: &F) -> anyhow::Result<()>
     where
         F: Fn(),
     {
         let mut decoded = ffmpeg::util::frame::Video::empty();
         log::debug!("got new sample");
-        while ctx.decoder.receive_frame(&mut decoded).is_ok() {
+        loop {
+            match ctx.decoder.receive_frame(&mut decoded) {
+                Ok(()) => {}
+                Err(ffmpeg::Error::Other { errno }) if errno == ffmpeg::error::EAGAIN => {
+                    // No more frames available right now, this is normal
+                    break;
+                }
+                Err(ffmpeg::Error::InputChanged) => {
+                    // Stream parameters changed (e.g., fallback stream activated)
+                    // Flush decoder and reset scaler to adapt to new stream
+                    warn!("Input changed detected, flushing decoder");
+                    ctx.decoder.flush();
+                    ctx.scaler = None;
+                    break;
+                }
+                Err(e) => {
+                    // Other errors - log but don't fail the whole function
+                    trace!("receive_frame error: {}", e);
+                    break;
+                }
+            }
+
+            let target_dims = self
+                .output_dimensions
+                .lock()
+                .map(|d| d.clone())
+                .unwrap_or_else(|_| self.video_info.dimensions.clone());
+
+            // Create or recreate scaler if needed (e.g., after stream switch to fallback)
             if ctx.scaler.is_none() {
-                let target_dims = self
-                    .output_dimensions
-                    .lock()
-                    .map(|d| d.clone())
-                    .unwrap_or_else(|_| self.video_info.dimensions.clone());
                 let new_scaler = Self::create_scaler_with_fallbacks(
                     decoded.format(),
                     decoded.width(),
@@ -673,9 +694,15 @@ impl FfmpegVideoInput {
                 )?;
                 ctx.scaler = Some(new_scaler);
             }
+
             let mut rgb_frame = ffmpeg::util::frame::Video::empty();
             if let Some(ref mut scaler) = ctx.scaler {
-                scaler.run(&decoded, &mut rgb_frame)?;
+                if let Err(e) = scaler.run(&decoded, &mut rgb_frame) {
+                    // Scaler failed - likely input dimensions changed. Reset and retry next frame.
+                    warn!("Scaler error (resetting): {}", e);
+                    ctx.scaler = None;
+                    continue;
+                }
             } else {
                 return Err(anyhow::anyhow!("Scaler not initialized"));
             }
@@ -768,7 +795,7 @@ impl FfmpegVideoInput {
                 new_height,
             )?;
             ctx.scaler = Some(new_scaler);
-            info!(
+            debug!(
                 "Scaler updated to new dimensions: {}x{}",
                 new_width, new_height
             );

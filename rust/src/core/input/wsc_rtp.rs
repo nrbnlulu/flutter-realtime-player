@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use flume::Sender;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
@@ -88,12 +88,14 @@ impl WscRtpControl {
         let url = self.get_control_url("seek")?;
         let body = serde_json::json!({ "timestamp": timestamp_ms });
 
-        let response = self
+        let response = match self
             .http_client
-            .post(url)
+            .post(&url)
             .json(&body)
-            .send()
-            .context("WSC-RTP seek request failed")?;
+            .send() {
+                Ok(response) => response,
+                Err(err) => bail!("WSC-RTP seek request failed for url {}: {}", url, err),
+            };
 
         self.handle_response(response)
             .context("WSC-RTP seek response error")
