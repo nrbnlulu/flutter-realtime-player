@@ -40,7 +40,7 @@ impl VideoInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[flutter_rust_bridge::frb(sync)]
-pub struct TsdpEndpoint {
+pub struct WscRtpEndpoint {
     pub base_url: String,
     pub source_id: String,
     pub client_port: Option<u16>,

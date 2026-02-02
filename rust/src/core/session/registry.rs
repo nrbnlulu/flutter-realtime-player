@@ -236,7 +236,7 @@ pub fn create_new_playable(
 pub fn create_wsc_rtp_playable(
     session_id: i64,
     engine_handle: i64,
-    endpoint: types::TsdpEndpoint,
+    endpoint: types::WscRtpEndpoint,
     mut video_info: types::VideoInfo,
     update_stream: DartStateStream,
     ffmpeg_options: Option<HashMap<String, String>>,

@@ -6,31 +6,6 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-class WscSdpEndpoint {
-  final String baseUrl;
-  final String sourceId;
-  final int? clientPort;
-
-  const WscSdpEndpoint({
-    required this.baseUrl,
-    required this.sourceId,
-    this.clientPort,
-  });
-
-  @override
-  int get hashCode =>
-      baseUrl.hashCode ^ sourceId.hashCode ^ clientPort.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is WscSdpEndpoint &&
-          runtimeType == other.runtimeType &&
-          baseUrl == other.baseUrl &&
-          sourceId == other.sourceId &&
-          clientPort == other.clientPort;
-}
-
 class VideoDimensions {
   final int width;
   final int height;
@@ -82,4 +57,29 @@ class VideoInfo {
           framerate == other.framerate &&
           mute == other.mute &&
           autoRestart == other.autoRestart;
+}
+
+class WscRtpEndpoint {
+  final String baseUrl;
+  final String sourceId;
+  final int? clientPort;
+
+  const WscRtpEndpoint({
+    required this.baseUrl,
+    required this.sourceId,
+    this.clientPort,
+  });
+
+  @override
+  int get hashCode =>
+      baseUrl.hashCode ^ sourceId.hashCode ^ clientPort.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WscRtpEndpoint &&
+          runtimeType == other.runtimeType &&
+          baseUrl == other.baseUrl &&
+          sourceId == other.sourceId &&
+          clientPort == other.clientPort;
 }

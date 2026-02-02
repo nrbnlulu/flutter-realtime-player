@@ -5,14 +5,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use flume::Sender;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use tungstenite::{connect, Message};
 use url::Url;
 
-use crate::{core::types::TsdpEndpoint, dart_types::StreamEvent, utils::LogErr};
+use crate::{core::types::WscRtpEndpoint, dart_types::StreamEvent, utils::LogErr};
 
 pub struct WscRtpSetup {
     pub sdp_data: Arc<Vec<u8>>,
@@ -88,14 +88,10 @@ impl WscRtpControl {
         let url = self.get_control_url("seek")?;
         let body = serde_json::json!({ "timestamp": timestamp_ms });
 
-        let response = match self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .send() {
-                Ok(response) => response,
-                Err(err) => bail!("WSC-RTP seek request failed for url {}: {}", url, err),
-            };
+        let response = match self.http_client.post(&url).json(&body).send() {
+            Ok(response) => response,
+            Err(err) => bail!("WSC-RTP seek request failed for url {}: {}", url, err),
+        };
 
         self.handle_response(response)
             .context("WSC-RTP seek response error")
@@ -173,7 +169,7 @@ enum WscRtpCommand {
 }
 
 pub fn setup_wsc_rtp_session(
-    endpoint: &TsdpEndpoint,
+    endpoint: &WscRtpEndpoint,
     events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
 ) -> anyhow::Result<WscRtpSetup> {
     let _base_url = Url::parse(&endpoint.base_url).context("invalid base_url")?;

@@ -91,7 +91,7 @@ abstract class RustLibApi extends BaseApi {
   Stream<StreamState> crateApiSimpleCreateWscRtpPlayable({
     required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
-    required WscSdpEndpoint endpoint,
+    required WscRtpEndpoint endpoint,
     required VideoInfo videoInfo,
     Map<String, String>? ffmpegOptions,
   });
@@ -226,7 +226,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Stream<StreamState> crateApiSimpleCreateWscRtpPlayable({
     required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
-    required WscSdpEndpoint endpoint,
+    required WscRtpEndpoint endpoint,
     required VideoInfo videoInfo,
     Map<String, String>? ffmpegOptions,
   }) {
@@ -238,7 +238,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             final serializer = SseSerializer(generalizedFrbRustBinding);
             sse_encode_i_64(sessionId, serializer);
             sse_encode_i_64(engineHandle, serializer);
-            sse_encode_box_autoadd_tsdp_endpoint(endpoint, serializer);
+            sse_encode_box_autoadd_wsc_rtp_endpoint(endpoint, serializer);
             sse_encode_box_autoadd_video_info(videoInfo, serializer);
             sse_encode_opt_Map_String_String_None(ffmpegOptions, serializer);
             sse_encode_StreamSink_stream_state_Sse(sink, serializer);
@@ -666,12 +666,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  WscSdpEndpoint dco_decode_box_autoadd_tsdp_endpoint(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_tsdp_endpoint(raw);
-  }
-
-  @protected
   int dco_decode_box_autoadd_u_16(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -681,6 +675,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   VideoInfo dco_decode_box_autoadd_video_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_video_info(raw);
+  }
+
+  @protected
+  WscRtpEndpoint dco_decode_box_autoadd_wsc_rtp_endpoint(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_wsc_rtp_endpoint(raw);
   }
 
   @protected
@@ -788,19 +788,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  WscSdpEndpoint dco_decode_tsdp_endpoint(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
-    return WscSdpEndpoint(
-      baseUrl: dco_decode_String(arr[0]),
-      sourceId: dco_decode_String(arr[1]),
-      clientPort: dco_decode_opt_box_autoadd_u_16(arr[2]),
-    );
-  }
-
-  @protected
   int dco_decode_u_16(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -858,6 +845,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WscRtpEndpoint dco_decode_wsc_rtp_endpoint(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return WscRtpEndpoint(
+      baseUrl: dco_decode_String(arr[0]),
+      sourceId: dco_decode_String(arr[1]),
+      clientPort: dco_decode_opt_box_autoadd_u_16(arr[2]),
+    );
+  }
+
+  @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_String(deserializer);
@@ -909,14 +909,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  WscSdpEndpoint sse_decode_box_autoadd_tsdp_endpoint(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_tsdp_endpoint(deserializer));
-  }
-
-  @protected
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_16(deserializer));
@@ -926,6 +918,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   VideoInfo sse_decode_box_autoadd_video_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_video_info(deserializer));
+  }
+
+  @protected
+  WscRtpEndpoint sse_decode_box_autoadd_wsc_rtp_endpoint(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_wsc_rtp_endpoint(deserializer));
   }
 
   @protected
@@ -1074,19 +1074,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  WscSdpEndpoint sse_decode_tsdp_endpoint(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_baseUrl = sse_decode_String(deserializer);
-    var var_sourceId = sse_decode_String(deserializer);
-    var var_clientPort = sse_decode_opt_box_autoadd_u_16(deserializer);
-    return WscSdpEndpoint(
-      baseUrl: var_baseUrl,
-      sourceId: var_sourceId,
-      clientPort: var_clientPort,
-    );
-  }
-
-  @protected
   int sse_decode_u_16(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint16();
@@ -1137,6 +1124,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       framerate: var_framerate,
       mute: var_mute,
       autoRestart: var_autoRestart,
+    );
+  }
+
+  @protected
+  WscRtpEndpoint sse_decode_wsc_rtp_endpoint(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_baseUrl = sse_decode_String(deserializer);
+    var var_sourceId = sse_decode_String(deserializer);
+    var var_clientPort = sse_decode_opt_box_autoadd_u_16(deserializer);
+    return WscRtpEndpoint(
+      baseUrl: var_baseUrl,
+      sourceId: var_sourceId,
+      clientPort: var_clientPort,
     );
   }
 
@@ -1214,15 +1214,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_tsdp_endpoint(
-    WscSdpEndpoint self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_tsdp_endpoint(self, serializer);
-  }
-
-  @protected
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_16(self, serializer);
@@ -1235,6 +1226,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_video_info(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_wsc_rtp_endpoint(
+    WscRtpEndpoint self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_wsc_rtp_endpoint(self, serializer);
   }
 
   @protected
@@ -1374,14 +1374,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_tsdp_endpoint(WscSdpEndpoint self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.baseUrl, serializer);
-    sse_encode_String(self.sourceId, serializer);
-    sse_encode_opt_box_autoadd_u_16(self.clientPort, serializer);
-  }
-
-  @protected
   void sse_encode_u_16(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint16(self);
@@ -1428,5 +1420,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_i_32(self.framerate, serializer);
     sse_encode_bool(self.mute, serializer);
     sse_encode_bool(self.autoRestart, serializer);
+  }
+
+  @protected
+  void sse_encode_wsc_rtp_endpoint(
+    WscRtpEndpoint self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.baseUrl, serializer);
+    sse_encode_String(self.sourceId, serializer);
+    sse_encode_opt_box_autoadd_u_16(self.clientPort, serializer);
   }
 }
