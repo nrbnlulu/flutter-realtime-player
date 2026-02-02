@@ -54,7 +54,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoInfo dco_decode_box_autoadd_video_info(dynamic raw);
 
   @protected
-  WscRtpEndpoint dco_decode_box_autoadd_wsc_rtp_endpoint(dynamic raw);
+  WscSdpEndpoint dco_decode_box_autoadd_wsc_sdp_endpoint(dynamic raw);
 
   @protected
   double dco_decode_f_64(dynamic raw);
@@ -111,7 +111,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoInfo dco_decode_video_info(dynamic raw);
 
   @protected
-  WscRtpEndpoint dco_decode_wsc_rtp_endpoint(dynamic raw);
+  WscSdpEndpoint dco_decode_wsc_sdp_endpoint(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -147,7 +147,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoInfo sse_decode_box_autoadd_video_info(SseDeserializer deserializer);
 
   @protected
-  WscRtpEndpoint sse_decode_box_autoadd_wsc_rtp_endpoint(
+  WscSdpEndpoint sse_decode_box_autoadd_wsc_sdp_endpoint(
     SseDeserializer deserializer,
   );
 
@@ -212,7 +212,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoInfo sse_decode_video_info(SseDeserializer deserializer);
 
   @protected
-  WscRtpEndpoint sse_decode_wsc_rtp_endpoint(SseDeserializer deserializer);
+  WscSdpEndpoint sse_decode_wsc_sdp_endpoint(SseDeserializer deserializer);
 
   @protected
   void sse_encode_AnyhowException(
@@ -257,8 +257,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_box_autoadd_wsc_rtp_endpoint(
-    WscRtpEndpoint self,
+  void sse_encode_box_autoadd_wsc_sdp_endpoint(
+    WscSdpEndpoint self,
     SseSerializer serializer,
   );
 
@@ -332,8 +332,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_video_info(VideoInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_wsc_rtp_endpoint(
-    WscRtpEndpoint self,
+  void sse_encode_wsc_sdp_endpoint(
+    WscSdpEndpoint self,
     SseSerializer serializer,
   );
 }

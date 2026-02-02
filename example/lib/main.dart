@@ -12,6 +12,7 @@ import 'wsc_rtp_seek_demo.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await fl_gst.init();
+  
   await windowManager.ensureInitialized();
   runApp(const MyApp());
 }

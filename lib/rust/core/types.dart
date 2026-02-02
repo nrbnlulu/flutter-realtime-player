@@ -59,12 +59,12 @@ class VideoInfo {
           autoRestart == other.autoRestart;
 }
 
-class WscRtpEndpoint {
+class WscSdpEndpoint {
   final String baseUrl;
   final String sourceId;
   final int? clientPort;
 
-  const WscRtpEndpoint({
+  const WscSdpEndpoint({
     required this.baseUrl,
     required this.sourceId,
     this.clientPort,
@@ -77,7 +77,7 @@ class WscRtpEndpoint {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is WscRtpEndpoint &&
+      other is WscSdpEndpoint &&
           runtimeType == other.runtimeType &&
           baseUrl == other.baseUrl &&
           sourceId == other.sourceId &&

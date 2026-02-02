@@ -5,7 +5,7 @@ use log::{debug, info, trace};
 use crate::{
     core::{
         session::registry::{self},
-        types::{VideoInfo, WscRtpEndpoint},
+        types::{VideoInfo, WscSdpEndpoint},
         IS_INITIALIZED,
     },
     dart_types::{StreamEvent, StreamState},
@@ -68,7 +68,7 @@ pub fn create_new_playable(
 pub fn create_wsc_rtp_playable(
     session_id: i64,
     engine_handle: i64,
-    endpoint: WscRtpEndpoint,
+    endpoint: WscSdpEndpoint,
     video_info: VideoInfo,
     ffmpeg_options: Option<HashMap<String, String>>,
     sink: StreamSink<StreamState>,

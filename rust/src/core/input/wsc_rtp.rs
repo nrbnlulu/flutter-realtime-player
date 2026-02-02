@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tungstenite::{connect, Message};
 use url::Url;
 
-use crate::{core::types::WscRtpEndpoint, dart_types::StreamEvent, utils::LogErr};
+use crate::{core::types::WscSdpEndpoint, dart_types::StreamEvent, utils::LogErr};
 
 pub struct WscRtpSetup {
     pub sdp_data: Arc<Vec<u8>>,
@@ -169,7 +169,7 @@ enum WscRtpCommand {
 }
 
 pub fn setup_wsc_rtp_session(
-    endpoint: &WscRtpEndpoint,
+    endpoint: &WscSdpEndpoint,
     events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
 ) -> anyhow::Result<WscRtpSetup> {
     let _base_url = Url::parse(&endpoint.base_url).context("invalid base_url")?;
@@ -208,7 +208,7 @@ pub fn setup_wsc_rtp_session(
             &source_id,
             announce_port,
             command_rx,
-            sdp_tx,
+            &sdp_tx,
             events_sink_clone,
             token_clone,
         ) {
@@ -216,6 +216,8 @@ pub fn setup_wsc_rtp_session(
                 "WSC-RTP session thread error: base_url={}, source_id={}, error={}",
                 base_url, source_id, err
             );
+            // Send the error through the channel so the caller gets a meaningful error
+            let _ = sdp_tx.send(Err(err));
         }
     });
 
@@ -247,7 +249,7 @@ fn run_wsc_rtp_session(
     _source_id: &str,
     announce_port: u16,
     command_rx: flume::Receiver<WscRtpCommand>,
-    sdp_tx: mpsc::Sender<anyhow::Result<String>>,
+    sdp_tx: &mpsc::Sender<anyhow::Result<String>>,
     events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
     token_shared: Arc<Mutex<Option<String>>>,
 ) -> Result<()> {

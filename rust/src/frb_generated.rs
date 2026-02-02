@@ -150,7 +150,7 @@ fn wire__crate__api__simple__create_wsc_rtp_playable_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_session_id = <i64>::sse_decode(&mut deserializer);
             let api_engine_handle = <i64>::sse_decode(&mut deserializer);
-            let api_endpoint = <crate::core::types::WscRtpEndpoint>::sse_decode(&mut deserializer);
+            let api_endpoint = <crate::core::types::WscSdpEndpoint>::sse_decode(&mut deserializer);
             let api_video_info = <crate::core::types::VideoInfo>::sse_decode(&mut deserializer);
             let api_ffmpeg_options =
                 <Option<std::collections::HashMap<String, String>>>::sse_decode(&mut deserializer);
@@ -820,13 +820,13 @@ impl SseDecode for crate::core::types::VideoInfo {
     }
 }
 
-impl SseDecode for crate::core::types::WscRtpEndpoint {
+impl SseDecode for crate::core::types::WscSdpEndpoint {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_baseUrl = <String>::sse_decode(deserializer);
         let mut var_sourceId = <String>::sse_decode(deserializer);
         let mut var_clientPort = <Option<u16>>::sse_decode(deserializer);
-        return crate::core::types::WscRtpEndpoint {
+        return crate::core::types::WscSdpEndpoint {
             base_url: var_baseUrl,
             source_id: var_sourceId,
             client_port: var_clientPort,
@@ -1020,7 +1020,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::core::types::VideoInfo>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::core::types::WscRtpEndpoint {
+impl flutter_rust_bridge::IntoDart for crate::core::types::WscSdpEndpoint {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.base_url.into_into_dart().into_dart(),
@@ -1031,13 +1031,13 @@ impl flutter_rust_bridge::IntoDart for crate::core::types::WscRtpEndpoint {
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::core::types::WscRtpEndpoint
+    for crate::core::types::WscSdpEndpoint
 {
 }
-impl flutter_rust_bridge::IntoIntoDart<crate::core::types::WscRtpEndpoint>
-    for crate::core::types::WscRtpEndpoint
+impl flutter_rust_bridge::IntoIntoDart<crate::core::types::WscSdpEndpoint>
+    for crate::core::types::WscSdpEndpoint
 {
-    fn into_into_dart(self) -> crate::core::types::WscRtpEndpoint {
+    fn into_into_dart(self) -> crate::core::types::WscSdpEndpoint {
         self
     }
 }
@@ -1286,7 +1286,7 @@ impl SseEncode for crate::core::types::VideoInfo {
     }
 }
 
-impl SseEncode for crate::core::types::WscRtpEndpoint {
+impl SseEncode for crate::core::types::WscSdpEndpoint {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.base_url, serializer);
