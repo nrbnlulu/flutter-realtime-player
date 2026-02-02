@@ -36,7 +36,7 @@ Stream<StreamState> createNewPlayable({
 Stream<StreamState> createWscRtpPlayable({
   required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
-  required TsdpEndpoint endpoint,
+  required WscSdpEndpoint endpoint,
   required VideoInfo videoInfo,
   Map<String, String>? ffmpegOptions,
 }) => RustLib.instance.api.crateApiSimpleCreateWscRtpPlayable(

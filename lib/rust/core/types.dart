@@ -6,12 +6,12 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-class TsdpEndpoint {
+class WscSdpEndpoint {
   final String baseUrl;
   final String sourceId;
   final int? clientPort;
 
-  const TsdpEndpoint({
+  const WscSdpEndpoint({
     required this.baseUrl,
     required this.sourceId,
     this.clientPort,
@@ -24,7 +24,7 @@ class TsdpEndpoint {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is TsdpEndpoint &&
+      other is WscSdpEndpoint &&
           runtimeType == other.runtimeType &&
           baseUrl == other.baseUrl &&
           sourceId == other.sourceId &&

@@ -48,7 +48,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_box_autoadd_i_32(dynamic raw);
 
   @protected
-  TsdpEndpoint dco_decode_box_autoadd_tsdp_endpoint(dynamic raw);
+  WscSdpEndpoint dco_decode_box_autoadd_tsdp_endpoint(dynamic raw);
 
   @protected
   int dco_decode_box_autoadd_u_16(dynamic raw);
@@ -90,7 +90,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StreamState dco_decode_stream_state(dynamic raw);
 
   @protected
-  TsdpEndpoint dco_decode_tsdp_endpoint(dynamic raw);
+  WscSdpEndpoint dco_decode_tsdp_endpoint(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -141,7 +141,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
 
   @protected
-  TsdpEndpoint sse_decode_box_autoadd_tsdp_endpoint(
+  WscSdpEndpoint sse_decode_box_autoadd_tsdp_endpoint(
     SseDeserializer deserializer,
   );
 
@@ -191,7 +191,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StreamState sse_decode_stream_state(SseDeserializer deserializer);
 
   @protected
-  TsdpEndpoint sse_decode_tsdp_endpoint(SseDeserializer deserializer);
+  WscSdpEndpoint sse_decode_tsdp_endpoint(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -249,7 +249,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_tsdp_endpoint(
-    TsdpEndpoint self,
+    WscSdpEndpoint self,
     SseSerializer serializer,
   );
 
@@ -308,7 +308,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_stream_state(StreamState self, SseSerializer serializer);
 
   @protected
-  void sse_encode_tsdp_endpoint(TsdpEndpoint self, SseSerializer serializer);
+  void sse_encode_tsdp_endpoint(WscSdpEndpoint self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);

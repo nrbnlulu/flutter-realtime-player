@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show TsdpEndpoint, VideoDimensions;
+    show WscSdpEndpoint, VideoDimensions;
 import 'package:flutter_realtime_player/video_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
@@ -625,7 +625,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
     final result =
         widget.useTsdp
             ? await VideoController.createWscRtp(
-              endpoint: TsdpEndpoint(
+              endpoint: WscSdpEndpoint(
                 baseUrl: widget.tsdpBaseUrl,
                 sourceId: widget.tsdpSourceId,
                 clientPort: int.tryParse(widget.tsdpClientPort.trim()),

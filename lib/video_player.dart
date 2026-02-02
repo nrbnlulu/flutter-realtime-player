@@ -92,7 +92,7 @@ class VideoController {
   }
 
   static Future<(VideoController?, String?)> createWscRtp({
-    required TsdpEndpoint endpoint,
+    required WscSdpEndpoint endpoint,
     required VideoDimensions dimensions,
     bool mute = true,
     bool autoRestart = false,
