@@ -50,9 +50,7 @@ impl WscRtpControl {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("WSC-RTP session token not yet available"))?;
 
-        // base_url usually looks like "http://host:port" or "https://host:port"
-        // We need to construct: http://{host}:{port}/streams/{source_id}/wsc-rtp/{token}/{endpoint}
-
+        // Construct: http://{host}:{port}/streams/{source_id}/wsc-rtp/{token}/{endpoint}
         let mut url = Url::parse(&self.base_url)?;
         url.set_path(&format!(
             "/streams/{}/wsc-rtp/{}/{}",
@@ -145,21 +143,10 @@ enum ClientMessage {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum ServerMessage {
-    Init {
-        token: String,
-        server_port: u16,
-        #[serde(default)]
-        udp_holepunch_required: bool,
-    },
-    Sdp {
-        sdp: String,
-    },
-    StreamState {
-        state: String,
-    },
-    Error {
-        message: String,
-    },
+    Init { token: String, holepunch_port: u16 },
+    Sdp { sdp: String },
+    StreamState { state: String },
+    Error { message: String },
     Pong,
 }
 
@@ -322,17 +309,15 @@ fn handle_server_message(
     match message {
         ServerMessage::Init {
             token: init_token,
-            server_port: init_server_port,
-            udp_holepunch_required,
+            holepunch_port,
         } => {
             {
                 let mut guard = token_shared.lock().unwrap();
                 *guard = Some(init_token.clone());
             }
-            *server_port = Some(init_server_port);
-            if udp_holepunch_required {
-                send_udp_holepunch(base_url, init_server_port, &init_token, announce_port)?;
-            }
+            *server_port = Some(holepunch_port);
+            // Always send UDP holepunch to the provided port
+            send_udp_holepunch(base_url, holepunch_port, &init_token, announce_port)?;
         }
         ServerMessage::Sdp { sdp } => {
             if !*sdp_sent {
