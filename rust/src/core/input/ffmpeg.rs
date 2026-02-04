@@ -530,11 +530,8 @@ impl FfmpegVideoInput {
                     sleep_duration = Some(Duration::from_nanos(nanos_per_frame as u64));
                 }
 
-                let mut packet = ffmpeg::Packet::empty();
-
-                // Packet reading and sending to decoder logic
-                match packet.read(&mut ctx.input_ctx) {
-                    Ok(_) => {
+                match  ctx.input_ctx.next_packet() {
+                    Ok(packet) => {
                         if packet.stream() == ctx.video_stream_index {
                             if let Err(err) = ctx.decoder.send_packet(&packet) {
                                 error!("Error sending packet to decoder: {}", err);
