@@ -349,9 +349,15 @@ pub fn destroy_stream_session(session_id: i64) {
     info!("No stream session found for session id: {}", session_id);
 }
 
-pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
-    get_session_mut(session_id, |session| session.resize(width, height))
-        .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
+pub fn resize_stream_session(session_id: i64, width: u32, height: u32) {
+    match get_session_mut(session_id, |session| session.resize(width, height)) {
+        Some(Ok(())) => {}
+        Some(Err(e)) => log::warn!("Failed to resize session {}: {}", session_id, e),
+        None => log::warn!(
+            "Resize called for non-existent session {}, ignoring",
+            session_id
+        ),
+    }
 }
 
 pub fn seek_session(session_id: i64, ts: i64) -> anyhow::Result<()> {

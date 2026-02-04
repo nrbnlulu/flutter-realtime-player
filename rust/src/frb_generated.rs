@@ -420,16 +420,16 @@ fn wire__crate__api__simple__resize_stream_session_impl(
             let api_height = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
-                        let output_ok = crate::api::simple::resize_stream_session(
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::simple::resize_stream_session(
                             api_session_id,
                             api_width,
                             api_height,
-                        )?;
-                        Ok(output_ok)
-                    })(),
-                )
+                        );
+                    })?;
+                    Ok(output_ok)
+                })())
             }
         },
     )

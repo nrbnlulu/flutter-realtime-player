@@ -127,6 +127,6 @@ pub fn destroy_stream_session(session_id: i64) {
     crate::core::session::registry::destroy_stream_session(session_id)
 }
 
-pub fn resize_stream_session(session_id: i64, width: u32, height: u32) -> anyhow::Result<()> {
+pub fn resize_stream_session(session_id: i64, width: u32, height: u32) {
     crate::core::session::registry::resize_stream_session(session_id, width, height)
 }

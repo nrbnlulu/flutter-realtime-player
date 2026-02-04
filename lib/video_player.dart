@@ -163,15 +163,11 @@ class VideoController {
 
   /// Resize the video stream with new dimensions
   Future<void> resizeStream(VideoDimensions newDimensions) async {
-    try {
-      await rlib.resizeStreamSession(
-        sessionId: sessionId,
-        width: newDimensions.width,
-        height: newDimensions.height,
-      );
-    } catch (e) {
-      debugPrint('Error resizing stream: $e');
-    }
+    await rlib.resizeStreamSession(
+      sessionId: sessionId,
+      width: newDimensions.width,
+      height: newDimensions.height,
+    );
   }
 }
 // ignore: implementation_imports
