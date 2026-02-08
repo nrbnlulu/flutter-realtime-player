@@ -10,7 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 use log::{info, warn};
-use serde::{Deserialize, Serialize};
+
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
@@ -26,9 +26,6 @@ use crate::{
 
 // ─── Protocol constants ──────────────────────────────────────────────────────
 
-const HOLEPUNCH_HEADER: &str = "ws-rtp";
-const DUMMY_HEADER: &str = "ws-rtp-dummy";
-const ACK_HEADER: &str = "ws-rtp-ack";
 const UDP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 const PING_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -56,13 +53,6 @@ pub struct WscRtpControl {
     events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
 }
 
-#[derive(Debug, Deserialize)]
-struct SessionModeResponse {
-    is_live: bool,
-    current_time_ms: Option<u64>,
-    speed: f64,
-}
-
 impl WscRtpControl {
     fn get_control_url(&self, endpoint: &str) -> Result<String> {
         let token_guard = self.token.lock().unwrap();
@@ -85,7 +75,8 @@ impl WscRtpControl {
                 status
             ));
         }
-        let mode: SessionModeResponse = response.json().context("parsing WSC-RTP response")?;
+        let mode: media_server_api_models::SessionModeResponse =
+            response.json().context("parsing WSC-RTP response")?;
         push_event(
             &self.events_sink,
             StreamEvent::WscRtpSessionMode {
@@ -143,23 +134,7 @@ impl WscRtpSessionCleanup {
     }
 }
 
-// ─── Internal types ──────────────────────────────────────────────────────────
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum ClientMessage {
-    Ping,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum ServerMessage {
-    Init { token: String, holepunch_port: u16 },
-    Sdp { sdp: String },
-    StreamState { state: String },
-    Error { message: String },
-    Pong,
-}
+use media_server_api_models::{WscRtpClientMessage, WscRtpServerMessage};
 
 // ─── Session setup ───────────────────────────────────────────────────────────
 
@@ -267,7 +242,7 @@ async fn run_wsc_rtp_session(
 
             // Periodic ping
             _ = ping_interval.tick() => {
-                if let Ok(payload) = serde_json::to_string(&ClientMessage::Ping) {
+                if let Ok(payload) = serde_json::to_string(&WscRtpClientMessage::Ping) {
                     let _ = ws_sink.send(Message::Text(payload.into())).await;
                 }
             }
@@ -285,16 +260,21 @@ async fn run_wsc_rtp_session(
                         let _ = rtp_tx.send(data.to_vec());
                     }
                     Some(Ok(Message::Text(text))) => {
-                        if let Ok(msg) = serde_json::from_str::<ServerMessage>(&text) {
-                            handle_server_message(
-                                msg,
-                                base_url,
-                                &token_shared,
-                                &mut sdp_sent,
-                                sdp_tx,
-                                &events_sink,
-                                &rtp_tx,
-                            );
+                        match serde_json::from_str::<media_server_api_models::WscRtpServerMessage>(&text) {
+                            Ok(msg) => {
+                                handle_server_message(
+                                    msg,
+                                    base_url,
+                                    &token_shared,
+                                    &mut sdp_sent,
+                                    sdp_tx,
+                                    &events_sink,
+                                    &rtp_tx,
+                                );
+                            }
+                            Err(err) => {
+                                warn!("WSC-RTP: failed to parse server message: {} — raw: {}", err, text);
+                            }
                         }
                     }
                     Some(Ok(Message::Close(_))) => return Ok(()),
@@ -306,7 +286,7 @@ async fn run_wsc_rtp_session(
 }
 
 fn handle_server_message(
-    message: ServerMessage,
+    message: WscRtpServerMessage,
     base_url: &str,
     token_shared: &Arc<Mutex<Option<String>>>,
     sdp_sent: &mut bool,
@@ -315,7 +295,7 @@ fn handle_server_message(
     rtp_tx: &flume::Sender<Vec<u8>>,
 ) {
     match message {
-        ServerMessage::Init {
+        WscRtpServerMessage::Init {
             token: init_token,
             holepunch_port,
         } => {
@@ -323,7 +303,6 @@ fn handle_server_message(
                 let mut guard = token_shared.lock().unwrap();
                 *guard = Some(init_token.clone());
             }
-            // UDP holepunch runs on blocking thread pool since UdpSocket is sync
             let base_url = base_url.to_string();
             let token = init_token.clone();
             let tx = rtp_tx.clone();
@@ -331,23 +310,27 @@ fn handle_server_message(
                 try_udp_holepunch(&base_url, holepunch_port, &token, &tx);
             });
         }
-        ServerMessage::Sdp { sdp } => {
+        WscRtpServerMessage::Sdp { sdp } => {
             if !*sdp_sent {
                 *sdp_sent = true;
                 let _ = sdp_tx.send(Ok(sdp));
             }
         }
-        ServerMessage::StreamState { state } => {
+        WscRtpServerMessage::StreamState { state } => {
             push_event(events_sink, StreamEvent::WscRtpStreamState(state));
         }
-        ServerMessage::Error { message } => {
+        WscRtpServerMessage::SessionMode(_mode) => {}
+        WscRtpServerMessage::Error { message } => {
             push_event(events_sink, StreamEvent::Error(message.clone()));
             if !*sdp_sent {
                 let _ = sdp_tx.send(Err(anyhow::anyhow!("WSC-RTP error: {}", message)));
                 *sdp_sent = true;
             }
         }
-        ServerMessage::Pong => {}
+        WscRtpServerMessage::FallingBackRtpToWs => {
+            info!("WSC-RTP: server falling back to WebSocket for RTP delivery");
+        }
+        WscRtpServerMessage::Pong => {}
     }
 }
 
@@ -383,7 +366,11 @@ fn try_udp_holepunch(
         }
     };
 
-    let holepunch = format!("{} {}", HOLEPUNCH_HEADER, token);
+    let holepunch = format!(
+        "{} {}",
+        media_server_api_models::wsc_rtp::HOLEPUNCH_HEADER,
+        token
+    );
     if let Err(e) = udp.send_to(holepunch.as_bytes(), server_addr) {
         warn!("WSC-RTP: UDP holepunch send failed: {}", e);
         return;
@@ -396,13 +383,17 @@ fn try_udp_holepunch(
     }
 
     let mut buf = [0u8; 512];
-    let expected_dummy = format!("{} {}", DUMMY_HEADER, token);
+    let expected_dummy = format!(
+        "{} {}",
+        media_server_api_models::wsc_rtp::DUMMY_HEADER,
+        token
+    );
 
     match udp.recv_from(&mut buf) {
         Ok((n, _src)) => {
             if let Ok(payload) = std::str::from_utf8(&buf[..n]) {
                 if payload.trim() == expected_dummy {
-                    let ack = format!("{} {}", ACK_HEADER, token);
+                    let ack = format!("{} {}", media_server_api_models::wsc_rtp::ACK_HEADER, token);
                     if let Err(e) = udp.send_to(ack.as_bytes(), server_addr) {
                         warn!("WSC-RTP: UDP ack send failed: {}", e);
                         return;
