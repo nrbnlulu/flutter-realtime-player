@@ -44,6 +44,8 @@ pub struct WscSdpEndpoint {
     pub base_url: String,
     pub source_id: String,
     pub client_port: Option<u16>,
+    /// Skip UDP negotiation and use WebSocket for RTP delivery from the start.
+    pub force_websocket_transport: bool,
 }
 
 pub type DartStateStream = StreamSink<StreamState>;

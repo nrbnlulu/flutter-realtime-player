@@ -148,7 +148,8 @@ pub fn setup_wsc_rtp_session(
         endpoint.base_url, endpoint.source_id
     );
 
-    let wsc_rtp_url = build_wsc_rtp_url(&endpoint.base_url, &endpoint.source_id)?;
+    let force_ws = endpoint.force_websocket_transport;
+    let wsc_rtp_url = build_wsc_rtp_url(&endpoint.base_url, &endpoint.source_id, force_ws)?;
     let (sdp_tx, sdp_rx) = std::sync::mpsc::channel::<anyhow::Result<String>>();
     let (rtp_tx, rtp_rx) = flume::unbounded::<Vec<u8>>();
     let (terminate_tx, terminate_rx) = tokio::sync::oneshot::channel::<()>();
@@ -176,6 +177,7 @@ pub fn setup_wsc_rtp_session(
             if let Err(err) = run_wsc_rtp_session(
                 wsc_rtp_url,
                 &base_url,
+                force_ws,
                 &sdp_tx,
                 events_sink_clone,
                 token_clone,
@@ -216,6 +218,7 @@ pub fn setup_wsc_rtp_session(
 async fn run_wsc_rtp_session(
     wsc_rtp_url: Url,
     base_url: &str,
+    force_websocket_transport: bool,
     sdp_tx: &std::sync::mpsc::Sender<anyhow::Result<String>>,
     events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
     token_shared: Arc<Mutex<Option<String>>>,
@@ -265,6 +268,7 @@ async fn run_wsc_rtp_session(
                                 handle_server_message(
                                     msg,
                                     base_url,
+                                    force_websocket_transport,
                                     &token_shared,
                                     &mut sdp_sent,
                                     sdp_tx,
@@ -288,6 +292,7 @@ async fn run_wsc_rtp_session(
 fn handle_server_message(
     message: WscRtpServerMessage,
     base_url: &str,
+    force_websocket_transport: bool,
     token_shared: &Arc<Mutex<Option<String>>>,
     sdp_sent: &mut bool,
     sdp_tx: &std::sync::mpsc::Sender<anyhow::Result<String>>,
@@ -303,12 +308,16 @@ fn handle_server_message(
                 let mut guard = token_shared.lock().unwrap();
                 *guard = Some(init_token.clone());
             }
-            let base_url = base_url.to_string();
-            let token = init_token.clone();
-            let tx = rtp_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                try_udp_holepunch(&base_url, holepunch_port, &token, &tx);
-            });
+            if force_websocket_transport {
+                info!("WSC-RTP: skipping UDP holepunch (force_websocket_transport=true)");
+            } else {
+                let base_url = base_url.to_string();
+                let token = init_token.clone();
+                let tx = rtp_tx.clone();
+                tokio::task::spawn_blocking(move || {
+                    try_udp_holepunch(&base_url, holepunch_port, &token, &tx);
+                });
+            }
         }
         WscRtpServerMessage::Sdp { sdp } => {
             if !*sdp_sent {
@@ -656,7 +665,11 @@ fn push_event(
     }
 }
 
-fn build_wsc_rtp_url(base_url: &str, source_id: &str) -> Result<Url> {
+fn build_wsc_rtp_url(
+    base_url: &str,
+    source_id: &str,
+    force_websocket_transport: bool,
+) -> Result<Url> {
     let mut url = Url::parse(base_url).context("invalid base_url")?;
     let scheme = match url.scheme() {
         "https" => "wss",
@@ -667,7 +680,11 @@ fn build_wsc_rtp_url(base_url: &str, source_id: &str) -> Result<Url> {
     url.set_scheme(&scheme)
         .map_err(|_| anyhow::anyhow!("invalid base_url scheme"))?;
     url.set_path(&format!("/streams/{}/wsc-rtp", source_id));
-    url.set_query(None);
+    if force_websocket_transport {
+        url.set_query(Some("force_websocket_transport=true"));
+    } else {
+        url.set_query(None);
+    }
     Ok(url)
 }
 

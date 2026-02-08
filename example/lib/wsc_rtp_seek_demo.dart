@@ -38,6 +38,7 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
   VideoController? _controller;
   int? _sessionId;
   bool _isConnecting = false;
+  bool _forceWebsocketTransport = false;
   String? _errorMessage;
   SessionMode? _sessionMode;
   StreamSubscription<StreamEvent>? _eventsSub;
@@ -70,6 +71,7 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
           baseUrl: _baseUrlController.text.trim(),
           sourceId: _sourceIdController.text.trim(),
           clientPort: requestedPort,
+          forceWebsocketTransport: _forceWebsocketTransport,
         ),
         dimensions: dimensions,
         autoRestart: true,
@@ -283,7 +285,19 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
                     prefixIcon: Icon(Icons.router),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text('Force WebSocket Transport'),
+                  subtitle: const Text('Skip UDP, use WS for RTP'),
+                  value: _forceWebsocketTransport,
+                  onChanged: (value) {
+                    setState(() {
+                      _forceWebsocketTransport = value;
+                    });
+                  },
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 16),
                 if (_errorMessage != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),

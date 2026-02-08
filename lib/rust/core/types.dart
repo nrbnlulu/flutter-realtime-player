@@ -64,15 +64,22 @@ class WscSdpEndpoint {
   final String sourceId;
   final int? clientPort;
 
+  /// Skip UDP negotiation and use WebSocket for RTP delivery from the start.
+  final bool forceWebsocketTransport;
+
   const WscSdpEndpoint({
     required this.baseUrl,
     required this.sourceId,
     this.clientPort,
+    required this.forceWebsocketTransport,
   });
 
   @override
   int get hashCode =>
-      baseUrl.hashCode ^ sourceId.hashCode ^ clientPort.hashCode;
+      baseUrl.hashCode ^
+      sourceId.hashCode ^
+      clientPort.hashCode ^
+      forceWebsocketTransport.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -81,5 +88,6 @@ class WscSdpEndpoint {
           runtimeType == other.runtimeType &&
           baseUrl == other.baseUrl &&
           sourceId == other.sourceId &&
-          clientPort == other.clientPort;
+          clientPort == other.clientPort &&
+          forceWebsocketTransport == other.forceWebsocketTransport;
 }

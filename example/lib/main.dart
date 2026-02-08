@@ -207,6 +207,7 @@ class _StreamConfig {
   bool isStreaming;
   bool autoRestart;
   bool useTsdp;
+  bool forceWebsocketTransport;
 
   _StreamConfig({
     required this.urlController,
@@ -217,6 +218,7 @@ class _StreamConfig {
     required this.isStreaming,
     required this.autoRestart,
     required this.useTsdp,
+    this.forceWebsocketTransport = false,
   });
 }
 
@@ -295,6 +297,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
               tsdpBaseUrl: stream.tsdpBaseUrlController.text,
               tsdpSourceId: stream.tsdpSourceIdController.text,
               tsdpClientPort: stream.tsdpClientPortController.text,
+              forceWebsocketTransport: stream.forceWebsocketTransport,
             ),
             // Overlay controls
             Positioned(
@@ -392,6 +395,20 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 8.0),
+                Row(
+                  children: [
+                    Switch(
+                      value: stream.forceWebsocketTransport,
+                      onChanged: (value) {
+                        setState(() {
+                          stream.forceWebsocketTransport = value;
+                        });
+                      },
+                    ),
+                    const Text('Force WebSocket Transport'),
+                  ],
+                ),
               ],
               const SizedBox(height: 16.0),
               // FFmpeg options expansion
@@ -473,6 +490,8 @@ class _StreamGridItemState extends State<_StreamGridItem>
                           tsdpBaseUrl: stream.tsdpBaseUrlController.text,
                           tsdpSourceId: stream.tsdpSourceIdController.text,
                           tsdpClientPort: stream.tsdpClientPortController.text,
+                          forceWebsocketTransport:
+                              stream.forceWebsocketTransport,
                         )
                         : const Center(
                           child: Text(
@@ -562,6 +581,7 @@ class _VideoPlayerWithControls extends StatefulWidget {
   final String tsdpBaseUrl;
   final String tsdpSourceId;
   final String tsdpClientPort;
+  final bool forceWebsocketTransport;
 
   const _VideoPlayerWithControls({
     super.key,
@@ -572,6 +592,7 @@ class _VideoPlayerWithControls extends StatefulWidget {
     required this.tsdpBaseUrl,
     required this.tsdpSourceId,
     required this.tsdpClientPort,
+    this.forceWebsocketTransport = false,
   });
 
   @override
@@ -629,6 +650,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                 baseUrl: widget.tsdpBaseUrl,
                 sourceId: widget.tsdpSourceId,
                 clientPort: int.tryParse(widget.tsdpClientPort.trim()),
+                forceWebsocketTransport: widget.forceWebsocketTransport,
               ),
               dimensions: dimensions,
               autoRestart: true,

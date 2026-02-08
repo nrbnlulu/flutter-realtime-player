@@ -848,12 +848,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   WscSdpEndpoint dco_decode_wsc_sdp_endpoint(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return WscSdpEndpoint(
       baseUrl: dco_decode_String(arr[0]),
       sourceId: dco_decode_String(arr[1]),
       clientPort: dco_decode_opt_box_autoadd_u_16(arr[2]),
+      forceWebsocketTransport: dco_decode_bool(arr[3]),
     );
   }
 
@@ -1133,10 +1134,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_baseUrl = sse_decode_String(deserializer);
     var var_sourceId = sse_decode_String(deserializer);
     var var_clientPort = sse_decode_opt_box_autoadd_u_16(deserializer);
+    var var_forceWebsocketTransport = sse_decode_bool(deserializer);
     return WscSdpEndpoint(
       baseUrl: var_baseUrl,
       sourceId: var_sourceId,
       clientPort: var_clientPort,
+      forceWebsocketTransport: var_forceWebsocketTransport,
     );
   }
 
@@ -1431,5 +1434,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.baseUrl, serializer);
     sse_encode_String(self.sourceId, serializer);
     sse_encode_opt_box_autoadd_u_16(self.clientPort, serializer);
+    sse_encode_bool(self.forceWebsocketTransport, serializer);
   }
 }
