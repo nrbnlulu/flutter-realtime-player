@@ -1,17 +1,17 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs, UdpSocket},
-    sync::{mpsc, Arc, Mutex, Weak},
+    sync::{Arc, Mutex, Weak},
     thread,
     time::Duration,
 };
 
 use anyhow::{bail, Context, Result};
-use flume::Sender;
+use futures_util::{SinkExt, StreamExt};
 use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use tungstenite::{connect, Message};
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
 use crate::{
@@ -30,6 +30,7 @@ const HOLEPUNCH_HEADER: &str = "ws-rtp";
 const DUMMY_HEADER: &str = "ws-rtp-dummy";
 const ACK_HEADER: &str = "ws-rtp-ack";
 const UDP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
+const PING_INTERVAL: Duration = Duration::from_secs(2);
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -133,12 +134,12 @@ impl WscRtpControl {
 }
 
 pub struct WscRtpSessionCleanup {
-    command_tx: Sender<WscRtpCommand>,
+    terminate_tx: tokio::sync::oneshot::Sender<()>,
 }
 
 impl WscRtpSessionCleanup {
     pub fn cleanup(self) {
-        let _ = self.command_tx.send(WscRtpCommand::Terminate);
+        let _ = self.terminate_tx.send(());
     }
 }
 
@@ -160,11 +161,6 @@ enum ServerMessage {
     Pong,
 }
 
-#[derive(Debug)]
-enum WscRtpCommand {
-    Terminate,
-}
-
 // ─── Session setup ───────────────────────────────────────────────────────────
 
 pub fn setup_wsc_rtp_session(
@@ -178,34 +174,48 @@ pub fn setup_wsc_rtp_session(
     );
 
     let wsc_rtp_url = build_wsc_rtp_url(&endpoint.base_url, &endpoint.source_id)?;
-    let (command_tx, command_rx) = flume::unbounded();
-    let (sdp_tx, sdp_rx) = mpsc::channel();
+    let (sdp_tx, sdp_rx) = std::sync::mpsc::channel::<anyhow::Result<String>>();
     let (rtp_tx, rtp_rx) = flume::unbounded::<Vec<u8>>();
+    let (terminate_tx, terminate_rx) = tokio::sync::oneshot::channel::<()>();
 
     let token = Arc::new(Mutex::new(None));
-
     let base_url = endpoint.base_url.clone();
     let source_id = endpoint.source_id.clone();
     let events_sink_clone = Arc::clone(&events_sink);
     let token_clone = Arc::clone(&token);
 
     thread::spawn(move || {
-        if let Err(err) = run_wsc_rtp_session(
-            wsc_rtp_url,
-            &base_url,
-            &source_id,
-            command_rx,
-            &sdp_tx,
-            events_sink_clone,
-            token_clone,
-            rtp_tx,
-        ) {
-            warn!(
-                "WSC-RTP session thread error: base_url={}, source_id={}, error={}",
-                base_url, source_id, err
-            );
-            let _ = sdp_tx.send(Err(err));
-        }
+        let rt = match tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                let _ = sdp_tx.send(Err(anyhow::anyhow!("tokio runtime build failed: {}", e)));
+                return;
+            }
+        };
+
+        rt.block_on(async move {
+            if let Err(err) = run_wsc_rtp_session(
+                wsc_rtp_url,
+                &base_url,
+                &sdp_tx,
+                events_sink_clone,
+                token_clone,
+                rtp_tx,
+                terminate_rx,
+            )
+            .await
+            {
+                warn!(
+                    "WSC-RTP session error: base_url={}, source_id={}, error={}",
+                    base_url, source_id, err
+                );
+                let _ = sdp_tx.send(Err(err));
+            }
+        });
     });
 
     let sdp_text = sdp_rx
@@ -224,73 +234,74 @@ pub fn setup_wsc_rtp_session(
             http_client: reqwest::blocking::Client::new(),
             events_sink: Arc::clone(&events_sink),
         },
-        cleanup: WscRtpSessionCleanup { command_tx },
+        cleanup: WscRtpSessionCleanup { terminate_tx },
     })
 }
 
-fn run_wsc_rtp_session(
+async fn run_wsc_rtp_session(
     wsc_rtp_url: Url,
     base_url: &str,
-    _source_id: &str,
-    command_rx: flume::Receiver<WscRtpCommand>,
-    sdp_tx: &mpsc::Sender<anyhow::Result<String>>,
+    sdp_tx: &std::sync::mpsc::Sender<anyhow::Result<String>>,
     events_sink: Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
     token_shared: Arc<Mutex<Option<String>>>,
     rtp_tx: flume::Sender<Vec<u8>>,
+    mut terminate_rx: tokio::sync::oneshot::Receiver<()>,
 ) -> Result<()> {
-    let (mut socket, _) = connect(wsc_rtp_url.to_string()).context("connecting to WSC-RTP ws")?;
-    set_nonblocking(&mut socket);
+    let (ws_stream, _) = connect_async(wsc_rtp_url.to_string())
+        .await
+        .context("connecting to WSC-RTP ws")?;
+
+    let (mut ws_sink, mut ws_stream) = ws_stream.split();
 
     let mut sdp_sent = false;
-    let mut last_ping = std::time::Instant::now();
+    let mut ping_interval = tokio::time::interval(PING_INTERVAL);
+    ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
-        while let Ok(cmd) = command_rx.try_recv() {
-            match cmd {
-                WscRtpCommand::Terminate => {
-                    let _ = socket.close(None);
-                    return Ok(());
-                }
-            }
-        }
-
-        match socket.read() {
-            Ok(message) => match message {
-                Message::Ping(payload) => {
-                    let _ = socket.send(Message::Pong(payload));
-                }
-                Message::Binary(data) => {
-                    // WebSocket fallback: server sends RTP packets as binary frames
-                    // when UDP is blocked
-                    let _ = rtp_tx.send(data.to_vec());
-                }
-                other => {
-                    if let Some(server_message) = decode_text_message(other)? {
-                        handle_server_message(
-                            server_message,
-                            base_url,
-                            &token_shared,
-                            &mut sdp_sent,
-                            sdp_tx,
-                            &events_sink,
-                            &rtp_tx,
-                        )?;
-                    }
-                }
-            },
-            Err(tungstenite::Error::Io(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(tungstenite::Error::ConnectionClosed) | Err(tungstenite::Error::AlreadyClosed) => {
+        tokio::select! {
+            // Terminate signal
+            _ = &mut terminate_rx => {
+                let _ = ws_sink.close().await;
                 return Ok(());
             }
-            Err(err) => return Err(err.into()),
-        }
 
-        if last_ping.elapsed() >= Duration::from_secs(2) {
-            let _ = send_message(&mut socket, ClientMessage::Ping);
-            last_ping = std::time::Instant::now();
-        }
+            // Periodic ping
+            _ = ping_interval.tick() => {
+                if let Ok(payload) = serde_json::to_string(&ClientMessage::Ping) {
+                    let _ = ws_sink.send(Message::Text(payload.into())).await;
+                }
+            }
 
-        thread::sleep(Duration::from_millis(20));
+            // Incoming WebSocket message
+            msg = ws_stream.next() => {
+                match msg {
+                    None => return Ok(()), // stream closed
+                    Some(Err(e)) => return Err(e.into()),
+                    Some(Ok(Message::Ping(data))) => {
+                        let _ = ws_sink.send(Message::Pong(data)).await;
+                    }
+                    Some(Ok(Message::Binary(data))) => {
+                        // WebSocket fallback: RTP packet
+                        let _ = rtp_tx.send(data.to_vec());
+                    }
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(msg) = serde_json::from_str::<ServerMessage>(&text) {
+                            handle_server_message(
+                                msg,
+                                base_url,
+                                &token_shared,
+                                &mut sdp_sent,
+                                sdp_tx,
+                                &events_sink,
+                                &rtp_tx,
+                            );
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) => return Ok(()),
+                    Some(Ok(_)) => {}
+                }
+            }
+        }
     }
 }
 
@@ -299,10 +310,10 @@ fn handle_server_message(
     base_url: &str,
     token_shared: &Arc<Mutex<Option<String>>>,
     sdp_sent: &mut bool,
-    sdp_tx: &mpsc::Sender<anyhow::Result<String>>,
+    sdp_tx: &std::sync::mpsc::Sender<anyhow::Result<String>>,
     events_sink: &Arc<Mutex<Option<crate::core::types::DartEventsStream>>>,
     rtp_tx: &flume::Sender<Vec<u8>>,
-) -> Result<()> {
+) {
     match message {
         ServerMessage::Init {
             token: init_token,
@@ -312,10 +323,13 @@ fn handle_server_message(
                 let mut guard = token_shared.lock().unwrap();
                 *guard = Some(init_token.clone());
             }
-            // Attempt UDP holepunch; if confirmed, spawn UDP receive thread.
-            // If UDP is blocked, the server will fall back to binary WebSocket frames
-            // which are handled directly in the main loop above.
-            try_udp_holepunch(base_url, holepunch_port, &init_token, rtp_tx);
+            // UDP holepunch runs on blocking thread pool since UdpSocket is sync
+            let base_url = base_url.to_string();
+            let token = init_token.clone();
+            let tx = rtp_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                try_udp_holepunch(&base_url, holepunch_port, &token, &tx);
+            });
         }
         ServerMessage::Sdp { sdp } => {
             if !*sdp_sent {
@@ -335,14 +349,13 @@ fn handle_server_message(
         }
         ServerMessage::Pong => {}
     }
-    Ok(())
 }
 
 // ─── UDP holepunch + handshake ───────────────────────────────────────────────
 
-/// Attempts UDP holepunch. If the dummy/ack handshake succeeds, spawns a UDP
-/// receive thread. If UDP is blocked (timeout), does nothing — the server will
-/// automatically fall back to sending RTP as binary WebSocket frames.
+/// Runs on a blocking thread. Attempts UDP holepunch; if confirmed, spawns a
+/// blocking UDP receive loop. If UDP is blocked, the server sends RTP as binary
+/// WebSocket frames (handled in the async loop above).
 fn try_udp_holepunch(
     base_url: &str,
     holepunch_port: u16,
@@ -377,7 +390,6 @@ fn try_udp_holepunch(
     }
     info!("WSC-RTP: sent UDP holepunch to {}", server_addr);
 
-    // Wait for dummy packet
     if let Err(e) = udp.set_read_timeout(Some(UDP_HANDSHAKE_TIMEOUT)) {
         warn!("WSC-RTP: set_read_timeout failed: {}", e);
         return;
@@ -395,13 +407,16 @@ fn try_udp_holepunch(
                         warn!("WSC-RTP: UDP ack send failed: {}", e);
                         return;
                     }
-                    info!("WSC-RTP: UDP confirmed, spawning UDP receive thread");
+                    info!("WSC-RTP: UDP confirmed, starting UDP receive loop");
                     udp.set_read_timeout(None).ok();
                     let tx = rtp_tx.clone();
+                    // Spawn a new blocking thread for the receive loop
+                    // (tokio::task::spawn_blocking has a limited pool, so use std::thread
+                    // for a long-lived loop)
                     thread::spawn(move || run_udp_receiver(udp, tx));
                 } else {
                     warn!(
-                        "WSC-RTP: unexpected UDP payload {:?}, falling back to WS",
+                        "WSC-RTP: unexpected UDP payload {:?}, using WS fallback",
                         payload
                     );
                 }
@@ -603,9 +618,7 @@ impl VideoInput for GstreamerWscRtpInput {
                         dims.width = width;
                         dims.height = height;
                     }
-                    InputCommand::Seek { .. } => {
-                        // Seek not applicable for live RTP
-                    }
+                    InputCommand::Seek { .. } => {}
                 }
             }
 
@@ -649,42 +662,6 @@ fn push_event(
         if let Some(sink) = guard.as_ref() {
             sink.add(event).log_err();
         }
-    }
-}
-
-fn decode_text_message(message: Message) -> Result<Option<ServerMessage>> {
-    match message {
-        Message::Text(text) => Ok(Some(
-            serde_json::from_str(&text).context("parsing WSC-RTP message")?,
-        )),
-        Message::Pong(_) => Ok(Some(ServerMessage::Pong)),
-        Message::Close(_) => Ok(None),
-        _ => Ok(None),
-    }
-}
-
-fn send_message(
-    socket: &mut tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>,
-    message: ClientMessage,
-) -> Result<()> {
-    let payload = serde_json::to_string(&message).context("serializing WSC-RTP message")?;
-    socket
-        .send(Message::Text(payload))
-        .context("sending WSC-RTP message")?;
-    Ok(())
-}
-
-fn set_nonblocking(
-    socket: &mut tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>,
-) {
-    use tungstenite::stream::MaybeTlsStream;
-    let stream = socket.get_mut();
-    match stream {
-        MaybeTlsStream::Plain(inner) => {
-            let _ = inner.set_nonblocking(true);
-        }
-        #[allow(unreachable_patterns)]
-        _ => {}
     }
 }
 
