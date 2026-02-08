@@ -9,8 +9,9 @@ use log::{debug, info};
 
 use crate::core::{
     input::{
-        ffmpeg::FfmpegVideoInput, wsc_rtp, InputCommandReceiver, InputCommandSender,
-        InputEventReceiver, InputEventSender, VideoInput,
+        ffmpeg::FfmpegVideoInput,
+        wsc_rtp::{self, GstreamerWscRtpInput},
+        InputCommandReceiver, InputCommandSender, InputEventReceiver, InputEventSender, VideoInput,
     },
     output::flutter_pixelbuffer::{create_flutter_pixelbuffer, FlutterPixelBufferHandle},
     session::{RawVideoSession, VideoSession, WscRtpVideoSession},
@@ -21,6 +22,8 @@ pub fn init() -> anyhow::Result<()> {
     ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))?;
     info!("ffmpeg initialized: version {}", ffmpeg::version::version());
     ffmpeg::util::log::set_level(ffmpeg::util::log::Level::Fatal);
+    gstreamer::init().map_err(|e| anyhow::anyhow!("Failed to initialize GStreamer: {:?}", e))?;
+    info!("GStreamer initialized");
     Ok(())
 }
 
@@ -140,27 +143,6 @@ fn spawn_stream_thread(
     });
 }
 
-fn apply_wsc_rtp_ffmpeg_defaults(options: &mut HashMap<String, String>) {
-    options
-        .entry("protocol_whitelist".to_string())
-        .or_insert_with(|| "file,udp,rtp".to_string());
-    options
-        .entry("listen_timeout".to_string())
-        .or_insert_with(|| "2147483647".to_string());
-    options
-        .entry("fflags".to_string())
-        .or_insert_with(|| "nobuffer".to_string());
-    options
-        .entry("flags".to_string())
-        .or_insert_with(|| "low_delay".to_string());
-    options
-        .entry("analyzeduration".to_string())
-        .or_insert_with(|| "0".to_string());
-    options
-        .entry("probesize".to_string())
-        .or_insert_with(|| "32".to_string());
-}
-
 pub fn stream_alive_tester_task() {
     loop {
         let mut closed_sessions = Vec::new();
@@ -237,9 +219,9 @@ pub fn create_wsc_rtp_playable(
     session_id: i64,
     engine_handle: i64,
     endpoint: types::WscSdpEndpoint,
-    mut video_info: types::VideoInfo,
+    video_info: types::VideoInfo,
     update_stream: DartStateStream,
-    ffmpeg_options: Option<HashMap<String, String>>,
+    _ffmpeg_options: Option<HashMap<String, String>>,
 ) -> anyhow::Result<()> {
     info!(
         "Creating WSC-RTP playable: session_id={}, engine_handle={}, source_id={}",
@@ -248,32 +230,26 @@ pub fn create_wsc_rtp_playable(
     let events_sink = Arc::new(Mutex::new(None));
     let wsc_rtp_setup = wsc_rtp::setup_wsc_rtp_session(&endpoint, Arc::clone(&events_sink))?;
     let wsc_rtp::WscRtpSetup {
-        sdp_data,
-        client_port,
+        sdp_text,
+        rtp_rx,
         wsc_rtp_control,
         cleanup,
     } = wsc_rtp_setup;
     let mut session_cleanup = Some(cleanup);
-    video_info.uri = format!("wsc-rtp://{}/{}", endpoint.base_url, endpoint.source_id);
-    let mut options = ffmpeg_options.unwrap_or_default();
-    apply_wsc_rtp_ffmpeg_defaults(&mut options);
-    options
-        .entry("local_rtpport".to_string())
-        .or_insert_with(|| client_port.to_string());
-    options
-        .entry("local_rtcpport".to_string())
-        .or_insert_with(|| (client_port + 1).to_string());
 
-    let build_result = build_input_and_output(
+    let (input_event_tx, input_event_rx): (InputEventSender, InputEventReceiver) =
+        flume::unbounded();
+    let (input_command_tx, input_command_rx): (InputCommandSender, InputCommandReceiver) =
+        flume::unbounded();
+
+    let (output_handle, payload_holder_weak, texture_id) = match create_flutter_pixelbuffer(
         session_id,
         engine_handle,
-        video_info,
         update_stream,
-        Some(options),
-        Some(Arc::clone(&sdp_data)),
-    );
-    let (input, output_handle, input_command_rx, input_event_tx, texture_id) = match build_result {
-        Ok(value) => value,
+        input_event_rx,
+        input_command_tx,
+    ) {
+        Ok(v) => v,
         Err(err) => {
             if let Some(cleanup) = session_cleanup.take() {
                 cleanup.cleanup();
@@ -281,6 +257,14 @@ pub fn create_wsc_rtp_playable(
             return Err(err);
         }
     };
+
+    let input = GstreamerWscRtpInput::new(
+        &sdp_text,
+        rtp_rx,
+        video_info.dimensions.clone(),
+        payload_holder_weak,
+    );
+    let input: Arc<dyn VideoInput> = input;
 
     let wsc_rtp_cleanup = session_cleanup.take().expect("WSC-RTP cleanup missing");
     let session = WscRtpVideoSession::new(

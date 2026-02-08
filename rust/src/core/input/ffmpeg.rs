@@ -1,5 +1,6 @@
 // inspired by
 // - https://github.com/zmwangx/rust-ffmpeg/blob/master/examples/dump-frames.rs
+use ffmpeg::format::Pixel;
 use ffmpeg::Rescale;
 use std::{
     collections::HashMap,
@@ -21,7 +22,7 @@ use crate::{
     dart_types::StreamState,
 };
 
-use crate::core::texture::payload::FFmpegFrameWrapper;
+use crate::core::texture::payload::RawRgbaFrame;
 
 struct DecodingContext {
     input_ctx: ffmpeg::format::context::Input,
@@ -530,7 +531,7 @@ impl FfmpegVideoInput {
                     sleep_duration = Some(Duration::from_nanos(nanos_per_frame as u64));
                 }
 
-                match  ctx.input_ctx.next_packet() {
+                match ctx.input_ctx.next_packet() {
                     Ok(packet) => {
                         if packet.stream() == ctx.video_stream_index {
                             if let Err(err) = ctx.decoder.send_packet(&packet) {
@@ -705,7 +706,7 @@ impl FfmpegVideoInput {
             }
 
             if let Some(payload_holder) = self.payload_holder.upgrade() {
-                payload_holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(rgb_frame)));
+                payload_holder.set_payload(Arc::new(RawRgbaFrame::from_ffmpeg(&rgb_frame)));
                 mark_frame_avb();
             } else {
                 break;
@@ -808,31 +809,29 @@ impl FfmpegVideoInput {
         new_height: u32,
     ) {
         if let Some(holder) = self.payload_holder.upgrade() {
-            let prev_frame = holder.previous_frame();
-            if let Some(prev) = prev_frame {
-                if !self
-                    .rescale_and_set_previous_frame(&holder, &prev, old_dims, new_width, new_height)
-                {
-                    self.create_black_frame(new_width, new_height, &holder);
-                }
+            let rescaled = if let Some(prev) = holder.previous_frame() {
+                self.rescale_and_set_previous_frame(&holder, &prev, old_dims, new_width, new_height)
             } else {
-                info!("No previous frame available, using black fallback.");
-                self.create_black_frame(new_width, new_height, &holder);
+                false
+            };
+            if !rescaled {
+                info!("No previous frame available or not rescalable, using black fallback.");
+                holder.set_payload(Arc::new(RawRgbaFrame::black(new_width, new_height)));
             }
         }
     }
 
-    /// Tries to rescale the last displayed frame to the new dimensions.
+    /// Tries to rescale the last displayed frame to the new dimensions using FFmpeg's scaler.
     fn rescale_and_set_previous_frame(
         &self,
         holder: &Arc<PayloadHolder>,
-        prev_frame: &FFmpegFrameWrapper,
+        prev_frame: &RawRgbaFrame,
         old_dims: &types::VideoDimensions,
         new_width: u32,
         new_height: u32,
     ) -> bool {
-        let prev_width = prev_frame.0.width();
-        let prev_height = prev_frame.0.height();
+        let prev_width = prev_frame.width;
+        let prev_height = prev_frame.height;
 
         if prev_width != old_dims.width || prev_height != old_dims.height {
             warn!(
@@ -842,23 +841,35 @@ impl FfmpegVideoInput {
         }
 
         let temp_scaler = Self::create_scaler_with_fallbacks(
-            ffmpeg::format::Pixel::RGBA,
+            Pixel::RGBA,
             prev_width,
             prev_height,
-            ffmpeg::format::Pixel::RGBA,
+            Pixel::RGBA,
             new_width,
             new_height,
         );
 
         if let Ok(mut temp_scaler) = temp_scaler {
+            // Wrap the raw bytes into an FFmpeg frame for the scaler
+            let mut src_frame =
+                ffmpeg::util::frame::Video::new(Pixel::RGBA, prev_width, prev_height);
+            let stride = src_frame.stride(0);
+            let row_len = (prev_width * 4) as usize;
+            for y in 0..prev_height as usize {
+                let src_start = y * row_len;
+                let dst_start = y * stride;
+                src_frame.data_mut(0)[dst_start..dst_start + row_len]
+                    .copy_from_slice(&prev_frame.data[src_start..src_start + row_len]);
+            }
+
             let mut resized_frame = ffmpeg::util::frame::Video::empty();
-            if temp_scaler.run(&prev_frame.0, &mut resized_frame).is_ok() {
+            if temp_scaler.run(&src_frame, &mut resized_frame).is_ok() {
                 if resized_frame.width() == new_width && resized_frame.height() == new_height {
                     info!(
                         "Successfully rescaled previous frame to {}x{}",
                         new_width, new_height
                     );
-                    holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(resized_frame)));
+                    holder.set_payload(Arc::new(RawRgbaFrame::from_ffmpeg(&resized_frame)));
                     return true;
                 } else {
                     error!("Rescaled frame has wrong dimensions!");
@@ -868,23 +879,6 @@ impl FfmpegVideoInput {
             }
         }
         false
-    }
-
-    /// Helper function to create and set a black frame with specified dimensions.
-    fn create_black_frame(&self, width: u32, height: u32, holder: &Arc<PayloadHolder>) {
-        info!("Creating black frame with dimensions {}x{}", width, height);
-        let mut new_frame =
-            ffmpeg::util::frame::Video::new(ffmpeg::format::Pixel::RGBA, width, height);
-
-        let data = new_frame.data_mut(0);
-        for chunk in data.chunks_mut(4) {
-            chunk[0] = 0; // R
-            chunk[1] = 0; // G
-            chunk[2] = 0; // B
-            chunk[3] = 255; // A
-        }
-
-        holder.set_payload(Box::new(FFmpegFrameWrapper::from_frame(new_frame)));
     }
 }
 
