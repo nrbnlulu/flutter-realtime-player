@@ -4,9 +4,7 @@ use log::{debug, info, trace};
 
 use crate::{
     core::{
-        session::registry::{self},
-        types::{VideoInfo, WscSdpEndpoint},
-        IS_INITIALIZED,
+        IS_INITIALIZED, session::{WscRtpVideoSession, registry::{self}}, types::{VideoInfo, WscSdpEndpoint}
     },
     dart_types::{StreamEvent, StreamState},
     frb_generated::StreamSink,
@@ -79,14 +77,13 @@ pub fn create_wsc_rtp_playable(
         endpoint.source_id.as_str(),
         session_id
     );
-    crate::core::session::registry::create_wsc_rtp_playable(
+    let session = WscRtpVideoSession::new(
         session_id,
         engine_handle,
-        endpoint,
-        video_info,
-        sink.clone(),
-        ffmpeg_options,
-    )?;
+    );
+
+    insert_session(session_id, Box::new(session));
+
     Ok(())
 }
 

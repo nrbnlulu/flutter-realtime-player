@@ -10,7 +10,7 @@ use log::{debug, info};
 use crate::core::{
     input::{
         ffmpeg::FfmpegVideoInput,
-        wsc_rtp::{self, GstreamerWscRtpInput},
+        wsc_rtp::{self, WscRtpSessionConfig},
         InputCommandReceiver, InputCommandSender, InputEventReceiver, InputEventSender, VideoInput,
     },
     output::flutter_pixelbuffer::{create_flutter_pixelbuffer, FlutterPixelBufferHandle},
@@ -215,73 +215,6 @@ pub fn create_new_playable(
     Ok(())
 }
 
-pub fn create_wsc_rtp_playable(
-    session_id: i64,
-    engine_handle: i64,
-    endpoint: types::WscSdpEndpoint,
-    video_info: types::VideoInfo,
-    update_stream: DartStateStream,
-    _ffmpeg_options: Option<HashMap<String, String>>,
-) -> anyhow::Result<()> {
-    info!(
-        "Creating WSC-RTP playable: session_id={}, engine_handle={}, source_id={}",
-        session_id, engine_handle, endpoint.source_id
-    );
-    let events_sink = Arc::new(Mutex::new(None));
-    let wsc_rtp_setup = wsc_rtp::setup_wsc_rtp_session(&endpoint, Arc::clone(&events_sink))?;
-    let wsc_rtp::WscRtpSetup {
-        sdp_text,
-        rtp_rx,
-        wsc_rtp_control,
-        cleanup,
-    } = wsc_rtp_setup;
-    let mut session_cleanup = Some(cleanup);
-
-    let (input_event_tx, input_event_rx): (InputEventSender, InputEventReceiver) =
-        flume::unbounded();
-    let (input_command_tx, input_command_rx): (InputCommandSender, InputCommandReceiver) =
-        flume::unbounded();
-
-    let (output_handle, payload_holder_weak, texture_id) = match create_flutter_pixelbuffer(
-        session_id,
-        engine_handle,
-        update_stream,
-        input_event_rx,
-        input_command_tx,
-    ) {
-        Ok(v) => v,
-        Err(err) => {
-            if let Some(cleanup) = session_cleanup.take() {
-                cleanup.cleanup();
-            }
-            return Err(err);
-        }
-    };
-
-    let input = GstreamerWscRtpInput::new(
-        &sdp_text,
-        rtp_rx,
-        video_info.dimensions.clone(),
-        payload_holder_weak,
-    );
-    let input: Arc<dyn VideoInput> = input;
-
-    let wsc_rtp_cleanup = session_cleanup.take().expect("WSC-RTP cleanup missing");
-    let session = WscRtpVideoSession::new(
-        session_id,
-        engine_handle,
-        output_handle,
-        Arc::clone(&events_sink),
-        wsc_rtp_cleanup,
-        wsc_rtp_control,
-    );
-    {
-        insert_session(session_id, Box::new(session));
-    }
-    spawn_stream_thread(input, input_event_tx, input_command_rx, texture_id);
-
-    Ok(())
-}
 
 pub fn mark_session_alive(session_id: i64) {
     log::trace!("mark_session_alive {}", session_id);

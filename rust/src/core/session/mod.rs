@@ -8,7 +8,7 @@ use std::{
 use log::{debug, warn};
 
 use crate::core::{
-    input::wsc_rtp::{WscRtpControl, WscRtpSessionCleanup},
+    input::wsc_rtp::{WscRtpSession, WscRtpShutdownHandle},
     output::flutter_pixelbuffer::{FlutterPixelBufferHandle, OutputCommand},
     types::DartEventsStream,
 };
@@ -28,20 +28,20 @@ pub trait VideoSession: Send {
     fn destroy(self: Box<Self>);
 }
 
-struct CommonSession {
-    session_id: i64,
-    engine_handle: i64,
-    output: FlutterPixelBufferHandle,
-    last_alive_mark: SystemTime,
-    events_sink: Arc<Mutex<Option<DartEventsStream>>>,
+pub struct VideoSessionCommon {
+    pub session_id: i64,
+    pub engine_handle: i64,
+    pub output: FlutterPixelBufferHandle,
+    pub last_alive_mark: SystemTime,
+    pub events_sink: DartEventsStream,
 }
 
-impl CommonSession {
+impl VideoSessionCommon {
     fn new(
         session_id: i64,
         engine_handle: i64,
         output: FlutterPixelBufferHandle,
-        events_sink: Arc<Mutex<Option<DartEventsStream>>>,
+        events_sink: DartEventsStream,
     ) -> Self {
         Self {
             session_id,
@@ -54,7 +54,7 @@ impl CommonSession {
 }
 
 pub struct RawVideoSession {
-    common: CommonSession,
+    common: VideoSessionCommon,
 }
 
 impl RawVideoSession {
@@ -62,10 +62,10 @@ impl RawVideoSession {
         session_id: i64,
         engine_handle: i64,
         output: FlutterPixelBufferHandle,
-        events_sink: Arc<Mutex<Option<DartEventsStream>>>,
+        events_sink: DartEventsStream,
     ) -> Self {
         Self {
-            common: CommonSession::new(session_id, engine_handle, output, events_sink),
+            common: VideoSessionCommon::new(session_id, engine_handle, output, events_sink),
         }
     }
 }
@@ -138,27 +138,12 @@ impl VideoSession for RawVideoSession {
 }
 
 pub struct WscRtpVideoSession {
-    common: CommonSession,
-    wsc_rtp_cleanup: Option<WscRtpSessionCleanup>,
-    wsc_rtp_control: WscRtpControl,
+    common: VideoSessionCommon,
+    wsc_rtp_session: Arc<WscRtpSession>,
+    wsc_rtp_shutdown: WscRtpShutdownHandle,
 }
 
-impl WscRtpVideoSession {
-    pub fn new(
-        session_id: i64,
-        engine_handle: i64,
-        output: FlutterPixelBufferHandle,
-        events_sink: Arc<Mutex<Option<DartEventsStream>>>,
-        wsc_rtp_cleanup: WscRtpSessionCleanup,
-        wsc_rtp_control: WscRtpControl,
-    ) -> Self {
-        Self {
-            common: CommonSession::new(session_id, engine_handle, output, events_sink),
-            wsc_rtp_cleanup: Some(wsc_rtp_cleanup),
-            wsc_rtp_control,
-        }
-    }
-}
+
 
 impl VideoSession for WscRtpVideoSession {
     fn session_id(&self) -> i64 {
@@ -179,9 +164,7 @@ impl VideoSession for WscRtpVideoSession {
 
     fn terminate(&mut self) {
         debug!("Terminating WSC-RTP session {}", self.common.session_id);
-        if let Some(cleanup) = self.wsc_rtp_cleanup.take() {
-            cleanup.cleanup();
-        }
+        self.wsc_rtp_shutdown.shutdown();
         if let Err(err) = self.common.output.send(OutputCommand::Terminate) {
             warn!(
                 "Failed to terminate output for session {}: {}",
@@ -202,7 +185,8 @@ impl VideoSession for WscRtpVideoSession {
             self.common.session_id,
             ts
         );
-        self.wsc_rtp_control.seek(ts)
+        let session = Arc::clone(&self.wsc_rtp_session);
+        tokio::runtime::Handle::current().block_on(session.seek(ts))
     }
 
     fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
@@ -213,11 +197,13 @@ impl VideoSession for WscRtpVideoSession {
     }
 
     fn go_to_live_stream(&self) -> anyhow::Result<()> {
-        self.wsc_rtp_control.live()
+        let session = Arc::clone(&self.wsc_rtp_session);
+        tokio::runtime::Handle::current().block_on(session.go_live())
     }
 
     fn set_speed(&self, speed: f64) -> anyhow::Result<()> {
-        self.wsc_rtp_control.set_speed(speed)
+        let session = Arc::clone(&self.wsc_rtp_session);
+        tokio::runtime::Handle::current().block_on(session.set_speed(speed))
     }
 
     fn destroy(self: Box<Self>) {
