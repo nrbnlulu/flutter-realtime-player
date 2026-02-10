@@ -25,12 +25,13 @@ use crate::{
         output::flutter_pixelbuffer::create_flutter_pixelbuffer,
         session::VideoSessionCommon,
         texture::{
-            FlutterTextureSession, payload::{self, RawRgbaFrame, SharedPixelData}
+            payload::{self, RawRgbaFrame, SharedPixelData},
+            FlutterTextureSession,
         },
         types::{VideoDimensions, WscRtpSessionConfig},
     },
     dart_types::{StreamEvent, StreamState},
-    utils::{LogErr, invoke_on_platform_main_thread},
+    utils::{invoke_on_platform_main_thread, LogErr},
 };
 
 use media_server_api_models::{WscRtpClientMessage, WscRtpServerMessage};
@@ -428,8 +429,7 @@ impl WscRtpSession {
 }
 
 #[async_trait]
-impl crate::core::session::VideoSession for WscRtpSession{
-    
+impl crate::core::session::VideoSession for WscRtpSession {
     async fn seek(&self, ts: i64) -> anyhow::Result<()> {
         Self::seek(&self, ts).await
     }
@@ -457,10 +457,10 @@ impl crate::core::session::VideoSession for WscRtpSession{
     }
 
     fn terminate(&self) {
-        todo!()
+        self.pipeline.set_state(gstreamer::State::Null);
     }
 
-    fn set_events_sink(&mut self, sink: crate::core::types::DartEventsStream) {
+    fn set_events_sink(&self, sink: crate::core::types::DartEventsStream) {
         self.session_common.set_events_sink(sink);
     }
 
@@ -468,12 +468,8 @@ impl crate::core::session::VideoSession for WscRtpSession{
         log::warn!("resize not supported yet for wsc rtp");
         Ok(())
     }
-
-    fn destroy(self: Box<Self>) {
-        // no need to do anything here, we handle the flutter texture destroyal in the execute fn.
-    }
-
 }
+
 async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> anyhow::Result<()> {
     async fn one_try(
         udp_sock: &mut tokio::net::UdpSocket,
