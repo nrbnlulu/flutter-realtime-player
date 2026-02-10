@@ -77,6 +77,7 @@ pub fn create_wsc_rtp_playable(
         endpoint.source_id.as_str(),
         session_id
     );
+    
     let session = WscRtpVideoSession::new(
         session_id,
         engine_handle,

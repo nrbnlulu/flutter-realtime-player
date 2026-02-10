@@ -11,6 +11,7 @@ use futures_util::{
 };
 use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
+use irondash_texture::Texture;
 use log::{info, warn};
 
 use tokio::net::{TcpStream, UdpSocket};
@@ -20,12 +21,16 @@ use url::Url;
 use crate::{
     core::{
         input::{InputEvent, InputEventSender},
+        output::flutter_pixelbuffer::create_flutter_pixelbuffer,
         session::VideoSessionCommon,
-        texture::payload::{RawRgbaFrame, SharedPixelData},
+        texture::{
+            payload::{self, RawRgbaFrame, SharedPixelData},
+            FlutterTextureSession,
+        },
         types::VideoDimensions,
     },
-    dart_types::StreamEvent,
-    utils::LogErr,
+    dart_types::{StreamEvent, StreamState},
+    utils::{invoke_on_platform_main_thread, LogErr},
 };
 
 use media_server_api_models::{WscRtpClientMessage, WscRtpServerMessage};
@@ -60,8 +65,8 @@ pub struct WscRtpSession {
     holepunch_port: u16,
     media_server_http_url: Url,
     source_id: String,
-    use_udp_transport: bool,
     http_client: reqwest::Client,
+    pipeline: Arc<gstreamer::Pipeline>,
 }
 
 impl WscRtpSession {
@@ -73,7 +78,7 @@ impl WscRtpSession {
         server_url: &str,
         command_rx: tokio::sync::mpsc::Receiver<WscRtpSessionCommand>,
         http_client: Arc<reqwest::Client>,
-    ) -> Result<(Arc<Self>, WsSink, WsStream)> {
+    ) -> Result<(Arc<Self>, WsSink, WsStream, Option<UdpSocket>)> {
         let server_url = Url::parse(server_url).context("parsing media server HTTP URL")?;
         let wsc_rtp_url = build_wsc_rtp_handshake_request(
             &server_url,
@@ -82,16 +87,15 @@ impl WscRtpSession {
         )?;
         info!("WSC-RTP connecting to {}", wsc_rtp_url);
 
-        let (ws, _) = connect_async(wsc_rtp_url.into())
+        let (ws, _) = connect_async(wsc_rtp_url.to_string())
             .await
             .context("connecting to WSC-RTP ws")?;
         let (ws_sink, mut ws_stream) = ws.split();
 
         let deadline = tokio::time::Instant::now() + SDP_TIMEOUT;
-        let mut udp_success: Option<bool> = None;
         let mut init_message = None;
         let mut initial_sdp = None;
-        
+
         // TODO: add timeout
         while init_message.is_none() && initial_sdp.is_none() {
             let msg = tokio::time::timeout_at(deadline, ws_stream.next())
@@ -114,11 +118,12 @@ impl WscRtpSession {
                 }
             }
         }
-        
-        let initial_sdp = initial_sdp.ok_or_else(|| anyhow::anyhow!("WSC-RTP websocket closed before SDP"))?;
+
+        let initial_sdp =
+            initial_sdp.ok_or_else(|| anyhow::anyhow!("WSC-RTP websocket closed before SDP"))?;
         let (session_id, holepunch_port) = init_message
             .ok_or_else(|| anyhow::anyhow!("WSC-RTP websocket closed before initialization"))?;
-        
+
         // the ws wasn't initialized with force_websocket
         // do holepunch and check if we can receive udp packets
         let mut udp_sock_maybe = None;
@@ -132,18 +137,29 @@ impl WscRtpSession {
             udp_sock_maybe = Some(udp_sock);
         }
 
+        let (encoding, pt, clock_rate, sprop) = parse_rtp_caps_from_sdp(&initial_sdp)
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse RTP caps from SDP"))?;
+        // TODO: real dimensions
+        let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop, 640, 480);
+        info!("WSC-RTP GStreamer pipeline: {}", pipeline_str);
+
+        let pipeline = gstreamer::parse::launch(&pipeline_str)
+            .context("GStreamer pipeline launch")?
+            .downcast::<gstreamer::Pipeline>()
+            .map_err(|_| anyhow::anyhow!("Not a pipeline"))?;
+
         let session = Arc::new(Self {
+            pipeline: Arc::new(pipeline),
             session_common,
             initial_sdp,
             session_id: session_id,
             holepunch_port,
             media_server_http_url: server_url,
             source_id: config.source_id.clone(),
-            use_udp_transport: udp_sock_maybe.is_some(),
             http_client: reqwest::Client::new(),
         });
 
-        Ok((session, ws_sink, ws_stream))
+        Ok((session, ws_sink, ws_stream, udp_sock_maybe))
     }
 
     pub fn sdp_text(&self) -> &str {
@@ -180,75 +196,45 @@ impl WscRtpSession {
         mut ws_sink: WsSink,
         mut ws_stream: WsStream,
         mut command_rx: tokio::sync::mpsc::Receiver<WscRtpSessionCommand>,
-        event_tx: InputEventSender,
-        output_dims: Arc<Mutex<VideoDimensions>>,
-        payload_holder: Weak<crate::core::texture::payload::PayloadHolder>,
-        texture_id: i64,
-    ) {
-        let result = self
-            .execute_inner(
-                &mut ws_sink,
-                &mut ws_stream,
-                &event_tx,
-                output_dims,
-                payload_holder,
-                texture_id,
-            )
-            .await;
-
-        let _ = ws_sink.close().await;
-
-        match result {
-            Ok(()) => info!("WSC-RTP session finished cleanly"),
-            Err(e) => {
-                warn!("WSC-RTP session error: {}", e);
-                push_event(&self.events_sink, StreamEvent::Error(e.to_string()));
-                let _ = event_tx.send(InputEvent::State(crate::dart_types::StreamState::Error(
-                    e.to_string(),
-                )));
-            }
-        }
-
-        let _ = event_tx.send(InputEvent::State(crate::dart_types::StreamState::Stopped));
-    }
-
-    async fn execute_inner(
-        &self,
-        ws_sink: &mut WsSink,
-        ws_stream: &mut WsStream,
-        event_tx: &InputEventSender,
-        output_dims: Arc<Mutex<VideoDimensions>>,
-        payload_holder: Weak<crate::core::texture::payload::PayloadHolder>,
-        texture_id: i64,
-    ) -> Result<()> {
-        // ── Parse SDP and build GStreamer pipeline ────────────────────────
-        let (encoding, pt, clock_rate, sprop) = parse_rtp_caps_from_sdp(&self.initial_sdp)
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse RTP caps from SDP"))?;
-
-        let dims = output_dims.lock().unwrap().clone();
-        let pipeline_str =
-            build_pipeline_str(&encoding, pt, clock_rate, &sprop, dims.width, dims.height);
-        info!("WSC-RTP GStreamer pipeline: {}", pipeline_str);
-
-        let pipeline = gstreamer::parse::launch(&pipeline_str)
-            .context("GStreamer pipeline launch")?
-            .downcast::<gstreamer::Pipeline>()
-            .map_err(|_| anyhow::anyhow!("Not a pipeline"))?;
-
-        let appsrc = pipeline
+        udp_rtp_transport_sock: Option<UdpSocket>,
+    ) -> anyhow::Result<()> {
+        let appsrc = self
+            .pipeline
             .by_name("src")
             .ok_or_else(|| anyhow::anyhow!("appsrc not found"))?
             .downcast::<AppSrc>()
             .map_err(|_| anyhow::anyhow!("src is not AppSrc"))?;
 
-        let appsink = pipeline
+        let appsink = self
+            .pipeline
             .by_name("sink")
             .ok_or_else(|| anyhow::anyhow!("appsink not found"))?
             .downcast::<gstreamer_app::AppSink>()
             .map_err(|_| anyhow::anyhow!("sink is not AppSink"))?;
 
-        let event_tx_clone = event_tx.clone();
-        let out_dims = Arc::clone(&output_dims);
+        let payload_holder = Arc::new(crate::core::texture::payload::PayloadHolder::new());
+        let payload_holder_weak = Arc::downgrade(&payload_holder);
+        let payload_holder_for_texture = Arc::clone(&payload_holder);
+        let engine_handle = self.session_common.engine_handle;
+        let (sendable_texture, texture_id) =
+            invoke_on_platform_main_thread(move || -> Result<_> {
+                let texture =
+                    Texture::new_with_provider(engine_handle, payload_holder_for_texture)?;
+                let texture_id = texture.id();
+                Ok((texture.into_sendable_texture(), texture_id))
+            })?;
+
+        let texture_session = Arc::new(crate::core::texture::flutter::TextureSession::new(
+            texture_id,
+            Arc::downgrade(&sendable_texture),
+            payload_holder_weak.clone(),
+        ));
+        let texture_session: Arc<dyn FlutterTextureSession> = texture_session;
+        self.session_common.send_state_msg(StreamState::Playing {
+            texture_id,
+            seekable: true,
+        });
+
         appsink.set_callbacks(
             gstreamer_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
@@ -257,61 +243,59 @@ impl WscRtpSession {
                     let map = buffer
                         .map_readable()
                         .map_err(|_| gstreamer::FlowError::Error)?;
+                    let frame;
+                    if let Some((width, height)) = sample.caps().and_then(|caps| {
+                        let structure = caps.structure(0)?;
 
-                    let dims = out_dims.lock().unwrap();
-                    let frame = RawRgbaFrame {
-                        width: dims.width,
-                        height: dims.height,
-                        data: map.as_slice().to_vec(),
-                    };
-                    drop(dims);
+                        let width = structure.get::<i32>("width").ok()?;
+                        let height = structure.get::<i32>("height").ok()?;
 
-                    if let Some(holder) = payload_holder.upgrade() {
+                        Some((width, height))
+                    }) {
+                        frame = RawRgbaFrame {
+                            width: width as _,
+                            height: height as _,
+                            data: map.as_slice().to_vec(),
+                        };
+                    } else {
+                        frame = RawRgbaFrame {
+                            width: 0,
+                            height: 0,
+                            data: Vec::new(),
+                        };
+                    }
+                    if let Some(holder) = payload_holder_weak.upgrade() {
                         holder.set_payload(Arc::new(frame) as SharedPixelData);
-                        let _ = event_tx_clone.send(InputEvent::FrameAvailable);
+                        texture_session.mark_frame_available();
                     }
                     Ok(gstreamer::FlowSuccess::Ok)
                 })
                 .build(),
         );
 
-        pipeline
-            .set_state(gstreamer::State::Playing)
-            .context("set pipeline Playing")?;
-
-        event_tx
-            .send(InputEvent::State(crate::dart_types::StreamState::Playing {
-                texture_id,
-                seekable: false,
-            }))
-            .ok();
-
-        // ── Optional UDP transport ───────────────────────────────────────
-        let (rtp_tx, rtp_rx) = flume::unbounded::<Vec<u8>>();
-
-        if self.use_udp_transport {
-            let base_url = self.base_url.clone();
-            let token = self.session_id.clone();
-            let holepunch_port = self.holepunch_port;
-            let tx = rtp_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                try_udp_holepunch(&base_url, holepunch_port, &token, &tx);
-            });
-        } else {
-            info!("WSC-RTP: skipping UDP holepunch (force_websocket_transport=true)");
+        async fn udp_packet_receiver(appsrc: AppSrc, udp_sock: UdpSocket) {
+            // 1500 is standard MTU size for Ethernet frames
+            let mut buf = [0u8; 1500];
+            while let Ok((len, _)) = udp_sock.recv_from(&mut buf).await {
+                let gst_buffer = gstreamer::Buffer::from_slice(buf[..len].to_vec());
+                if let Err(err) = appsrc.push_buffer(gst_buffer) {
+                    log::warn!("WSC-RTP: appsrc push_buffer failed: {}", err);
+                    break;
+                }
+            }
         }
 
-        // ── Main select loop ─────────────────────────────────────────────
-        // Take the receiver out of the Mutex so we don't hold a MutexGuard across awaits.
-        let mut command_rx = self
-            .command_rx
-            .lock()
-            .unwrap()
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("WscRtpSession::execute called more than once"))?;
+        let mut udp_packet_rcv_task = None;
+        if let Some(udp_rtp_transport_sock) = udp_rtp_transport_sock {
+            udp_packet_rcv_task = Some(tokio::spawn(udp_packet_receiver(
+                appsrc.clone(),
+                udp_rtp_transport_sock,
+            )));
+        }
+
         let mut ping_interval = tokio::time::interval(PING_INTERVAL);
         ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
+        let mut output: anyhow::Result<()> = Ok(());
         loop {
             tokio::select! {
                 // ── Session commands (shutdown only) ──────────────────
@@ -319,36 +303,34 @@ impl WscRtpSession {
                     match cmd {
                         Some(WscRtpSessionCommand::Shutdown) | None => {
                             info!("WSC-RTP: shutdown command received");
-                            pipeline.set_state(gstreamer::State::Null).ok();
-                            return Ok(());
+                            break;
                         }
                     }
                 }
 
-                // ── Periodic ping ────────────────────────────────────
                 _ = ping_interval.tick() => {
                     if let Ok(payload) = serde_json::to_string(&WscRtpClientMessage::Ping) {
                         let _ = ws_sink.send(Message::Text(payload.into())).await;
                     }
                 }
-
-                // ── Incoming WebSocket messages ──────────────────────
                 msg = ws_stream.next() => {
                     match msg {
                         None => {
-                            info!("WSC-RTP: websocket stream closed");
-                            pipeline.set_state(gstreamer::State::Null).ok();
-                            return Ok(());
+                            output = Err(anyhow::anyhow!("WebSocket stream closed"));
+                            break;
                         }
                         Some(Err(e)) => {
-                            pipeline.set_state(gstreamer::State::Null).ok();
-                            return Err(e.into());
+                            output = Err(anyhow::anyhow!("WebSocket error: {}", e));
+                            break;
                         }
                         Some(Ok(Message::Ping(data))) => {
                             let _ = ws_sink.send(Message::Pong(data)).await;
                         }
                         Some(Ok(Message::Binary(data))) => {
-                            let _ = rtp_tx.send(data.to_vec());
+                            let buffer = gstreamer::Buffer::from_mut_slice(data.to_vec());
+                            if let Err(err) = appsrc.push_buffer(buffer) {
+                                log::warn!("WSC-RTP: failed to handle binary message: {}", err);
+                            }
                         }
                         Some(Ok(Message::Text(text))) => {
                             match serde_json::from_str::<WscRtpServerMessage>(&text) {
@@ -359,58 +341,56 @@ impl WscRtpSession {
                             }
                         }
                         Some(Ok(Message::Close(_))) => {
-                            info!("WSC-RTP: received close frame");
-                            pipeline.set_state(gstreamer::State::Null).ok();
-                            return Ok(());
+                            output = Err(anyhow::anyhow!("WSC-RTP: received close frame"));
+                            break;
                         }
                         Some(Ok(_)) => {}
                     }
                 }
-
-                // ── RTP packets from UDP or WS ───────────────────────
-                rtp = tokio::task::spawn_blocking({
-                    let rx = rtp_rx.clone();
-                    move || rx.recv_timeout(Duration::from_millis(50))
-                }) => {
-                    match rtp {
-                        Ok(Ok(packet)) => {
-                            let mut buffer = gstreamer::Buffer::with_size(packet.len())
-                                .map_err(|_| anyhow::anyhow!("GStreamer buffer alloc failed"))?;
-                            {
-                                let buf_mut = buffer.get_mut().unwrap();
-                                buf_mut.copy_from_slice(0, &packet).ok();
-                            }
-                            if appsrc.push_buffer(buffer) != Ok(gstreamer::FlowSuccess::Ok) {
-                                warn!("WSC-RTP: appsrc push_buffer failed");
-                            }
-                        }
-                        Ok(Err(flume::RecvTimeoutError::Timeout)) => {}
-                        Ok(Err(flume::RecvTimeoutError::Disconnected)) => {
-                            info!("WSC-RTP: RTP channel disconnected");
-                            pipeline.set_state(gstreamer::State::Null).ok();
-                            return Ok(());
-                        }
-                        Err(e) => {
-                            warn!("WSC-RTP: spawn_blocking join error: {}", e);
-                        }
-                    }
-                }
             }
+            // cleanup
+            if let Some(udp_rcv_task) = udp_packet_rcv_task {
+                udp_rcv_task.abort();
+            }
+            self.pipeline.set_state(gstreamer::State::Null)?;
+            return output;
         }
-    }
 
+        let _ = self
+            .session_common
+            .send_state_msg(crate::dart_types::StreamState::Stopped);
+
+        invoke_on_platform_main_thread(move || {
+            // make sure it is dropped on the main thread
+            // because this would call non thread safe flutter stuff back in irondash
+            drop(payload_holder)
+        });
+        Ok(())
+    }
     // ─── Internal helpers ────────────────────────────────────────────
 
     fn handle_server_message(&self, message: WscRtpServerMessage) {
         match message {
             WscRtpServerMessage::Init { .. } => {}
             WscRtpServerMessage::Sdp { .. } => {}
-            WscRtpServerMessage::StreamState { state } => {
-                push_event(&self.events_sink, StreamEvent::WscRtpStreamState(state));
+            WscRtpServerMessage::StreamState { .. } => {}
+            WscRtpServerMessage::SessionMode(mode) => {
+                let (is_live, current_time_ms) = match mode {
+                    media_server_api_models::SessionMode::Live => (true, 0),
+                    media_server_api_models::SessionMode::Dvr { timestamp } => {
+                        (false, timestamp as i64)
+                    }
+                };
+                self.session_common
+                    .send_event_msg(StreamEvent::WscRtpSessionMode {
+                        is_live,
+                        current_time_ms,
+                        speed: 1.0,
+                    });
             }
-            WscRtpServerMessage::SessionMode(_mode) => {}
             WscRtpServerMessage::Error { message } => {
-                push_event(&self.events_sink, StreamEvent::Error(message));
+                self.session_common
+                    .send_event_msg(StreamEvent::Error(message));
             }
             WscRtpServerMessage::FallingBackRtpToWs => {
                 info!("WSC-RTP: server falling back to WebSocket for RTP delivery");
@@ -424,7 +404,7 @@ impl WscRtpSession {
         endpoint: &str,
         body: Option<serde_json::Value>,
     ) -> Result<()> {
-        let mut url = Url::parse(&self.base_url)?;
+        let mut url = self.media_server_http_url.clone();
         url.set_path(&format!(
             "/streams/{}/wsc-rtp/{}/{}",
             self.source_id, self.session_id, endpoint
@@ -445,15 +425,12 @@ impl WscRtpSession {
             .json()
             .await
             .context("parsing WSC-RTP control response")?;
-        push_event(
-            &self.events_sink,
-            StreamEvent::WscRtpSessionMode {
+        self.session_common
+            .send_event_msg(StreamEvent::WscRtpSessionMode {
                 is_live: mode.is_live,
                 current_time_ms: mode.current_time_ms.unwrap_or(0) as i64,
                 speed: mode.speed,
-            },
-        );
-
+            });
         Ok(())
     }
 }
@@ -525,74 +502,12 @@ impl WscRtpShutdownHandle {
     }
 }
 
-// ─── Public setup entry point ────────────────────────────────────────────────
-
-/// Creates a WSC-RTP session. Returns the `Arc<WscRtpSession>` (for seek/live/speed
-/// calls), a shutdown handle, and a tokio JoinHandle for the execute task.
-///
-/// Texture creation and frame marking happen on the platform thread via the
-/// `event_tx` → output loop path (unchanged from before).
-pub async fn setup_wsc_rtp_session(
-    config: &WscRtpSessionConfig,
-    events_sink: crate::core::types::DartEventsStream,
-    event_tx: InputEventSender,
-    output_dims: Arc<Mutex<VideoDimensions>>,
-    payload_holder: Weak<crate::core::texture::payload::PayloadHolder>,
-    texture_id: i64,
-) -> Result<(
-    Arc<WscRtpSession>,
-    WscRtpShutdownHandle,
-    tokio::task::JoinHandle<()>,
-)> {
-    let (command_tx, command_rx) = tokio::sync::mpsc::channel::<WscRtpSessionCommand>(32);
-
-    let (session, ws_sink, ws_stream) = WscRtpSession::new(config, events_sink, command_rx).await?;
-
-    let session_clone = Arc::clone(&session);
-    let handle = tokio::spawn(async move {
-        session_clone
-            .execute(
-                ws_sink,
-                ws_stream,
-                event_tx,
-                output_dims,
-                payload_holder,
-                texture_id,
-            )
-            .await;
-    });
-
-    let shutdown = WscRtpShutdownHandle { tx: command_tx };
-
-    Ok((session, shutdown, handle))
-}
-
 fn is_timeout_err(e: &std::io::Error) -> bool {
     matches!(
         e.kind(),
         std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
     )
 }
-
-fn run_udp_receiver(socket: UdpSocket, tx: flume::Sender<Vec<u8>>) {
-    let mut buf = vec![0u8; 65536];
-    loop {
-        match socket.recv(&mut buf) {
-            Ok(n) if n > 0 => {
-                if tx.send(buf[..n].to_vec()).is_err() {
-                    break;
-                }
-            }
-            Ok(_) => {}
-            Err(e) => {
-                warn!("WSC-RTP UDP receive error: {}", e);
-                break;
-            }
-        }
-    }
-    info!("WSC-RTP UDP receive thread exiting");
-}
-
 // ─── GStreamer pipeline helpers ───────────────────────────────────────────────
 
 fn parse_rtp_caps_from_sdp(sdp_text: &str) -> Option<(String, u8, u32, Option<String>)> {
@@ -656,10 +571,6 @@ fn build_pipeline_str(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-fn push_event(events_sink: &crate::core::types::DartEventsStream, event: StreamEvent) {
-    events_sink.add(event).log_err();
-}
 
 fn build_wsc_rtp_handshake_request(
     url: &Url,

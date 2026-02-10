@@ -7,10 +7,13 @@ use std::{
 
 use log::{debug, warn};
 
-use crate::core::{
-    input::wsc_rtp::{WscRtpSession, WscRtpShutdownHandle},
-    output::flutter_pixelbuffer::{FlutterPixelBufferHandle, OutputCommand},
-    types::DartEventsStream,
+use crate::{
+    core::{
+        input::{InputEvent, wsc_rtp::{WscRtpSession, WscRtpShutdownHandle}},
+        output::flutter_pixelbuffer::{FlutterPixelBufferHandle, OutputCommand},
+        types::{DartEventsStream, DartStateStream},
+    },
+    dart_types::{StreamEvent, StreamState},
 };
 
 pub trait VideoSession: Send {
@@ -34,6 +37,7 @@ pub struct VideoSessionCommon {
     pub output: FlutterPixelBufferHandle,
     pub last_alive_mark: SystemTime,
     pub events_sink: DartEventsStream,
+    pub state_sink: Mutex<Option<DartStateStream>>,
 }
 
 impl VideoSessionCommon {
@@ -49,6 +53,21 @@ impl VideoSessionCommon {
             output,
             last_alive_mark: SystemTime::now(),
             events_sink,
+            state_sink: Mutex::new(None),
+        }
+    }
+
+    pub fn send_state_msg(&self, msg: StreamState) {
+        if let Some(sink) = self.state_sink.lock().unwrap().as_ref() {
+            if let Err(e) = sink.add(msg) {
+                log::error!("Failed to send state message: {}", e);
+            }
+        }
+    }
+
+    pub fn send_event_msg(&self, msg: StreamEvent) {
+        if let Err(e) = self.events_sink.add(msg) {
+            log::error!("Failed to send event message: {}", e);
         }
     }
 }
@@ -142,8 +161,6 @@ pub struct WscRtpVideoSession {
     wsc_rtp_session: Arc<WscRtpSession>,
     wsc_rtp_shutdown: WscRtpShutdownHandle,
 }
-
-
 
 impl VideoSession for WscRtpVideoSession {
     fn session_id(&self) -> i64 {
