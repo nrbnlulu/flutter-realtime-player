@@ -1,231 +1,74 @@
 pub mod registry;
 
-use std::{
-    sync::{Arc, Mutex},
-    time::SystemTime,
-};
+use std::time::SystemTime;
 
-use log::{debug, warn};
+use async_trait::async_trait;
+use parking_lot::Mutex;
 
 use crate::{
-    core::{
-        input::{InputEvent, wsc_rtp::{WscRtpSession, WscRtpShutdownHandle}},
-        output::flutter_pixelbuffer::{FlutterPixelBufferHandle, OutputCommand},
-        types::{DartEventsStream, DartStateStream},
-    },
+    core::types::{DartEventsStream, DartStateStream},
     dart_types::{StreamEvent, StreamState},
 };
 
-pub trait VideoSession: Send {
+#[async_trait]
+pub trait VideoSession: Send + Sync {
     fn session_id(&self) -> i64;
     fn engine_handle(&self) -> i64;
     fn last_alive_mark(&self) -> SystemTime;
-    fn make_alive(&mut self);
-    fn terminate(&mut self);
-    fn set_events_sink(&mut self, sink: DartEventsStream);
-    fn seek(&self, ts: i64) -> anyhow::Result<()>;
+    fn make_alive(&self);
+    /// this should not block at all.
+    /// either set a flag or abort a task.
+    /// it is expected that a few moments later (or immediately) any actual flutter textures will be destroyed.
+    fn terminate(&self);
+    fn set_events_sink(&self, sink: DartEventsStream);
     fn resize(&self, width: u32, height: u32) -> anyhow::Result<()>;
-    /// only valid for WSC-RTP sessions
-    fn go_to_live_stream(&self) -> anyhow::Result<()>;
-    fn set_speed(&self, speed: f64) -> anyhow::Result<()>;
-    fn destroy(self: Box<Self>);
+    async fn seek(&self, ts: i64) -> anyhow::Result<()>;
+    async fn go_to_live_stream(&self) -> anyhow::Result<()>;
+    async fn set_speed(&self, speed: f64) -> anyhow::Result<()>;
 }
 
 pub struct VideoSessionCommon {
     pub session_id: i64,
     pub engine_handle: i64,
-    pub output: FlutterPixelBufferHandle,
-    pub last_alive_mark: SystemTime,
-    pub events_sink: DartEventsStream,
-    pub state_sink: Mutex<Option<DartStateStream>>,
+    pub last_alive_mark: Mutex<SystemTime>,
+    pub events_sink: Mutex<Option<DartEventsStream>>,
+    pub state_sink: DartStateStream,
 }
 
 impl VideoSessionCommon {
-    fn new(
-        session_id: i64,
-        engine_handle: i64,
-        output: FlutterPixelBufferHandle,
-        events_sink: DartEventsStream,
-    ) -> Self {
+    pub fn new(session_id: i64, engine_handle: i64, state_sink: DartStateStream) -> Self {
         Self {
             session_id,
             engine_handle,
-            output,
-            last_alive_mark: SystemTime::now(),
-            events_sink,
-            state_sink: Mutex::new(None),
+            last_alive_mark: Mutex::new(SystemTime::now()),
+            state_sink,
+            events_sink: Mutex::new(None),
         }
     }
 
-    pub fn send_state_msg(&self, msg: StreamState) {
-        if let Some(sink) = self.state_sink.lock().unwrap().as_ref() {
+    pub fn get_last_alive_mark(&self) -> SystemTime {
+        *self.last_alive_mark.lock()
+    }
+
+    pub fn mark_alive(&self) {
+        *self.last_alive_mark.lock() = SystemTime::now();
+    }
+
+    pub fn set_events_sink(&self, sink: DartEventsStream) {
+        *self.events_sink.lock() = Some(sink);
+    }
+
+    pub fn send_event_msg(&self, msg: StreamEvent) {
+        if let Some(sink) = self.events_sink.lock().as_ref() {
             if let Err(e) = sink.add(msg) {
-                log::error!("Failed to send state message: {}", e);
+                log::error!("Failed to send event message: {}", e);
             }
         }
     }
 
-    pub fn send_event_msg(&self, msg: StreamEvent) {
-        if let Err(e) = self.events_sink.add(msg) {
-            log::error!("Failed to send event message: {}", e);
+    pub fn send_state_msg(&self, msg: StreamState) {
+        if let Err(e) = self.state_sink.add(msg) {
+            log::error!("Failed to send state message: {}", e);
         }
-    }
-}
-
-pub struct RawVideoSession {
-    common: VideoSessionCommon,
-}
-
-impl RawVideoSession {
-    pub fn new(
-        session_id: i64,
-        engine_handle: i64,
-        output: FlutterPixelBufferHandle,
-        events_sink: DartEventsStream,
-    ) -> Self {
-        Self {
-            common: VideoSessionCommon::new(session_id, engine_handle, output, events_sink),
-        }
-    }
-}
-
-impl VideoSession for RawVideoSession {
-    fn session_id(&self) -> i64 {
-        self.common.session_id
-    }
-
-    fn engine_handle(&self) -> i64 {
-        self.common.engine_handle
-    }
-
-    fn last_alive_mark(&self) -> SystemTime {
-        self.common.last_alive_mark
-    }
-
-    fn make_alive(&mut self) {
-        self.common.last_alive_mark = SystemTime::now();
-    }
-
-    fn terminate(&mut self) {
-        debug!("Terminating raw session {}", self.common.session_id);
-        if let Err(err) = self.common.output.send(OutputCommand::Terminate) {
-            warn!(
-                "Failed to terminate output for session {}: {}",
-                self.common.session_id, err
-            );
-        }
-    }
-
-    fn set_events_sink(&mut self, sink: DartEventsStream) {
-        if let Ok(mut guard) = self.common.events_sink.lock() {
-            *guard = Some(sink);
-        }
-    }
-
-    fn seek(&self, ts: i64) -> anyhow::Result<()> {
-        log::debug!("Seeking raw session {} to {}", self.common.session_id, ts);
-        self.common.output.send(OutputCommand::Seek { ts })
-    }
-
-    fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        debug!("Resizing raw session {}", self.common.session_id);
-        self.common
-            .output
-            .send(OutputCommand::Resize { width, height })
-    }
-
-    fn go_to_live_stream(&self) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("WSC-RTP live not supported for session"))
-    }
-
-    fn set_speed(&self, speed: f64) -> anyhow::Result<()> {
-        let ts = (speed * 1000.0).round() as i64;
-        log::debug!(
-            "Mapping speed {} to seek {} on raw session {}",
-            speed,
-            ts,
-            self.common.session_id
-        );
-        self.common.output.send(OutputCommand::Seek { ts })
-    }
-
-    fn destroy(self: Box<Self>) {
-        debug!("Destroying raw session {}", self.common.session_id);
-        let mut session = *self;
-        session.terminate();
-    }
-}
-
-pub struct WscRtpVideoSession {
-    common: VideoSessionCommon,
-    wsc_rtp_session: Arc<WscRtpSession>,
-    wsc_rtp_shutdown: WscRtpShutdownHandle,
-}
-
-impl VideoSession for WscRtpVideoSession {
-    fn session_id(&self) -> i64 {
-        self.common.session_id
-    }
-
-    fn engine_handle(&self) -> i64 {
-        self.common.engine_handle
-    }
-
-    fn last_alive_mark(&self) -> SystemTime {
-        self.common.last_alive_mark
-    }
-
-    fn make_alive(&mut self) {
-        self.common.last_alive_mark = SystemTime::now();
-    }
-
-    fn terminate(&mut self) {
-        debug!("Terminating WSC-RTP session {}", self.common.session_id);
-        self.wsc_rtp_shutdown.shutdown();
-        if let Err(err) = self.common.output.send(OutputCommand::Terminate) {
-            warn!(
-                "Failed to terminate output for session {}: {}",
-                self.common.session_id, err
-            );
-        }
-    }
-
-    fn set_events_sink(&mut self, sink: DartEventsStream) {
-        if let Ok(mut guard) = self.common.events_sink.lock() {
-            *guard = Some(sink);
-        }
-    }
-
-    fn seek(&self, ts: i64) -> anyhow::Result<()> {
-        log::debug!(
-            "Seeking WSC-RTP session {} to {}",
-            self.common.session_id,
-            ts
-        );
-        let session = Arc::clone(&self.wsc_rtp_session);
-        tokio::runtime::Handle::current().block_on(session.seek(ts))
-    }
-
-    fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        debug!("Resizing WSC-RTP session {}", self.common.session_id);
-        self.common
-            .output
-            .send(OutputCommand::Resize { width, height })
-    }
-
-    fn go_to_live_stream(&self) -> anyhow::Result<()> {
-        let session = Arc::clone(&self.wsc_rtp_session);
-        tokio::runtime::Handle::current().block_on(session.go_live())
-    }
-
-    fn set_speed(&self, speed: f64) -> anyhow::Result<()> {
-        let session = Arc::clone(&self.wsc_rtp_session);
-        tokio::runtime::Handle::current().block_on(session.set_speed(speed))
-    }
-
-    fn destroy(self: Box<Self>) {
-        debug!("Destroying WSC-RTP session {}", self.common.session_id);
-        let mut session = *self;
-        session.terminate();
     }
 }

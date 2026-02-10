@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
@@ -24,13 +25,12 @@ use crate::{
         output::flutter_pixelbuffer::create_flutter_pixelbuffer,
         session::VideoSessionCommon,
         texture::{
-            payload::{self, RawRgbaFrame, SharedPixelData},
-            FlutterTextureSession,
+            FlutterTextureSession, payload::{self, RawRgbaFrame, SharedPixelData}
         },
-        types::VideoDimensions,
+        types::{VideoDimensions, WscRtpSessionConfig},
     },
     dart_types::{StreamEvent, StreamState},
-    utils::{invoke_on_platform_main_thread, LogErr},
+    utils::{LogErr, invoke_on_platform_main_thread},
 };
 
 use media_server_api_models::{WscRtpClientMessage, WscRtpServerMessage};
@@ -38,14 +38,6 @@ use media_server_api_models::{WscRtpClientMessage, WscRtpServerMessage};
 const UDP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 const PING_INTERVAL: Duration = Duration::from_secs(2);
 const SDP_TIMEOUT: Duration = Duration::from_secs(15);
-
-// ─── Config ──────────────────────────────────────────────────────────────────
-
-pub struct WscRtpSessionConfig {
-    pub base_url: String,
-    pub source_id: String,
-    pub force_websocket_transport: bool,
-}
 
 // ─── Session command enum (WS-level commands only) ───────────────────────────
 
@@ -65,21 +57,20 @@ pub struct WscRtpSession {
     holepunch_port: u16,
     media_server_http_url: Url,
     source_id: String,
-    http_client: reqwest::Client,
+    http_client: Arc<reqwest::Client>,
     pipeline: Arc<gstreamer::Pipeline>,
+    execution_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl WscRtpSession {
     /// Connect to the WSC-RTP websocket, wait for Init + SDP messages,
     /// and return the session together with the split websocket streams.
     pub async fn new(
-        config: &WscRtpSessionConfig,
+        config: WscRtpSessionConfig,
         session_common: VideoSessionCommon,
-        server_url: &str,
-        command_rx: tokio::sync::mpsc::Receiver<WscRtpSessionCommand>,
         http_client: Arc<reqwest::Client>,
     ) -> Result<(Arc<Self>, WsSink, WsStream, Option<UdpSocket>)> {
-        let server_url = Url::parse(server_url).context("parsing media server HTTP URL")?;
+        let server_url = Url::parse(&config.base_url).context("parsing media server HTTP URL")?;
         let wsc_rtp_url = build_wsc_rtp_handshake_request(
             &server_url,
             &config.source_id,
@@ -132,7 +123,7 @@ impl WscRtpSession {
 
             let mut udp_sock = UdpSocket::bind(bind_addr).await?;
             if let Err(e) = validate_udp_handshare(&session_id, &mut udp_sock).await {
-                log::warn!("failed to handshake for udp transport in session {} falling back to websockets", session_id);
+                log::warn!("failed to handshake for udp transport in session {} due to {} falling back to websockets", session_id, e);
             }
             udp_sock_maybe = Some(udp_sock);
         }
@@ -149,6 +140,7 @@ impl WscRtpSession {
             .map_err(|_| anyhow::anyhow!("Not a pipeline"))?;
 
         let session = Arc::new(Self {
+            execution_task: Mutex::new(None),
             pipeline: Arc::new(pipeline),
             session_common,
             initial_sdp,
@@ -156,7 +148,7 @@ impl WscRtpSession {
             holepunch_port,
             media_server_http_url: server_url,
             source_id: config.source_id.clone(),
-            http_client: reqwest::Client::new(),
+            http_client: http_client,
         });
 
         Ok((session, ws_sink, ws_stream, udp_sock_maybe))
@@ -435,6 +427,53 @@ impl WscRtpSession {
     }
 }
 
+#[async_trait]
+impl crate::core::session::VideoSession for WscRtpSession{
+    
+    async fn seek(&self, ts: i64) -> anyhow::Result<()> {
+        Self::seek(&self, ts).await
+    }
+    async fn go_to_live_stream(&self) -> anyhow::Result<()> {
+        Self::go_to_live_stream(&self).await
+    }
+
+    async fn set_speed(&self, speed: f64) -> anyhow::Result<()> {
+        Self::set_speed(&self, speed).await
+    }
+
+    fn session_id(&self) -> i64 {
+        self.session_common.session_id
+    }
+    fn engine_handle(&self) -> i64 {
+        self.session_common.engine_handle
+    }
+
+    fn last_alive_mark(&self) -> std::time::SystemTime {
+        self.session_common.get_last_alive_mark()
+    }
+
+    fn make_alive(&self) {
+        self.session_common.mark_alive();
+    }
+
+    fn terminate(&self) {
+        todo!()
+    }
+
+    fn set_events_sink(&mut self, sink: crate::core::types::DartEventsStream) {
+        self.session_common.set_events_sink(sink);
+    }
+
+    fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
+        log::warn!("resize not supported yet for wsc rtp");
+        Ok(())
+    }
+
+    fn destroy(self: Box<Self>) {
+        // no need to do anything here, we handle the flutter texture destroyal in the execute fn.
+    }
+
+}
 async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> anyhow::Result<()> {
     async fn one_try(
         udp_sock: &mut tokio::net::UdpSocket,

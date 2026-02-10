@@ -88,6 +88,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
 
 [[package]]
+name = "async-trait"
+version = "0.1.89"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
 name = "atk-sys"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -600,6 +611,7 @@ name = "flutter_realtime_player"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "cfg_aliases",
  "chrono",
  "flume",
@@ -620,6 +632,7 @@ dependencies = [
  "lazy_static",
  "log",
  "media-server-api-models",
+ "parking_lot",
  "reqwest",
  "rffmpeg",
  "sdp",
@@ -2090,6 +2103,16 @@ dependencies = [
  "gobject-sys 0.17.10",
  "libc",
  "system-deps 6.2.2",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
+dependencies = [
+ "lock_api",
+ "parking_lot_core",
 ]
 
 [[package]]

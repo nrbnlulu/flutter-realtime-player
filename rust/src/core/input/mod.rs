@@ -23,12 +23,3 @@ pub type InputCommandReceiver = flume::Receiver<InputCommand>;
 pub type InputEventSender = flume::Sender<InputEvent>;
 pub type InputEventReceiver = flume::Receiver<InputEvent>;
 
-pub trait VideoInput: Send + Sync {
-    fn execute(
-        &self,
-        event_tx: InputEventSender,
-        command_rx: InputCommandReceiver,
-        texture_id: i64,
-    ) -> Result<()>;
-    fn output_dimensions(&self) -> VideoDimensions;
-}

@@ -1,21 +1,14 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock},
-    thread,
+    sync::{Arc, RwLock},
     time::SystemTime,
 };
 
 use log::{debug, info};
 
 use crate::core::{
-    input::{
-        ffmpeg::FfmpegVideoInput,
-        wsc_rtp::{self, WscRtpSessionConfig},
-        InputCommandReceiver, InputCommandSender, InputEventReceiver, InputEventSender, VideoInput,
-    },
-    output::flutter_pixelbuffer::{create_flutter_pixelbuffer, FlutterPixelBufferHandle},
-    session::{RawVideoSession, VideoSession, WscRtpVideoSession},
-    types::{self, DartStateStream},
+    session::VideoSession,
+    types::{self},
 };
 
 pub fn init() -> anyhow::Result<()> {
@@ -27,33 +20,8 @@ pub fn init() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub struct SessionHolder {
-    inner: Mutex<Option<Box<dyn VideoSession>>>,
-}
-
-impl SessionHolder {
-    fn new(session: Box<dyn VideoSession>) -> Self {
-        Self {
-            inner: Mutex::new(Some(session)),
-        }
-    }
-
-    fn with_session_mut<F, R>(&self, f: F) -> Option<R>
-    where
-        F: FnOnce(&mut dyn VideoSession) -> R,
-    {
-        let mut guard = self.inner.lock().unwrap();
-        guard.as_mut().map(|session| f(session.as_mut()))
-    }
-
-    fn take(&self) -> Option<Box<dyn VideoSession>> {
-        let mut guard = self.inner.lock().unwrap();
-        guard.take()
-    }
-}
-
 lazy_static::lazy_static! {
-    static ref SESSION_CACHE: RwLock<HashMap<i64, Arc<SessionHolder>>> =
+    static ref SESSION_CACHE: RwLock<HashMap<i64, Arc<dyn VideoSession>>> =
         RwLock::new(HashMap::new());
 }
 
@@ -62,88 +30,21 @@ pub fn get_all_sessions() -> Vec<i64> {
     session_cache.keys().copied().collect()
 }
 
-pub fn get_session(session_id: i64) -> Option<Arc<SessionHolder>> {
+pub fn get_session(session_id: i64) -> Option<Arc<dyn VideoSession>> {
     let session_cache = SESSION_CACHE.read().unwrap();
     session_cache.get(&session_id).cloned()
 }
 
-pub fn get_session_mut<F, R>(session_id: i64, f: F) -> Option<R>
-where
-    F: FnOnce(&mut dyn VideoSession) -> R,
-{
-    let holder = get_session(session_id)?;
-    holder.with_session_mut(f)
+pub fn insert_session(session_id: i64, session: Arc<dyn VideoSession>) {
+    SESSION_CACHE.write().unwrap().insert(session_id, session);
 }
 
-pub fn insert_session(session_id: i64, session: Box<dyn VideoSession>) {
-    SESSION_CACHE
-        .write()
-        .unwrap()
-        .insert(session_id, Arc::new(SessionHolder::new(session)));
-}
-
-fn remove_session(session_id: i64) -> Option<Arc<SessionHolder>> {
+fn remove_session(session_id: i64) -> Option<Arc<dyn VideoSession>> {
     let mut session_cache = SESSION_CACHE.write().unwrap();
     session_cache.remove(&session_id)
 }
 
-fn build_input_and_output(
-    session_id: i64,
-    engine_handle: i64,
-    video_info: types::VideoInfo,
-    update_stream: DartStateStream,
-    ffmpeg_options: Option<HashMap<String, String>>,
-    sdp_data: Option<Arc<Vec<u8>>>,
-) -> anyhow::Result<(
-    Arc<dyn VideoInput>,
-    FlutterPixelBufferHandle,
-    InputCommandReceiver,
-    InputEventSender,
-    i64,
-)> {
-    let (input_event_tx, input_event_rx): (InputEventSender, InputEventReceiver) =
-        flume::unbounded();
-    let (input_command_tx, input_command_rx): (InputCommandSender, InputCommandReceiver) =
-        flume::unbounded();
-
-    let (output_handle, payload_holder_weak, texture_id) = create_flutter_pixelbuffer(
-        session_id,
-        engine_handle,
-        update_stream,
-        input_event_rx,
-        input_command_tx,
-    )?;
-
-    let input = FfmpegVideoInput::new(
-        &video_info,
-        session_id,
-        ffmpeg_options,
-        sdp_data,
-        payload_holder_weak,
-    );
-    let input: Arc<dyn VideoInput> = input;
-
-    Ok((
-        input,
-        output_handle,
-        input_command_rx,
-        input_event_tx,
-        texture_id,
-    ))
-}
-
-fn spawn_stream_thread(
-    input: Arc<dyn VideoInput>,
-    input_event_tx: InputEventSender,
-    input_command_rx: InputCommandReceiver,
-    texture_id: i64,
-) {
-    thread::spawn(move || {
-        let _ = input.execute(input_event_tx, input_command_rx, texture_id);
-    });
-}
-
-pub fn stream_alive_tester_task() {
+pub async fn stream_alive_tester_task() {
     loop {
         let mut closed_sessions = Vec::new();
 
@@ -153,12 +54,9 @@ pub fn stream_alive_tester_task() {
             .collect::<Vec<_>>();
         let now = SystemTime::now();
         for (session_id, holder) in holders {
-            let expired = holder
-                .with_session_mut(|session| {
-                    now.duration_since(session.last_alive_mark())
-                        .map(|duration| duration.as_millis() > 5000)
-                        .unwrap_or(false)
-                })
+            let expired = now
+                .duration_since(holder.last_alive_mark())
+                .map(|dur| dur.as_millis() > 5000)
                 .unwrap_or(false);
             if expired {
                 closed_sessions.push(session_id);
@@ -174,51 +72,15 @@ pub fn stream_alive_tester_task() {
                 destroy_stream_session(session_id);
             }
         }
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }
-
-pub fn create_new_playable(
-    session_id: i64,
-    engine_handle: i64,
-    video_info: types::VideoInfo,
-    update_stream: DartStateStream,
-    ffmpeg_options: Option<HashMap<String, String>>,
-) -> anyhow::Result<()> {
-    info!(
-        "Creating new playable: session_id={}, engine_handle={}",
-        session_id, engine_handle
-    );
-    let (input, output_handle, input_command_rx, input_event_tx, texture_id) =
-        build_input_and_output(
-            session_id,
-            engine_handle,
-            video_info,
-            update_stream,
-            ffmpeg_options,
-            None,
-        )?;
-
-    let events_sink = Arc::new(Mutex::new(None));
-    let session = RawVideoSession::new(
-        session_id,
-        engine_handle,
-        output_handle,
-        Arc::clone(&events_sink),
-    );
-    {
-        insert_session(session_id, Box::new(session));
-    }
-
-    spawn_stream_thread(input, input_event_tx, input_command_rx, texture_id);
-
-    Ok(())
-}
-
 
 pub fn mark_session_alive(session_id: i64) {
     log::trace!("mark_session_alive {}", session_id);
-    get_session_mut(session_id, |session| session.make_alive());
+    if let Some(session) = get_session(session_id) {
+        session.make_alive();
+    }
 }
 
 pub fn destroy_engine_streams(engine_handle: i64) {
@@ -259,7 +121,7 @@ pub fn destroy_stream_session(session_id: i64) {
             session_id
         );
         if let Some(session) = holder.take() {
-            thread::spawn(move || session.destroy());
+            holder.terminate();
         }
         return;
     }
@@ -267,31 +129,37 @@ pub fn destroy_stream_session(session_id: i64) {
 }
 
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) {
-    match get_session_mut(session_id, |session| session.resize(width, height)) {
-        Some(Ok(())) => {}
-        Some(Err(e)) => log::warn!("Failed to resize session {}: {}", session_id, e),
-        None => log::warn!(
-            "Resize called for non-existent session {}, ignoring",
-            session_id
-        ),
+    if let Some(session) = get_session(session_id) {
+        if let Err(e) = session.resize(width, height) {
+            log::warn!("Failed to resize session {}: {}", session_id, e);
+        }
     }
 }
 
-pub fn seek_session(session_id: i64, ts: i64) -> anyhow::Result<()> {
-    get_session_mut(session_id, |session| session.seek(ts))
-        .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
+pub async fn seek_session(session_id: i64, ts: i64) -> anyhow::Result<()> {
+    let session = get_session(session_id);
+    if let Some(session) = session {
+        session.seek(ts).await?;
+    }
+    Ok(())
 }
 
-pub fn wsc_rtp_live_session(session_id: i64) -> anyhow::Result<()> {
-    get_session_mut(session_id, |session| session.go_to_live_stream())
-        .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
+pub async fn wsc_rtp_live_session(session_id: i64) -> anyhow::Result<()> {
+    if let Some(session) = get_session(session_id) {
+        session.go_to_live_stream().await?;
+    }
+    Ok(())
 }
 
 pub fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()> {
-    get_session_mut(session_id, |session| session.set_speed(speed))
-        .unwrap_or_else(|| Err(anyhow::anyhow!("Session not found: {}", session_id)))
+    if let Some(session) = get_session(session_id) {
+        session.set_speed(speed);
+    }
+    Ok(())
 }
 
 pub fn register_events_sink(session_id: i64, sink: types::DartEventsStream) {
-    get_session_mut(session_id, |session| session.set_events_sink(sink));
+    if let Some(session) = get_session(session_id) {
+        session.set_events_sink(sink);
+    }
 }

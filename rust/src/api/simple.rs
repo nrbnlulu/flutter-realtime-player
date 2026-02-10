@@ -1,10 +1,17 @@
 use std::{collections::HashMap, thread};
 
+use lazy_static::lazy_static;
 use log::{debug, info, trace};
 
 use crate::{
     core::{
-        IS_INITIALIZED, session::{WscRtpVideoSession, registry::{self}}, types::{VideoInfo, WscSdpEndpoint}
+        input::wsc_rtp::WscRtpSession,
+        session::{
+            registry::{self, insert_session},
+            VideoSessionCommon, WscRtpVideoSession,
+        },
+        types::{VideoInfo, WscRtpSessionConfig},
+        HTTP_CLIENT, IS_INITIALIZED,
     },
     dart_types::{StreamEvent, StreamState},
     frb_generated::StreamSink,
@@ -62,11 +69,10 @@ pub fn create_new_playable(
     )?;
     Ok(())
 }
-
-pub fn create_wsc_rtp_playable(
+pub async fn create_wsc_rtp_playable(
     session_id: i64,
     engine_handle: i64,
-    endpoint: WscSdpEndpoint,
+    config: WscRtpSessionConfig,
     video_info: VideoInfo,
     ffmpeg_options: Option<HashMap<String, String>>,
     sink: StreamSink<StreamState>,
@@ -74,14 +80,13 @@ pub fn create_wsc_rtp_playable(
     trace!(
         "create_wsc_rtp_playable was called with engine_handle: {}, source_id: {}, session_id: {}",
         engine_handle,
-        endpoint.source_id.as_str(),
+        config.source_id.as_str(),
         session_id
     );
-    
-    let session = WscRtpVideoSession::new(
-        session_id,
-        engine_handle,
-    );
+    let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
+
+    let (session, ws_sender, ws_receiver, udp_sock) =
+        WscRtpSession::new(config, session_common, HTTP_CLIENT.clone()).await?;
 
     insert_session(session_id, Box::new(session));
 

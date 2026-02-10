@@ -42,6 +42,8 @@ tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 media-server-api-models = { version = "0.1.0", git = "https://github.com/nrbnlulu/media-server.git" }
 sdp = "0.17.1"
+parking_lot = "0.12.5"
+async-trait = "0.1.89"
 
 
 [target.'cfg(target_os = "windows")'.dependencies.windows]
