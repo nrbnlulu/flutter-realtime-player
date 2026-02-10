@@ -1,11 +1,10 @@
 use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs, UdpSocket},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex, Weak},
-    thread,
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
@@ -14,7 +13,7 @@ use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 use log::{info, warn};
 
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, UdpSocket};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use url::Url;
 
@@ -91,8 +90,10 @@ impl WscRtpSession {
         let deadline = tokio::time::Instant::now() + SDP_TIMEOUT;
         let mut udp_success: Option<bool> = None;
         let mut init_message = None;
+        let mut initial_sdp = None;
+        
         // TODO: add timeout
-        while init_message.is_none() {
+        while init_message.is_none() && initial_sdp.is_none() {
             let msg = tokio::time::timeout_at(deadline, ws_stream.next())
                 .await
                 .context("timeout waiting for WSC-RTP SDP")?
@@ -107,32 +108,38 @@ impl WscRtpSession {
                             token: token,
                             holepunch_port: holepunch_port,
                         } => init_message = Some((token, holepunch_port)),
+                        WscRtpServerMessage::Sdp { sdp } => initial_sdp = Some(sdp),
                         _ => {}
                     }
                 }
             }
         }
+        
+        let initial_sdp = initial_sdp.ok_or_else(|| anyhow::anyhow!("WSC-RTP websocket closed before SDP"))?;
         let (session_id, holepunch_port) = init_message
             .ok_or_else(|| anyhow::anyhow!("WSC-RTP websocket closed before initialization"))?;
+        
         // the ws wasn't initialized with force_websocket
         // do holepunch and check if we can receive udp packets
-        let udp_receiver_task = if !config.force_websocket_transport {
+        let mut udp_sock_maybe = None;
+        if !config.force_websocket_transport {
             let bind_addr = resolve_server_udp_addr(&server_url, holepunch_port)?;
 
-            let udp_sock = UdpSocket::bind(bind_addr)?;
-            if let Err(e) = validate_udp_handshare().await {
-                todo!("Handle UDP handshake error")
+            let mut udp_sock = UdpSocket::bind(bind_addr).await?;
+            if let Err(e) = validate_udp_handshare(&session_id, &mut udp_sock).await {
+                log::warn!("failed to handshake for udp transport in session {} falling back to websockets", session_id);
             }
-        };
+            udp_sock_maybe = Some(udp_sock);
+        }
 
         let session = Arc::new(Self {
             session_common,
-            initial_sdp: sdp,
-            session_id: token,
+            initial_sdp,
+            session_id: session_id,
             holepunch_port,
-            base_url: config.base_url.clone(),
+            media_server_http_url: server_url,
             source_id: config.source_id.clone(),
-            use_udp_transport: !config.force_websocket_transport,
+            use_udp_transport: udp_sock_maybe.is_some(),
             http_client: reqwest::Client::new(),
         });
 
@@ -451,76 +458,61 @@ impl WscRtpSession {
     }
 }
 
-async fn validate_udp_handshare(
-    session_id: &str,
-    udp_sock: &UdpSocket,
-    server_addr: SocketAddr,
-) -> anyhow::Result<()> {
-    let holepunch = format!(
+async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> anyhow::Result<()> {
+    async fn one_try(
+        udp_sock: &mut tokio::net::UdpSocket,
+        expected_dummy: &str,
+        holepunch_msg: &str,
+        session_id: &str,
+    ) -> anyhow::Result<()> {
+        let mut buf = [0u8; 512];
+        udp_sock.send(holepunch_msg.as_bytes()).await?;
+        let (n, _src) = udp_sock.recv_from(&mut buf).await?;
+        let payload = std::str::from_utf8(&buf[..n])?;
+        if payload.trim() == expected_dummy {
+            let ack = format!(
+                "{} {}",
+                media_server_api_models::wsc_rtp::ACK_HEADER,
+                session_id
+            );
+            udp_sock.send(ack.as_bytes()).await?;
+            info!("WSC-RTP: UDP confirmed, starting UDP receive loop");
+        } else {
+            bail!("WSC-RTP: unexpected UDP payload {:?}", payload);
+        }
+        Ok(())
+    }
+    let holepunch_msg = format!(
         "{} {}",
         media_server_api_models::wsc_rtp::HOLEPUNCH_HEADER,
         session_id
     );
 
     let mut max_retries = 5;
-
-    log::info!("WSC-RTP: sent UDP holepunch to {}", server_addr);
-    udp_sock.set_read_timeout(Some(UDP_HANDSHAKE_TIMEOUT))?;
-    let mut buf = [0u8; 512];
-    let expected_dummy = format!(
+    let expected_dummy_msg = format!(
         "{} {}",
         media_server_api_models::wsc_rtp::DUMMY_HEADER,
         session_id
     );
-    fn one_try(
-        udp_sock: &mut UdpSocket,
-        expected_dummy: &str,
-        &mut buf: &mut [0u8; 512],
-        server_addr: SocketAddr,
-    ) -> anyhow::Result<()> {
-
-        udp_sock.send_to(holepunch.as_bytes(), server_addr)?;
-        match udp_sock.recv_from(&mut buf) {
-            Ok((n, _src)) => {
-                if let Ok(payload) = std::str::from_utf8(&buf[..n]) {
-                    if payload.trim() == expected_dummy {
-                        let ack = format!(
-                            "{} {}",
-                            media_server_api_models::wsc_rtp::ACK_HEADER,
-                            session_id
-                        );
-                        udp_sock.send_to(ack.as_bytes(), server_addr)?;
-                        info!("WSC-RTP: UDP confirmed, starting UDP receive loop");
-                        udp_sock.set_read_timeout(None).ok();
-                    } else {
-                        warn!(
-                            "WSC-RTP: unexpected UDP payload {:?}, using WS fallback",
-                            payload
-                        );
-                    }
-                }
-            }
-            Err(e) if is_timeout_err(&e) => {
-                info!("WSC-RTP: UDP dummy timeout — server will use WebSocket binary fallback");
-            }
-            Err(e) => {
-                warn!(
-                    "WSC-RTP: UDP recv error: {} — server will use WebSocket binary fallback",
-                    e
-                );
-            }
-        }
-        Ok(())
-    }
     loop {
         if max_retries == 0 {
-            return Err(anyhow::anyhow!("Max retries exceeded"));
+            return Err(anyhow::anyhow!(
+                "Max handshake retries exceeded for session {}",
+                session_id
+            ));
         }
         max_retries -= 1;
-            
+        if let Err(e) = one_try(udp_sock, &holepunch_msg, &expected_dummy_msg, session_id).await {
+            log::warn!(
+                "failed to handshake udp transport for session {} due to {:?}",
+                session_id,
+                e
+            );
+        } else {
+            return Ok(());
+        }
     }
 }
-// ─── Shutdown handle ─────────────────────────────────────────────────────────
 
 #[derive(Clone)]
 pub struct WscRtpShutdownHandle {
