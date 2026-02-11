@@ -52,7 +52,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoInfo dco_decode_box_autoadd_video_info(dynamic raw);
 
   @protected
-  WscSdpEndpoint dco_decode_box_autoadd_wsc_sdp_endpoint(dynamic raw);
+  WscRtpSessionConfig dco_decode_box_autoadd_wsc_rtp_session_config(
+    dynamic raw,
+  );
 
   @protected
   double dco_decode_f_64(dynamic raw);
@@ -109,7 +111,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoInfo dco_decode_video_info(dynamic raw);
 
   @protected
-  WscSdpEndpoint dco_decode_wsc_sdp_endpoint(dynamic raw);
+  WscRtpSessionConfig dco_decode_wsc_rtp_session_config(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -145,7 +147,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoInfo sse_decode_box_autoadd_video_info(SseDeserializer deserializer);
 
   @protected
-  WscSdpEndpoint sse_decode_box_autoadd_wsc_sdp_endpoint(
+  WscRtpSessionConfig sse_decode_box_autoadd_wsc_rtp_session_config(
     SseDeserializer deserializer,
   );
 
@@ -210,7 +212,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoInfo sse_decode_video_info(SseDeserializer deserializer);
 
   @protected
-  WscSdpEndpoint sse_decode_wsc_sdp_endpoint(SseDeserializer deserializer);
+  WscRtpSessionConfig sse_decode_wsc_rtp_session_config(
+    SseDeserializer deserializer,
+  );
 
   @protected
   void sse_encode_AnyhowException(
@@ -255,8 +259,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_box_autoadd_wsc_sdp_endpoint(
-    WscSdpEndpoint self,
+  void sse_encode_box_autoadd_wsc_rtp_session_config(
+    WscRtpSessionConfig self,
     SseSerializer serializer,
   );
 
@@ -330,8 +334,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_video_info(VideoInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_wsc_sdp_endpoint(
-    WscSdpEndpoint self,
+  void sse_encode_wsc_rtp_session_config(
+    WscRtpSessionConfig self,
     SseSerializer serializer,
   );
 }

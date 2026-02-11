@@ -59,7 +59,7 @@ class VideoInfo {
           autoRestart == other.autoRestart;
 }
 
-class WscSdpEndpoint {
+class WscRtpSessionConfig {
   final String baseUrl;
   final String sourceId;
   final int? clientPort;
@@ -67,7 +67,7 @@ class WscSdpEndpoint {
   /// Skip UDP negotiation and use WebSocket for RTP delivery from the start.
   final bool forceWebsocketTransport;
 
-  const WscSdpEndpoint({
+  const WscRtpSessionConfig({
     required this.baseUrl,
     required this.sourceId,
     this.clientPort,
@@ -84,7 +84,7 @@ class WscSdpEndpoint {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is WscSdpEndpoint &&
+      other is WscRtpSessionConfig &&
           runtimeType == other.runtimeType &&
           baseUrl == other.baseUrl &&
           sourceId == other.sourceId &&

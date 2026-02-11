@@ -132,7 +132,7 @@ fn wire__crate__api__simple__create_wsc_rtp_playable_impl(
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "create_wsc_rtp_playable",
             port: Some(port_),
@@ -150,28 +150,28 @@ fn wire__crate__api__simple__create_wsc_rtp_playable_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_session_id = <i64>::sse_decode(&mut deserializer);
             let api_engine_handle = <i64>::sse_decode(&mut deserializer);
-            let api_endpoint = <crate::core::types::WscRtpSessionConfig>::sse_decode(&mut deserializer);
+            let api_config =
+                <crate::core::types::WscRtpSessionConfig>::sse_decode(&mut deserializer);
             let api_video_info = <crate::core::types::VideoInfo>::sse_decode(&mut deserializer);
-            let api_ffmpeg_options =
-                <Option<std::collections::HashMap<String, String>>>::sse_decode(&mut deserializer);
             let api_sink = <StreamSink<
                 crate::dart_types::StreamState,
                 flutter_rust_bridge::for_generated::SseCodec,
             >>::sse_decode(&mut deserializer);
             deserializer.end();
-            move |context| {
+            move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
+                    (move || async move {
                         let output_ok = crate::api::simple::create_wsc_rtp_playable(
                             api_session_id,
                             api_engine_handle,
-                            api_endpoint,
+                            api_config,
                             api_video_info,
-                            api_ffmpeg_options,
                             api_sink,
-                        )?;
+                        )
+                        .await?;
                         Ok(output_ok)
-                    })(),
+                    })()
+                    .await,
                 )
             }
         },
@@ -440,7 +440,7 @@ fn wire__crate__api__simple__seek_to_timestamp_impl(
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "seek_to_timestamp",
             port: Some(port_),
@@ -459,13 +459,14 @@ fn wire__crate__api__simple__seek_to_timestamp_impl(
             let api_session_id = <i64>::sse_decode(&mut deserializer);
             let api_ts = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
-            move |context| {
+            move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
+                    (move || async move {
                         let output_ok =
-                            crate::api::simple::seek_to_timestamp(api_session_id, api_ts)?;
+                            crate::api::simple::seek_to_timestamp(api_session_id, api_ts).await?;
                         Ok(output_ok)
-                    })(),
+                    })()
+                    .await,
                 )
             }
         },
@@ -513,7 +514,7 @@ fn wire__crate__api__simple__wsc_rtp_go_live_impl(
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "wsc_rtp_go_live",
             port: Some(port_),
@@ -531,12 +532,13 @@ fn wire__crate__api__simple__wsc_rtp_go_live_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_session_id = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
-            move |context| {
+            move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
-                        let output_ok = crate::api::simple::wsc_rtp_go_live(api_session_id)?;
+                    (move || async move {
+                        let output_ok = crate::api::simple::wsc_rtp_go_live(api_session_id).await?;
                         Ok(output_ok)
-                    })(),
+                    })()
+                    .await,
                 )
             }
         },

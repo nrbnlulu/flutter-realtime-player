@@ -36,15 +36,13 @@ Stream<StreamState> createNewPlayable({
 Stream<StreamState> createWscRtpPlayable({
   required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
-  required WscSdpEndpoint endpoint,
+  required WscRtpSessionConfig config,
   required VideoInfo videoInfo,
-  Map<String, String>? ffmpegOptions,
 }) => RustLib.instance.api.crateApiSimpleCreateWscRtpPlayable(
   sessionId: sessionId,
   engineHandle: engineHandle,
-  endpoint: endpoint,
+  config: config,
   videoInfo: videoInfo,
-  ffmpegOptions: ffmpegOptions,
 );
 
 Future<void> seekToTimestamp({
@@ -74,7 +72,7 @@ Stream<StreamEvent> registerToStreamEventsSink({
 
 /// marks the session as required by the ui
 /// if the ui won't call this every 2 seconds
-/// this session will terminate itself.
+/// this session will be terminate.
 Future<void> markSessionAlive({required PlatformInt64 sessionId}) =>
     RustLib.instance.api.crateApiSimpleMarkSessionAlive(sessionId: sessionId);
 

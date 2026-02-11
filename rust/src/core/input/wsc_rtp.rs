@@ -1,6 +1,6 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
-    sync::{Arc, Mutex, Weak},
+    sync::{Arc, Weak},
     time::Duration,
 };
 
@@ -15,6 +15,7 @@ use gst_app::AppSrc;
 use irondash_texture::Texture;
 use log::{info, warn};
 
+use parking_lot::Mutex;
 use tokio::net::{TcpStream, UdpSocket};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use url::Url;
@@ -52,7 +53,7 @@ pub struct WscRtpSession {
     holepunch_port: u16,
     media_server_http_url: Url,
     source_id: String,
-    shutdown_sender: Mutex<tokio::sync::oneshot::Sender<()>>,
+    shutdown_sender: tokio::sync::mpsc::Sender<()>,
     http_client: Arc<reqwest::Client>,
     pipeline: Arc<gst::Pipeline>,
 }
@@ -69,7 +70,7 @@ impl WscRtpSession {
         WsSink,
         WsStream,
         Option<UdpSocket>,
-        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::mpsc::Receiver<()>,
     )> {
         let server_url = Url::parse(&config.base_url).context("parsing media server HTTP URL")?;
         let wsc_rtp_url = build_wsc_rtp_handshake_request(
@@ -140,7 +141,7 @@ impl WscRtpSession {
             .downcast::<gst::Pipeline>()
             .map_err(|_| anyhow::anyhow!("Not a pipeline"))?;
 
-        let (shutdown_sender, shutdown_receiver) = tokio::sync::oneshot::channel();
+        let (shutdown_sender, shutdown_receiver) = tokio::sync::mpsc::channel(1);
 
         let session = Arc::new(Self {
             pipeline: Arc::new(pipeline),
@@ -148,7 +149,7 @@ impl WscRtpSession {
             initial_sdp,
             session_id: session_id,
             holepunch_port,
-            shutdown_sender: Mutex::new(shutdown_sender),
+            shutdown_sender,
             media_server_http_url: server_url,
             source_id: config.source_id.clone(),
             http_client: http_client,
@@ -196,7 +197,7 @@ impl WscRtpSession {
         self: &Arc<Self>,
         mut ws_sink: WsSink,
         mut ws_stream: WsStream,
-        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+        mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
         udp_rtp_transport_sock: Option<UdpSocket>,
     ) -> anyhow::Result<()> {
         let appsrc = self
@@ -241,9 +242,7 @@ impl WscRtpSession {
                 .new_sample(move |sink| {
                     let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
                     let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
-                    let map = buffer
-                        .map_readable()
-                        .map_err(|_| gst::FlowError::Error)?;
+                    let map = buffer.map_readable().map_err(|_| gst::FlowError::Error)?;
                     let frame;
                     if let Some((width, height)) = sample.caps().and_then(|caps| {
                         let structure = caps.structure(0)?;
@@ -301,8 +300,8 @@ impl WscRtpSession {
         loop {
             tokio::select! {
                 // ── Session commands (shutdown only) ──────────────────
-                cmd = shutdown_rx => {
-                    if let Ok(cmd) = cmd {
+                cmd = shutdown_rx.recv() => {
+                    if let Some(cmd) = cmd {
                         info!("WSC-RTP: shutdown command received");
                         break;
                     }
@@ -465,7 +464,7 @@ impl crate::core::session::VideoSession for WscRtpSession {
 
     fn terminate(&self) {
         self.pipeline.set_state(gst::State::Null);
-        if let Err(e) = self.shutdown_sender.send(()) {
+        if let Err(e) = self.shutdown_sender.blocking_send(()) {
             log::error!("Failed to send shutdown signal: {:?}", e);
         }
     }
@@ -533,17 +532,6 @@ async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> a
         } else {
             return Ok(());
         }
-    }
-}
-
-#[derive(Clone)]
-pub struct WscRtpShutdownHandle {
-    tx: tokio::sync::mpsc::Sender<WscRtpSessionCommand>,
-}
-
-impl WscRtpShutdownHandle {
-    pub fn shutdown(&self) {
-        let _ = self.tx.try_send(WscRtpSessionCommand::Shutdown);
     }
 }
 

@@ -60,13 +60,7 @@ pub fn create_new_playable(
         video_info,
         session_id
     );
-    crate::core::session::registry::create_new_playable(
-        session_id,
-        engine_handle,
-        video_info,
-        sink.clone(),
-        ffmpeg_options,
-    )?;
+    todo!("implement non wsc-rtp videos support");
     Ok(())
 }
 pub async fn create_wsc_rtp_playable(

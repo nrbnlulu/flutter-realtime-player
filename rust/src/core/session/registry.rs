@@ -92,10 +92,7 @@ pub fn destroy_engine_streams(engine_handle: i64) {
     let to_remove = holders
         .into_iter()
         .filter_map(|(session_id, holder)| {
-            let matches = holder
-                .with_session_mut(|session| session.engine_handle() == engine_handle)
-                .unwrap_or(false);
-            if matches {
+            if holder.engine_handle() == engine_handle {
                 Some(session_id)
             } else {
                 None
@@ -120,12 +117,10 @@ pub fn destroy_stream_session(session_id: i64) {
             "Session {} removed from cache, destroying in a new thread",
             session_id
         );
-        if let Some(session) = holder.take() {
-            holder.terminate();
-        }
-        return;
+        holder.terminate();
+    } else {
+        info!("No stream session found for session id: {}", session_id);
     }
-    info!("No stream session found for session id: {}", session_id);
 }
 
 pub fn resize_stream_session(session_id: i64, width: u32, height: u32) {

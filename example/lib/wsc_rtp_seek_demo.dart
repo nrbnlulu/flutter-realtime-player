@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show WscSdpEndpoint, VideoDimensions;
+    show WscRtpSessionConfig, VideoDimensions;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:flutter_realtime_player/video_player.dart';
 
@@ -67,7 +67,7 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
       final requestedPort = int.tryParse(_clientPortController.text.trim());
       final dimensions = const VideoDimensions(width: 1280, height: 720);
       final result = await VideoController.createWscRtp(
-        endpoint: WscSdpEndpoint(
+        endpoint: WscRtpSessionConfig(
           baseUrl: _baseUrlController.text.trim(),
           sourceId: _sourceIdController.text.trim(),
           clientPort: requestedPort,
