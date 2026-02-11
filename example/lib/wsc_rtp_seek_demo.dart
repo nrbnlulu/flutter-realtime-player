@@ -130,6 +130,7 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
           );
         });
       }
+      // Note: OriginVideoSize events are handled separately in the StreamBuilder
     });
   }
 
@@ -379,16 +380,36 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
           child: Container(
             color: Colors.black,
             child: Center(
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child:
-                    _controller != null
-                        ? VideoPlayer.fromController(
-                          controller: _controller!,
-                          autoDispose: false,
-                        )
-                        : const Center(child: CircularProgressIndicator()),
-              ),
+              child:
+                  _controller != null
+                      ? StreamBuilder<StreamEvent>(
+                        stream: rlib.registerToStreamEventsSink(
+                          sessionId: _controller!.sessionId,
+                        ),
+                        builder: (context, snapshot) {
+                          double aspectRatio = 16 / 9; // Default aspect ratio
+
+                          if (snapshot.hasData) {
+                            final event = snapshot.data!;
+                            if (event is StreamEvent_OriginVideoSize) {
+                              if (event.height > BigInt.zero) {
+                                aspectRatio =
+                                    event.width.toDouble() /
+                                    event.height.toDouble();
+                              }
+                            }
+                          }
+
+                          return AspectRatio(
+                            aspectRatio: aspectRatio,
+                            child: VideoPlayer.fromController(
+                              controller: _controller!,
+                              autoDispose: false,
+                            ),
+                          );
+                        },
+                      )
+                      : const Center(child: CircularProgressIndicator()),
             ),
           ),
         ),

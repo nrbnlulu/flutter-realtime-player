@@ -157,15 +157,6 @@ class VideoController {
   Future<void> setSpeed(double speed) async {
     await rlib.setSpeed(sessionId: sessionId, speed: speed);
   }
-
-  /// Resize the video stream with new dimensions
-  Future<void> resizeStream(VideoDimensions newDimensions) async {
-    await rlib.resizeStreamSession(
-      sessionId: sessionId,
-      width: newDimensions.width,
-      height: newDimensions.height,
-    );
-  }
 }
 // ignore: implementation_imports
 
@@ -206,40 +197,29 @@ class VideoPlayer extends StatefulWidget {
     bool autoDispose = true,
     Widget? child,
   }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Calculate dimensions from layout constraints
-        final width =
-            constraints.maxWidth.isFinite ? constraints.maxWidth.floor() : 640;
-        final height =
-            constraints.maxHeight.isFinite
-                ? constraints.maxHeight.floor()
-                : 360;
-        final dimensions = VideoDimensions(width: width, height: height);
+    // Use fixed fallback dimensions since we no longer support runtime resizing
+    final dimensions = const VideoDimensions(width: 1280, height: 720);
 
-        return FutureBuilder(
-          future: _createControllerWithSize(
-            url,
-            dimensions,
-            mute,
-            autoRestart,
-            ffmpegOptions,
-          ),
-          builder: (ctx, res) {
-            if (res.hasError) {
-              return Text(res.error.toString());
-            }
-            final (controller, err) = res.data!;
-            if (err != null) {
-              return Text(err);
-            }
-            return _VideoPlayerWithSize(
-              controller: controller!,
-              autoDispose: autoDispose,
-              initialDimensions: dimensions,
-              child: child,
-            );
-          },
+    return FutureBuilder(
+      future: _createControllerWithSize(
+        url,
+        dimensions,
+        mute,
+        autoRestart,
+        ffmpegOptions,
+      ),
+      builder: (ctx, res) {
+        if (res.hasError) {
+          return Text(res.error.toString());
+        }
+        final (controller, err) = res.data!;
+        if (err != null) {
+          return Text(err);
+        }
+        return _VideoPlayerWithSize(
+          controller: controller!,
+          autoDispose: autoDispose,
+          child: child,
         );
       },
     );
@@ -270,11 +250,9 @@ class _VideoPlayerWithSize extends StatefulWidget {
   final VideoController controller;
   final Widget? child;
   final bool autoDispose;
-  final VideoDimensions initialDimensions;
 
   const _VideoPlayerWithSize({
     required this.controller,
-    required this.initialDimensions,
     this.child,
     this.autoDispose = true,
   });
@@ -286,14 +264,10 @@ class _VideoPlayerWithSize extends StatefulWidget {
 class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
   StreamState? currentState;
   StreamSubscription<StreamState>? streamSubscription;
-  late VideoDimensions currentDimensions;
-  Timer? _resizeDebounceTimer;
-  VideoDimensions? _pendingResize;
 
   @override
   void initState() {
     super.initState();
-    currentDimensions = widget.initialDimensions;
 
     streamSubscription = widget.controller.stateBroadcast.listen((state) {
       setState(() {
@@ -317,20 +291,6 @@ class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width =
-            constraints.maxWidth.isFinite ? constraints.maxWidth.floor() : 640;
-        final height =
-            constraints.maxHeight.isFinite
-                ? constraints.maxHeight.floor()
-                : 360;
-        final newDimensions = VideoDimensions(width: width, height: height);
-
-        // If the widget resized and it's different from our current dimensions, update the stream
-        if (newDimensions.width != currentDimensions.width ||
-            newDimensions.height != currentDimensions.height) {
-          _handleResize(newDimensions);
-        }
-
         if (currentState == null) {
           return loadingWidget('initializing...');
         }
@@ -363,42 +323,8 @@ class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
     );
   }
 
-  void _handleResize(VideoDimensions newDimensions) {
-    // Only resize when the decoder is in playing or loading state
-    // Don't resize when in error or stopped state
-    if (currentState is StreamState_Playing ||
-        currentState is StreamState_Loading) {
-      // Store the pending resize dimensions
-      _pendingResize = newDimensions;
-
-      // Cancel any existing timer
-      _resizeDebounceTimer?.cancel();
-
-      // Create a new debounce timer (300ms delay)
-      _resizeDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-        if (_pendingResize != null && mounted) {
-          final dimensionsToApply = _pendingResize!;
-          _pendingResize = null;
-
-          debugPrint("resize from $currentDimensions to $dimensionsToApply");
-
-          setState(() {
-            currentDimensions = dimensionsToApply;
-          });
-
-          widget.controller.resizeStream(dimensionsToApply);
-        }
-      });
-    }
-  }
-
   @override
   void dispose() {
-    // Cancel the debounce timer to prevent memory leaks
-    _resizeDebounceTimer?.cancel();
-    _resizeDebounceTimer = null;
-    _pendingResize = null;
-
     super.dispose();
 
     Future.microtask(() async {
@@ -429,10 +355,6 @@ class _VideoPlayerState extends State<VideoPlayer> {
     // If a controller was provided, use it directly
     return _VideoPlayerWithSize(
       controller: widget.controller,
-      initialDimensions: const VideoDimensions(
-        width: 640,
-        height: 360,
-      ), // Fallback dimensions
       autoDispose: widget.autoDispose,
       child: widget.child,
     );

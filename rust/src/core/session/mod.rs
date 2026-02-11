@@ -21,7 +21,6 @@ pub trait VideoSession: Send + Sync {
     /// it is expected that a few moments later (or immediately) any actual flutter textures will be destroyed.
     fn terminate(&self);
     fn set_events_sink(&self, sink: DartEventsStream);
-    fn resize(&self, width: u32, height: u32) -> anyhow::Result<()>;
     async fn seek(&self, ts: i64) -> anyhow::Result<()>;
     async fn go_to_live_stream(&self) -> anyhow::Result<()>;
     async fn set_speed(&self, speed: f64) -> anyhow::Result<()>;

@@ -132,8 +132,7 @@ impl WscRtpSession {
 
         let (encoding, pt, clock_rate, sprop) = parse_rtp_caps_from_sdp(&initial_sdp)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse RTP caps from SDP"))?;
-        // TODO: real dimensions
-        let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop, 640, 480);
+        let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop);
         info!("WSC-RTP GStreamer pipeline: {}", pipeline_str);
 
         let pipeline = gst::parse::launch(&pipeline_str)
@@ -237,33 +236,63 @@ impl WscRtpSession {
             seekable: true,
         });
 
+        let session_weak = Arc::downgrade(self);
+        let mut origin_size_sent = false;
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
                     let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                    let caps = sample.caps().ok_or(gst::FlowError::Error)?;
+                    let video_info =
+                        gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::FlowError::Error)?;
                     let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
-                    let map = buffer.map_readable().map_err(|_| gst::FlowError::Error)?;
-                    let frame;
-                    if let Some((width, height)) = sample.caps().and_then(|caps| {
-                        let structure = caps.structure(0)?;
 
-                        let width = structure.get::<i32>("width").ok()?;
-                        let height = structure.get::<i32>("height").ok()?;
+                    let width = video_info.width();
+                    let height = video_info.height();
 
-                        Some((width, height))
-                    }) {
-                        frame = RawRgbaFrame {
-                            width: width as _,
-                            height: height as _,
-                            data: map.as_slice().to_vec(),
-                        };
-                    } else {
-                        frame = RawRgbaFrame {
-                            width: 0,
-                            height: 0,
-                            data: Vec::new(),
-                        };
+                    // Emit OriginVideoSize on first decoded frame
+                    if !origin_size_sent {
+                        origin_size_sent = true;
+                        if let Some(session) = session_weak.upgrade() {
+                            session
+                                .session_common
+                                .send_event_msg(StreamEvent::OriginVideoSize {
+                                    width: width as u64,
+                                    height: height as u64,
+                                });
+                        }
                     }
+
+                    let video_frame =
+                        gst_video::VideoFrameRef::from_buffer_ref_readable(buffer, &video_info)
+                            .map_err(|_| gst::FlowError::Error)?;
+
+                    let stride = video_info.stride()[0] as usize;
+                    let expected_stride = (width as usize) * 4; // RGBA
+                    let plane_data = video_frame
+                        .plane_data(0)
+                        .map_err(|_| gst::FlowError::Error)?;
+
+                    let data = if stride == expected_stride {
+                        plane_data.to_vec()
+                    } else {
+                        // Stride mismatch — copy row by row to strip padding
+                        let mut buf = Vec::with_capacity(expected_stride * height as usize);
+                        for y in 0..height as usize {
+                            let row_start = y * stride;
+                            buf.extend_from_slice(
+                                &plane_data[row_start..row_start + expected_stride],
+                            );
+                        }
+                        buf
+                    };
+
+                    let frame = RawRgbaFrame {
+                        width,
+                        height,
+                        data,
+                    };
+
                     if let Some(holder) = payload_holder_weak.upgrade() {
                         holder.set_payload(Arc::new(frame) as SharedPixelData);
                         texture_session.mark_frame_available();
@@ -476,11 +505,6 @@ impl crate::core::session::VideoSession for WscRtpSession {
     fn set_events_sink(&self, sink: crate::core::types::DartEventsStream) {
         self.session_common.set_events_sink(sink);
     }
-
-    fn resize(&self, width: u32, height: u32) -> anyhow::Result<()> {
-        log::warn!("resize not supported yet for wsc rtp");
-        Ok(())
-    }
 }
 
 async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> anyhow::Result<()> {
@@ -574,14 +598,7 @@ fn parse_rtp_caps_from_sdp(sdp_text: &str) -> Option<(String, u8, u32, Option<St
     Some((encoding, pt, clock_rate, sprop))
 }
 
-fn build_pipeline_str(
-    encoding: &str,
-    pt: u8,
-    clock_rate: u32,
-    sprop: &Option<String>,
-    width: u32,
-    height: u32,
-) -> String {
+fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<String>) -> String {
     let depay_decode = match encoding {
         "H264" => "rtph264depay ! h264parse ! avdec_h264",
         "H265" | "HEVC" => "rtph265depay ! h265parse ! avdec_h265",
@@ -601,8 +618,7 @@ fn build_pipeline_str(
          ! rtpjitterbuffer \
          ! {depay_decode} \
          ! videoconvert \
-         ! videoscale \
-         ! video/x-raw,format=RGBA,width={width},height={height} \
+         ! video/x-raw,format=RGBA \
          ! appsink name=sink sync=false emit-signals=true",
     )
 }

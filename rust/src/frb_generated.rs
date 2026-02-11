@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1203113781;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1132042852;
 
 // Section: executor
 
@@ -385,47 +385,6 @@ fn wire__crate__api__simple__register_to_stream_events_sink_impl(
                         crate::api::simple::register_to_stream_events_sink(
                             api_session_id,
                             api_sink,
-                        );
-                    })?;
-                    Ok(output_ok)
-                })())
-            }
-        },
-    )
-}
-fn wire__crate__api__simple__resize_stream_session_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "resize_stream_session",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_session_id = <i64>::sse_decode(&mut deserializer);
-            let api_width = <u32>::sse_decode(&mut deserializer);
-            let api_height = <u32>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, ()>((move || {
-                    let output_ok = Result::<_, ()>::Ok({
-                        crate::api::simple::resize_stream_session(
-                            api_session_id,
-                            api_width,
-                            api_height,
                         );
                     })?;
                     Ok(output_ok)
@@ -875,12 +834,9 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        10 => {
-            wire__crate__api__simple__resize_stream_session_impl(port, ptr, rust_vec_len, data_len)
-        }
-        11 => wire__crate__api__simple__seek_to_timestamp_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__simple__set_speed_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__simple__wsc_rtp_go_live_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__simple__seek_to_timestamp_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__simple__set_speed_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__simple__wsc_rtp_go_live_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

@@ -123,14 +123,6 @@ pub fn destroy_stream_session(session_id: i64) {
     }
 }
 
-pub fn resize_stream_session(session_id: i64, width: u32, height: u32) {
-    if let Some(session) = get_session(session_id) {
-        if let Err(e) = session.resize(width, height) {
-            log::warn!("Failed to resize session {}: {}", session_id, e);
-        }
-    }
-}
-
 pub async fn seek_session(session_id: i64, ts: i64) -> anyhow::Result<()> {
     let session = get_session(session_id);
     if let Some(session) = session {

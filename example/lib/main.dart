@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
     show WscRtpSessionConfig, VideoDimensions;
 import 'package:flutter_realtime_player/video_player.dart';
@@ -698,12 +699,35 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: AspectRatio(
-            aspectRatio: 16 / 9, // Standard video aspect ratio
-            child: VideoPlayer.fromController(
-              controller: _controller!,
-              autoDispose: false, // Don't auto dispose since we're managing it
-            ),
+          child: StreamBuilder<StreamEvent>(
+            stream:
+                _controller != null
+                    ? rlib.registerToStreamEventsSink(
+                      sessionId: _controller!.sessionId,
+                    )
+                    : null,
+            builder: (context, snapshot) {
+              double aspectRatio = 16 / 9; // Default aspect ratio
+
+              if (snapshot.hasData) {
+                final event = snapshot.data!;
+                if (event is StreamEvent_OriginVideoSize) {
+                  if (event.height > BigInt.zero) {
+                    aspectRatio =
+                        event.width.toDouble() / event.height.toDouble();
+                  }
+                }
+              }
+
+              return AspectRatio(
+                aspectRatio: aspectRatio,
+                child: VideoPlayer.fromController(
+                  controller: _controller!,
+                  autoDispose:
+                      false, // Don't auto dispose since we're managing it
+                ),
+              );
+            },
           ),
         ),
         Padding(

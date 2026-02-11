@@ -8,7 +8,7 @@ use crate::{
         input::wsc_rtp::WscRtpSession,
         session::{
             registry::{self, insert_session},
-            VideoSessionCommon
+            VideoSessionCommon,
         },
         types::{VideoInfo, WscRtpSessionConfig},
         HTTP_CLIENT, IS_INITIALIZED,
@@ -126,8 +126,4 @@ pub fn destroy_engine_streams(engine_id: i64) {
 pub fn destroy_stream_session(session_id: i64) {
     trace!("destroy_stream_session was called");
     crate::core::session::registry::destroy_stream_session(session_id)
-}
-
-pub fn resize_stream_session(session_id: i64, width: u32, height: u32) {
-    crate::core::session::registry::resize_stream_session(session_id, width, height)
 }
