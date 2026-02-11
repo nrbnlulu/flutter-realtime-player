@@ -92,11 +92,10 @@ class VideoController {
   }
 
   static Future<(VideoController?, String?)> createWscRtp({
-    required WscSdpConfig endpoint,
+    required WscRtpSessionConfig config,
     required VideoDimensions dimensions,
     bool mute = true,
     bool autoRestart = false,
-    Map<String, String>? ffmpegOptions,
   }) async {
     final handle = await EngineContext.instance.getEngineHandle();
     final sessionId = await rlib.createNewSession();
@@ -105,8 +104,7 @@ class VideoController {
       final stream = rlib.createWscRtpPlayable(
         sessionId: sessionId,
         engineHandle: handle,
-        endpoint: endpoint,
-        ffmpegOptions: ffmpegOptions,
+        config: config,
         videoInfo: VideoInfo(
           uri: '',
           dimensions: dimensions,
@@ -124,9 +122,8 @@ class VideoController {
         origSub,
         sessionId: sessionId,
         stateBroadcast: bs,
-        url: '${endpoint.baseUrl}/streams/${endpoint.sourceId}',
+        url: '${config.baseUrl}/streams/${config.sourceId}',
         autoRestart: autoRestart,
-        ffmpegOptions: ffmpegOptions,
         mute: mute,
       );
       ret._engineHandle = handle;

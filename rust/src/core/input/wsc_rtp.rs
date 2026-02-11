@@ -90,7 +90,7 @@ impl WscRtpSession {
         let mut initial_sdp = None;
 
         // TODO: add timeout
-        while init_message.is_none() && initial_sdp.is_none() {
+        while init_message.is_none() || initial_sdp.is_none() {
             let msg = tokio::time::timeout_at(deadline, ws_stream.next())
                 .await
                 .context("timeout waiting for WSC-RTP SDP")?
@@ -102,7 +102,7 @@ impl WscRtpSession {
                 {
                     match parsed {
                         WscRtpServerMessage::Init {
-                            token: token,
+                            session_id: token,
                             holepunch_port: holepunch_port,
                         } => init_message = Some((token, holepunch_port)),
                         WscRtpServerMessage::Sdp { sdp } => initial_sdp = Some(sdp),
@@ -293,6 +293,10 @@ impl WscRtpSession {
             )));
         }
 
+        self.pipeline
+            .set_state(gst::State::Playing)
+            .context("setting GStreamer pipeline to Playing")?;
+
         let mut ping_interval = tokio::time::interval(PING_INTERVAL);
         ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut output: anyhow::Result<()> = Ok(());
@@ -347,24 +351,25 @@ impl WscRtpSession {
                     }
                 }
             }
-            // cleanup
-            if let Some(udp_rcv_task) = udp_packet_rcv_task {
-                udp_rcv_task.abort();
-            }
-            self.pipeline.set_state(gst::State::Null)?;
-            return output;
         }
+
+        // ── cleanup (runs after any break) ───────────────────────────
+        if let Some(udp_rcv_task) = udp_packet_rcv_task {
+            udp_rcv_task.abort();
+        }
+        self.pipeline.set_state(gst::State::Null)?;
 
         let _ = self
             .session_common
             .send_state_msg(crate::dart_types::StreamState::Stopped);
 
+        // Texture + payload_holder must be dropped on the platform main thread
+        // because irondash calls non-thread-safe Flutter APIs on Drop.
         invoke_on_platform_main_thread(move || {
-            // make sure it is dropped on the main thread
-            // because this would call non thread safe flutter stuff back in irondash
-            drop(payload_holder)
+            drop(sendable_texture);
+            drop(payload_holder);
         });
-        Ok(())
+        output
     }
     // ─── Internal helpers ────────────────────────────────────────────
 
@@ -372,7 +377,6 @@ impl WscRtpSession {
         match message {
             WscRtpServerMessage::Init { .. } => {}
             WscRtpServerMessage::Sdp { .. } => {}
-            WscRtpServerMessage::StreamState { .. } => {}
             WscRtpServerMessage::SessionMode(mode) => {
                 let (is_live, current_time_ms) = match mode {
                     media_server_api_models::SessionMode::Live => (true, 0),
@@ -440,7 +444,7 @@ impl crate::core::session::VideoSession for WscRtpSession {
         Self::seek(&self, ts).await
     }
     async fn go_to_live_stream(&self) -> anyhow::Result<()> {
-        Self::go_to_live_stream(&self).await
+        Self::go_live(&self).await
     }
 
     async fn set_speed(&self, speed: f64) -> anyhow::Result<()> {

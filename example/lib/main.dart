@@ -646,7 +646,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
     final result =
         widget.useTsdp
             ? await VideoController.createWscRtp(
-              endpoint: WscRtpSessionConfig(
+              config: WscRtpSessionConfig(
                 baseUrl: widget.tsdpBaseUrl,
                 sourceId: widget.tsdpSourceId,
                 clientPort: int.tryParse(widget.tsdpClientPort.trim()),
@@ -654,7 +654,6 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
               ),
               dimensions: dimensions,
               autoRestart: true,
-              ffmpegOptions: widget.ffmpegOptions,
             )
             : await VideoController.create(
               url: widget.url,
