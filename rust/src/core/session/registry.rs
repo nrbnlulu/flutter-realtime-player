@@ -15,7 +15,7 @@ pub fn init() -> anyhow::Result<()> {
     ffmpeg::init().map_err(|e| anyhow::anyhow!("Failed to initialize ffmpeg: {:?}", e))?;
     info!("ffmpeg initialized: version {}", ffmpeg::version::version());
     ffmpeg::util::log::set_level(ffmpeg::util::log::Level::Fatal);
-    gstreamer::init().map_err(|e| anyhow::anyhow!("Failed to initialize GStreamer: {:?}", e))?;
+    gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize GStreamer: {:?}", e))?;
     info!("GStreamer initialized");
     Ok(())
 }

@@ -32,9 +32,9 @@ url = "2.5"
 thread_local = "1.1.8"
 ffmpeg = { package="rffmpeg", git = "https://github.com/nrbnlulu/rffmpeg.git", branch="main", default-features = false, features = ["codec", "filter", "format", "software-resampling", "software-scaling"] }
 
-gstreamer = "0.24.4"
-gstreamer-app = "0.24.4"
-gstreamer-video = "0.24.4"
+gst = {package = "gstreamer", version = "0.24.4"}
+gst-app = {package = "gstreamer-app", version = "0.24.4"}
+gst-video = {package = "gstreamer-video", version = "0.24.4"}
 
 
 log = "0.4"

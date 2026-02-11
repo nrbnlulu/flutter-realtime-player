@@ -10,8 +10,8 @@ use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
-use gstreamer::prelude::*;
-use gstreamer_app::AppSrc;
+use gst::prelude::*;
+use gst_app::AppSrc;
 use irondash_texture::Texture;
 use log::{info, warn};
 
@@ -40,12 +40,6 @@ const UDP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 const PING_INTERVAL: Duration = Duration::from_secs(2);
 const SDP_TIMEOUT: Duration = Duration::from_secs(15);
 
-// ─── Session command enum (WS-level commands only) ───────────────────────────
-
-pub enum WscRtpSessionCommand {
-    Shutdown,
-}
-
 // ─── Session ─────────────────────────────────────────────────────────────────
 
 type WsSink = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
@@ -58,9 +52,9 @@ pub struct WscRtpSession {
     holepunch_port: u16,
     media_server_http_url: Url,
     source_id: String,
+    shutdown_sender: Mutex<tokio::sync::oneshot::Sender<()>>,
     http_client: Arc<reqwest::Client>,
-    pipeline: Arc<gstreamer::Pipeline>,
-    execution_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    pipeline: Arc<gst::Pipeline>,
 }
 
 impl WscRtpSession {
@@ -70,7 +64,13 @@ impl WscRtpSession {
         config: WscRtpSessionConfig,
         session_common: VideoSessionCommon,
         http_client: Arc<reqwest::Client>,
-    ) -> Result<(Arc<Self>, WsSink, WsStream, Option<UdpSocket>)> {
+    ) -> Result<(
+        Arc<Self>,
+        WsSink,
+        WsStream,
+        Option<UdpSocket>,
+        tokio::sync::oneshot::Receiver<()>,
+    )> {
         let server_url = Url::parse(&config.base_url).context("parsing media server HTTP URL")?;
         let wsc_rtp_url = build_wsc_rtp_handshake_request(
             &server_url,
@@ -135,24 +135,32 @@ impl WscRtpSession {
         let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop, 640, 480);
         info!("WSC-RTP GStreamer pipeline: {}", pipeline_str);
 
-        let pipeline = gstreamer::parse::launch(&pipeline_str)
+        let pipeline = gst::parse::launch(&pipeline_str)
             .context("GStreamer pipeline launch")?
-            .downcast::<gstreamer::Pipeline>()
+            .downcast::<gst::Pipeline>()
             .map_err(|_| anyhow::anyhow!("Not a pipeline"))?;
 
+        let (shutdown_sender, shutdown_receiver) = tokio::sync::oneshot::channel();
+
         let session = Arc::new(Self {
-            execution_task: Mutex::new(None),
             pipeline: Arc::new(pipeline),
             session_common,
             initial_sdp,
             session_id: session_id,
             holepunch_port,
+            shutdown_sender: Mutex::new(shutdown_sender),
             media_server_http_url: server_url,
             source_id: config.source_id.clone(),
             http_client: http_client,
         });
 
-        Ok((session, ws_sink, ws_stream, udp_sock_maybe))
+        Ok((
+            session,
+            ws_sink,
+            ws_stream,
+            udp_sock_maybe,
+            shutdown_receiver,
+        ))
     }
 
     pub fn sdp_text(&self) -> &str {
@@ -188,7 +196,7 @@ impl WscRtpSession {
         self: &Arc<Self>,
         mut ws_sink: WsSink,
         mut ws_stream: WsStream,
-        mut command_rx: tokio::sync::mpsc::Receiver<WscRtpSessionCommand>,
+        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         udp_rtp_transport_sock: Option<UdpSocket>,
     ) -> anyhow::Result<()> {
         let appsrc = self
@@ -202,7 +210,7 @@ impl WscRtpSession {
             .pipeline
             .by_name("sink")
             .ok_or_else(|| anyhow::anyhow!("appsink not found"))?
-            .downcast::<gstreamer_app::AppSink>()
+            .downcast::<gst_app::AppSink>()
             .map_err(|_| anyhow::anyhow!("sink is not AppSink"))?;
 
         let payload_holder = Arc::new(crate::core::texture::payload::PayloadHolder::new());
@@ -229,13 +237,13 @@ impl WscRtpSession {
         });
 
         appsink.set_callbacks(
-            gstreamer_app::AppSinkCallbacks::builder()
+            gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
-                    let sample = sink.pull_sample().map_err(|_| gstreamer::FlowError::Eos)?;
-                    let buffer = sample.buffer().ok_or(gstreamer::FlowError::Error)?;
+                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                    let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
                     let map = buffer
                         .map_readable()
-                        .map_err(|_| gstreamer::FlowError::Error)?;
+                        .map_err(|_| gst::FlowError::Error)?;
                     let frame;
                     if let Some((width, height)) = sample.caps().and_then(|caps| {
                         let structure = caps.structure(0)?;
@@ -261,7 +269,7 @@ impl WscRtpSession {
                         holder.set_payload(Arc::new(frame) as SharedPixelData);
                         texture_session.mark_frame_available();
                     }
-                    Ok(gstreamer::FlowSuccess::Ok)
+                    Ok(gst::FlowSuccess::Ok)
                 })
                 .build(),
         );
@@ -270,7 +278,7 @@ impl WscRtpSession {
             // 1500 is standard MTU size for Ethernet frames
             let mut buf = [0u8; 1500];
             while let Ok((len, _)) = udp_sock.recv_from(&mut buf).await {
-                let gst_buffer = gstreamer::Buffer::from_slice(buf[..len].to_vec());
+                let gst_buffer = gst::Buffer::from_slice(buf[..len].to_vec());
                 if let Err(err) = appsrc.push_buffer(gst_buffer) {
                     log::warn!("WSC-RTP: appsrc push_buffer failed: {}", err);
                     break;
@@ -289,15 +297,14 @@ impl WscRtpSession {
         let mut ping_interval = tokio::time::interval(PING_INTERVAL);
         ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut output: anyhow::Result<()> = Ok(());
+
         loop {
             tokio::select! {
                 // ── Session commands (shutdown only) ──────────────────
-                cmd = command_rx.recv() => {
-                    match cmd {
-                        Some(WscRtpSessionCommand::Shutdown) | None => {
-                            info!("WSC-RTP: shutdown command received");
-                            break;
-                        }
+                cmd = shutdown_rx => {
+                    if let Ok(cmd) = cmd {
+                        info!("WSC-RTP: shutdown command received");
+                        break;
                     }
                 }
 
@@ -320,7 +327,7 @@ impl WscRtpSession {
                             let _ = ws_sink.send(Message::Pong(data)).await;
                         }
                         Some(Ok(Message::Binary(data))) => {
-                            let buffer = gstreamer::Buffer::from_mut_slice(data.to_vec());
+                            let buffer = gst::Buffer::from_mut_slice(data.to_vec());
                             if let Err(err) = appsrc.push_buffer(buffer) {
                                 log::warn!("WSC-RTP: failed to handle binary message: {}", err);
                             }
@@ -345,7 +352,7 @@ impl WscRtpSession {
             if let Some(udp_rcv_task) = udp_packet_rcv_task {
                 udp_rcv_task.abort();
             }
-            self.pipeline.set_state(gstreamer::State::Null)?;
+            self.pipeline.set_state(gst::State::Null)?;
             return output;
         }
 
@@ -457,7 +464,10 @@ impl crate::core::session::VideoSession for WscRtpSession {
     }
 
     fn terminate(&self) {
-        self.pipeline.set_state(gstreamer::State::Null);
+        self.pipeline.set_state(gst::State::Null);
+        if let Err(e) = self.shutdown_sender.send(()) {
+            log::error!("Failed to send shutdown signal: {:?}", e);
+        }
     }
 
     fn set_events_sink(&self, sink: crate::core::types::DartEventsStream) {

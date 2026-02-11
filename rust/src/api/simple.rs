@@ -8,7 +8,7 @@ use crate::{
         input::wsc_rtp::WscRtpSession,
         session::{
             registry::{self, insert_session},
-            VideoSessionCommon, WscRtpVideoSession,
+            VideoSessionCommon
         },
         types::{VideoInfo, WscRtpSessionConfig},
         HTTP_CLIENT, IS_INITIALIZED,
@@ -74,7 +74,6 @@ pub async fn create_wsc_rtp_playable(
     engine_handle: i64,
     config: WscRtpSessionConfig,
     video_info: VideoInfo,
-    ffmpeg_options: Option<HashMap<String, String>>,
     sink: StreamSink<StreamState>,
 ) -> anyhow::Result<()> {
     trace!(
@@ -83,23 +82,28 @@ pub async fn create_wsc_rtp_playable(
         config.source_id.as_str(),
         session_id
     );
+    // TODO: handle restarts
     let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
 
-    let (session, ws_sender, ws_receiver, udp_sock) =
+    let (session, ws_sender, ws_receiver, udp_sock, shutdown_rx) =
         WscRtpSession::new(config, session_common, HTTP_CLIENT.clone()).await?;
-
-    insert_session(session_id, Box::new(session));
-
+    let session_clone = session.clone();
+    tokio::spawn(async move {
+        session_clone
+            .execute(ws_sender, ws_receiver, shutdown_rx, udp_sock)
+            .await
+    });
+    insert_session(session_id, session);
     Ok(())
 }
 
-pub fn seek_to_timestamp(session_id: i64, ts: i64) -> anyhow::Result<()> {
+pub async fn seek_to_timestamp(session_id: i64, ts: i64) -> anyhow::Result<()> {
     info!("seeking to {ts}");
-    registry::seek_session(session_id, ts)
+    registry::seek_session(session_id, ts).await
 }
 
-pub fn wsc_rtp_go_live(session_id: i64) -> anyhow::Result<()> {
-    registry::wsc_rtp_live_session(session_id)
+pub async fn wsc_rtp_go_live(session_id: i64) -> anyhow::Result<()> {
+    registry::wsc_rtp_live_session(session_id).await
 }
 
 pub fn set_speed(session_id: i64, speed: f64) -> anyhow::Result<()> {
@@ -112,7 +116,7 @@ pub fn register_to_stream_events_sink(session_id: i64, sink: StreamSink<StreamEv
 
 /// marks the session as required by the ui
 /// if the ui won't call this every 2 seconds
-/// this session will terminate itself.
+/// this session will be terminate.
 pub fn mark_session_alive(session_id: i64) {
     crate::core::session::registry::mark_session_alive(session_id);
 }
