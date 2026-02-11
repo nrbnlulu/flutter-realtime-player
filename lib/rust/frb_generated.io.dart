@@ -93,9 +93,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_u_16(dynamic raw);
 
   @protected
-  int dco_decode_u_32(dynamic raw);
-
-  @protected
   BigInt dco_decode_u_64(dynamic raw);
 
   @protected
@@ -103,9 +100,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void dco_decode_unit(dynamic raw);
-
-  @protected
-  VideoDimensions dco_decode_video_dimensions(dynamic raw);
 
   @protected
   VideoInfo dco_decode_video_info(dynamic raw);
@@ -194,9 +188,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_u_32(SseDeserializer deserializer);
-
-  @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
@@ -204,9 +195,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_decode_unit(SseDeserializer deserializer);
-
-  @protected
-  VideoDimensions sse_decode_video_dimensions(SseDeserializer deserializer);
 
   @protected
   VideoInfo sse_decode_video_info(SseDeserializer deserializer);
@@ -313,9 +301,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
-  void sse_encode_u_32(int self, SseSerializer serializer);
-
-  @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer);
 
   @protected
@@ -323,12 +308,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_video_dimensions(
-    VideoDimensions self,
-    SseSerializer serializer,
-  );
 
   @protected
   void sse_encode_video_info(VideoInfo self, SseSerializer serializer);

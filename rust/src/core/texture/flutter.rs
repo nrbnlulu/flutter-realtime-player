@@ -43,10 +43,6 @@ impl FlutterTextureSession for TextureSession {
         }
     }
 
-    fn resize(&self, _width: u32, _height: u32) -> Result<()> {
-        Ok(())
-    }
-
     fn terminate(&self) {
         // nothing to do here now.
     }

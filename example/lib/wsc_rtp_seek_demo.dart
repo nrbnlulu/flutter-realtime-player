@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show VideoDimensions, WscRtpSessionConfig;
+    show WscRtpSessionConfig;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:flutter_realtime_player/video_player.dart';
 

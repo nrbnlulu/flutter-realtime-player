@@ -24,7 +24,6 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum OutputCommand {
-    Resize { width: u32, height: u32 },
     Terminate,
     Seek { ts: i64 },
 }
@@ -156,13 +155,6 @@ fn handle_command(
     texture_session: &Arc<dyn FlutterTextureSession>,
 ) -> bool {
     match command {
-        OutputCommand::Resize { width, height } => {
-            let _ = input_command_tx.send(InputCommand::Resize { width, height });
-            if let Err(err) = texture_session.resize(width, height) {
-                warn!("Output resize failed for session {}: {}", session_id, err);
-            }
-            false
-        }
         OutputCommand::Terminate => {
             let _ = input_command_tx.send(InputCommand::Terminate);
             texture_session.terminate();

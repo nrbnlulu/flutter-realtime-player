@@ -736,12 +736,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int dco_decode_u_32(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
-  }
-
-  @protected
   BigInt dco_decode_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeU64(raw);
@@ -760,29 +754,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  VideoDimensions dco_decode_video_dimensions(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-    return VideoDimensions(
-      width: dco_decode_u_32(arr[0]),
-      height: dco_decode_u_32(arr[1]),
-    );
-  }
-
-  @protected
   VideoInfo dco_decode_video_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return VideoInfo(
       uri: dco_decode_String(arr[0]),
-      dimensions: dco_decode_video_dimensions(arr[1]),
-      framerate: dco_decode_opt_box_autoadd_i_32(arr[2]),
-      mute: dco_decode_bool(arr[3]),
-      autoRestart: dco_decode_bool(arr[4]),
+      framerate: dco_decode_opt_box_autoadd_i_32(arr[1]),
+      mute: dco_decode_bool(arr[2]),
+      autoRestart: dco_decode_bool(arr[3]),
     );
   }
 
@@ -1023,12 +1004,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int sse_decode_u_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint32();
-  }
-
-  @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getBigUint64();
@@ -1046,24 +1021,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  VideoDimensions sse_decode_video_dimensions(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_width = sse_decode_u_32(deserializer);
-    var var_height = sse_decode_u_32(deserializer);
-    return VideoDimensions(width: var_width, height: var_height);
-  }
-
-  @protected
   VideoInfo sse_decode_video_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_uri = sse_decode_String(deserializer);
-    var var_dimensions = sse_decode_video_dimensions(deserializer);
     var var_framerate = sse_decode_opt_box_autoadd_i_32(deserializer);
     var var_mute = sse_decode_bool(deserializer);
     var var_autoRestart = sse_decode_bool(deserializer);
     return VideoInfo(
       uri: var_uri,
-      dimensions: var_dimensions,
       framerate: var_framerate,
       mute: var_mute,
       autoRestart: var_autoRestart,
@@ -1327,12 +1292,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_u_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint32(self);
-  }
-
-  @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putBigUint64(self);
@@ -1350,20 +1309,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_video_dimensions(
-    VideoDimensions self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self.width, serializer);
-    sse_encode_u_32(self.height, serializer);
-  }
-
-  @protected
   void sse_encode_video_info(VideoInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.uri, serializer);
-    sse_encode_video_dimensions(self.dimensions, serializer);
     sse_encode_opt_box_autoadd_i_32(self.framerate, serializer);
     sse_encode_bool(self.mute, serializer);
     sse_encode_bool(self.autoRestart, serializer);

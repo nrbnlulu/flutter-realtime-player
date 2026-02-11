@@ -725,13 +725,6 @@ impl SseDecode for u16 {
     }
 }
 
-impl SseDecode for u32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u32::<NativeEndian>().unwrap()
-    }
-}
-
 impl SseDecode for u64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -751,29 +744,15 @@ impl SseDecode for () {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
 }
 
-impl SseDecode for crate::core::types::VideoDimensions {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_width = <u32>::sse_decode(deserializer);
-        let mut var_height = <u32>::sse_decode(deserializer);
-        return crate::core::types::VideoDimensions {
-            width: var_width,
-            height: var_height,
-        };
-    }
-}
-
 impl SseDecode for crate::core::types::VideoInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_uri = <String>::sse_decode(deserializer);
-        let mut var_dimensions = <crate::core::types::VideoDimensions>::sse_decode(deserializer);
         let mut var_framerate = <Option<i32>>::sse_decode(deserializer);
         let mut var_mute = <bool>::sse_decode(deserializer);
         let mut var_autoRestart = <bool>::sse_decode(deserializer);
         return crate::core::types::VideoInfo {
             uri: var_uri,
-            dimensions: var_dimensions,
             framerate: var_framerate,
             mute: var_mute,
             auto_restart: var_autoRestart,
@@ -938,32 +917,10 @@ impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::StreamState>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::core::types::VideoDimensions {
-    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.width.into_into_dart().into_dart(),
-            self.height.into_into_dart().into_dart(),
-        ]
-        .into_dart()
-    }
-}
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::core::types::VideoDimensions
-{
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::core::types::VideoDimensions>
-    for crate::core::types::VideoDimensions
-{
-    fn into_into_dart(self) -> crate::core::types::VideoDimensions {
-        self
-    }
-}
-// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::core::types::VideoInfo {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.uri.into_into_dart().into_dart(),
-            self.dimensions.into_into_dart().into_dart(),
             self.framerate.into_into_dart().into_dart(),
             self.mute.into_into_dart().into_dart(),
             self.auto_restart.into_into_dart().into_dart(),
@@ -1202,13 +1159,6 @@ impl SseEncode for u16 {
     }
 }
 
-impl SseEncode for u32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_u32::<NativeEndian>(self).unwrap();
-    }
-}
-
 impl SseEncode for u64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1228,19 +1178,10 @@ impl SseEncode for () {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
 }
 
-impl SseEncode for crate::core::types::VideoDimensions {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <u32>::sse_encode(self.width, serializer);
-        <u32>::sse_encode(self.height, serializer);
-    }
-}
-
 impl SseEncode for crate::core::types::VideoInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.uri, serializer);
-        <crate::core::types::VideoDimensions>::sse_encode(self.dimensions, serializer);
         <Option<i32>>::sse_encode(self.framerate, serializer);
         <bool>::sse_encode(self.mute, serializer);
         <bool>::sse_encode(self.auto_restart, serializer);

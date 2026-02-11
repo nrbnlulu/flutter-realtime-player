@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show WscRtpSessionConfig, VideoDimensions;
+    show WscRtpSessionConfig;
 import 'package:flutter_realtime_player/video_player.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
@@ -638,12 +638,6 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   }
 
   Future<void> _initializeVideo() async {
-    // Use a standard HD resolution that maintains 16:9 aspect ratio
-    final dimensions = const VideoDimensions(
-      width: 1280,
-      height: 720,
-    ); // 16:9 aspect ratio for HD resolution
-
     final result =
         widget.useTsdp
             ? await VideoController.createWscRtp(
@@ -653,12 +647,18 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                 clientPort: int.tryParse(widget.tsdpClientPort.trim()),
                 forceWebsocketTransport: widget.forceWebsocketTransport,
               ),
-              dimensions: dimensions,
+              dimensions: const VideoDimensions(
+                width: 1280,
+                height: 720,
+              ), // Still needed for backward compatibility
               autoRestart: true,
             )
             : await VideoController.create(
               url: widget.url,
-              dimensions: dimensions,
+              dimensions: const VideoDimensions(
+                width: 1280,
+                height: 720,
+              ), // Still needed for backward compatibility
               autoRestart: true,
               ffmpegOptions: widget.ffmpegOptions,
             );

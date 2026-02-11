@@ -14,7 +14,6 @@ pub struct VideoDimensions {
 #[flutter_rust_bridge::frb(sync)]
 pub struct VideoInfo {
     pub uri: String,
-    pub dimensions: VideoDimensions,
     pub framerate: Option<i32>,
     pub mute: bool,
     pub auto_restart: bool,
@@ -23,14 +22,13 @@ pub struct VideoInfo {
 impl VideoInfo {
     pub fn new(
         uri: String,
-        dimensions: VideoDimensions,
+        _: VideoDimensions, // Ignore dimensions parameter for backward compatibility
         framerate: Option<i32>,
         mute: Option<bool>,
         auto_restart: Option<bool>,
     ) -> Self {
         Self {
             uri,
-            dimensions,
             framerate,
             mute: mute.unwrap_or(false),
             auto_restart: auto_restart.unwrap_or(false),

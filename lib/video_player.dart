@@ -8,6 +8,14 @@ import 'package:irondash_engine_context/irondash_engine_context.dart';
 import "package:rxdart/rxdart.dart" as rx;
 import 'rust/core/types.dart';
 
+// Define VideoDimensions for backward compatibility
+class VideoDimensions {
+  final int width;
+  final int height;
+
+  const VideoDimensions({required this.width, required this.height});
+}
+
 class VideoController {
   final String url;
   final bool mute;
@@ -52,12 +60,7 @@ class VideoController {
         sessionId: sessionId,
         engineHandle: handle,
         ffmpegOptions: ffmpegOptions,
-        videoInfo: VideoInfo(
-          uri: url,
-          dimensions: dimensions,
-          mute: mute,
-          autoRestart: autoRestart,
-        ),
+        videoInfo: VideoInfo(uri: url, mute: mute, autoRestart: autoRestart),
       );
       final bs = rx.BehaviorSubject<StreamState>.seeded(StreamState.loading());
       final origSub = stream.listen(
@@ -105,12 +108,7 @@ class VideoController {
         sessionId: sessionId,
         engineHandle: handle,
         config: config,
-        videoInfo: VideoInfo(
-          uri: '',
-          dimensions: dimensions,
-          mute: mute,
-          autoRestart: autoRestart,
-        ),
+        videoInfo: VideoInfo(uri: '', mute: mute, autoRestart: autoRestart),
       );
       final bs = rx.BehaviorSubject<StreamState>.seeded(StreamState.loading());
       final origSub = stream.listen(
