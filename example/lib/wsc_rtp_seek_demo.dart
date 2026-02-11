@@ -65,7 +65,6 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
 
     try {
       final requestedPort = int.tryParse(_clientPortController.text.trim());
-      final dimensions = const VideoDimensions(width: 1280, height: 720);
       final result = await VideoController.createWscRtp(
         config: WscRtpSessionConfig(
           baseUrl: _baseUrlController.text.trim(),
@@ -73,7 +72,6 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
           clientPort: requestedPort,
           forceWebsocketTransport: _forceWebsocketTransport,
         ),
-        dimensions: dimensions,
         autoRestart: true,
       );
 

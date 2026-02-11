@@ -647,18 +647,10 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                 clientPort: int.tryParse(widget.tsdpClientPort.trim()),
                 forceWebsocketTransport: widget.forceWebsocketTransport,
               ),
-              dimensions: const VideoDimensions(
-                width: 1280,
-                height: 720,
-              ), // Still needed for backward compatibility
               autoRestart: true,
             )
             : await VideoController.create(
               url: widget.url,
-              dimensions: const VideoDimensions(
-                width: 1280,
-                height: 720,
-              ), // Still needed for backward compatibility
               autoRestart: true,
               ffmpegOptions: widget.ffmpegOptions,
             );

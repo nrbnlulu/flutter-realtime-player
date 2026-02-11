@@ -8,7 +8,7 @@ import 'package:irondash_engine_context/irondash_engine_context.dart';
 import "package:rxdart/rxdart.dart" as rx;
 import 'rust/core/types.dart';
 
-// Define VideoDimensions for backward compatibility
+// Define VideoDimensions for internal compatibility
 class VideoDimensions {
   final int width;
   final int height;
@@ -46,7 +46,6 @@ class VideoController {
 
   static Future<(VideoController?, String?)> create({
     required String url,
-    required VideoDimensions dimensions,
     bool mute = true,
     bool autoRestart = false,
     Map<String, String>? ffmpegOptions,
@@ -96,7 +95,6 @@ class VideoController {
 
   static Future<(VideoController?, String?)> createWscRtp({
     required WscRtpSessionConfig config,
-    required VideoDimensions dimensions,
     bool mute = true,
     bool autoRestart = false,
   }) async {
@@ -195,13 +193,11 @@ class VideoPlayer extends StatefulWidget {
     bool autoDispose = true,
     Widget? child,
   }) {
-    // Use fixed fallback dimensions since we no longer support runtime resizing
-    final dimensions = const VideoDimensions(width: 1280, height: 720);
-
     return FutureBuilder(
       future: _createControllerWithSize(
         url,
-        dimensions,
+        // Pass dummy dimensions since the API still expects them but ignores them
+        const VideoDimensions(width: 1280, height: 720),
         mute,
         autoRestart,
         ffmpegOptions,
@@ -232,7 +228,6 @@ class VideoPlayer extends StatefulWidget {
   ) async {
     return VideoController.create(
       url: url,
-      dimensions: dimensions,
       mute: mute,
       autoRestart: autoRestart,
       ffmpegOptions: ffmpegOptions,
