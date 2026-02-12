@@ -82,7 +82,7 @@ impl WscRtpSession {
 
         let (ws, _) = connect_async(wsc_rtp_url.to_string())
             .await
-            .context("connecting to WSC-RTP ws")?;
+            .context(format!("connecting to WSC-RTP ws at {}", wsc_rtp_url))?;
         let (ws_sink, mut ws_stream) = ws.split();
 
         let deadline = tokio::time::Instant::now() + SDP_TIMEOUT;
