@@ -765,11 +765,13 @@ impl SseDecode for crate::core::types::WscRtpSessionConfig {
         let mut var_sourceId = <String>::sse_decode(deserializer);
         let mut var_clientPort = <Option<u16>>::sse_decode(deserializer);
         let mut var_forceWebsocketTransport = <bool>::sse_decode(deserializer);
+        let mut var_autoRestart = <bool>::sse_decode(deserializer);
         return crate::core::types::WscRtpSessionConfig {
             base_url: var_baseUrl,
             source_id: var_sourceId,
             client_port: var_clientPort,
             force_websocket_transport: var_forceWebsocketTransport,
+            auto_restart: var_autoRestart,
         };
     }
 }
@@ -942,6 +944,7 @@ impl flutter_rust_bridge::IntoDart for crate::core::types::WscRtpSessionConfig {
             self.source_id.into_into_dart().into_dart(),
             self.client_port.into_into_dart().into_dart(),
             self.force_websocket_transport.into_into_dart().into_dart(),
+            self.auto_restart.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1193,6 +1196,7 @@ impl SseEncode for crate::core::types::WscRtpSessionConfig {
         <String>::sse_encode(self.source_id, serializer);
         <Option<u16>>::sse_encode(self.client_port, serializer);
         <bool>::sse_encode(self.force_websocket_transport, serializer);
+        <bool>::sse_encode(self.auto_restart, serializer);
     }
 }
 

@@ -642,6 +642,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
         widget.useTsdp
             ? await VideoController.createWscRtp(
               config: WscRtpSessionConfig(
+                autoRestart: true,
                 baseUrl: widget.tsdpBaseUrl,
                 sourceId: widget.tsdpSourceId,
                 clientPort: int.tryParse(widget.tsdpClientPort.trim()),

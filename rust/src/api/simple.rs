@@ -75,17 +75,11 @@ pub async fn create_wsc_rtp_playable(
         config.source_id.as_str(),
         session_id
     );
-    // TODO: handle restarts
     let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
 
-    let (session, ws_sender, ws_receiver, udp_sock, shutdown_rx) =
-        WscRtpSession::new(config, session_common, HTTP_CLIENT.clone()).await?;
+    let (session, shutdown_rx) = WscRtpSession::new(config, session_common, HTTP_CLIENT.clone());
     let session_clone = session.clone();
-    tokio::spawn(async move {
-        session_clone
-            .execute(ws_sender, ws_receiver, shutdown_rx, udp_sock)
-            .await
-    });
+    tokio::spawn(async move { session_clone.execute(shutdown_rx).await });
     insert_session(session_id, session);
     Ok(())
 }

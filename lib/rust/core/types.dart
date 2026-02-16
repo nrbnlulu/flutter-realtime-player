@@ -41,12 +41,14 @@ class WscRtpSessionConfig {
 
   /// Skip UDP negotiation and use WebSocket for RTP delivery from the start.
   final bool forceWebsocketTransport;
+  final bool autoRestart;
 
   const WscRtpSessionConfig({
     required this.baseUrl,
     required this.sourceId,
     this.clientPort,
     required this.forceWebsocketTransport,
+    required this.autoRestart,
   });
 
   @override
@@ -54,7 +56,8 @@ class WscRtpSessionConfig {
       baseUrl.hashCode ^
       sourceId.hashCode ^
       clientPort.hashCode ^
-      forceWebsocketTransport.hashCode;
+      forceWebsocketTransport.hashCode ^
+      autoRestart.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -64,5 +67,6 @@ class WscRtpSessionConfig {
           baseUrl == other.baseUrl &&
           sourceId == other.sourceId &&
           clientPort == other.clientPort &&
-          forceWebsocketTransport == other.forceWebsocketTransport;
+          forceWebsocketTransport == other.forceWebsocketTransport &&
+          autoRestart == other.autoRestart;
 }

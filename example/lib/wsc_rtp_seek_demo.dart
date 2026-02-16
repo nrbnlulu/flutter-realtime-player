@@ -67,6 +67,7 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
       final requestedPort = int.tryParse(_clientPortController.text.trim());
       final result = await VideoController.createWscRtp(
         config: WscRtpSessionConfig(
+          autoRestart: true,
           baseUrl: _baseUrlController.text.trim(),
           sourceId: _sourceIdController.text.trim(),
           clientPort: requestedPort,
