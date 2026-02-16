@@ -37,12 +37,10 @@ Stream<StreamState> createWscRtpPlayable({
   required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
   required WscRtpSessionConfig config,
-  required VideoInfo videoInfo,
 }) => RustLib.instance.api.crateApiSimpleCreateWscRtpPlayable(
   sessionId: sessionId,
   engineHandle: engineHandle,
   config: config,
-  videoInfo: videoInfo,
 );
 
 Future<void> seekToTimestamp({

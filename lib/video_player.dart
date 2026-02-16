@@ -106,7 +106,6 @@ class VideoController {
         sessionId: sessionId,
         engineHandle: handle,
         config: config,
-        videoInfo: VideoInfo(uri: '', mute: mute, autoRestart: autoRestart),
       );
       final bs = rx.BehaviorSubject<StreamState>.seeded(StreamState.loading());
       final origSub = stream.listen(

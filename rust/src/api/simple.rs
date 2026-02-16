@@ -67,7 +67,6 @@ pub async fn create_wsc_rtp_playable(
     session_id: i64,
     engine_handle: i64,
     config: WscRtpSessionConfig,
-    video_info: VideoInfo,
     sink: StreamSink<StreamState>,
 ) -> anyhow::Result<()> {
     trace!(

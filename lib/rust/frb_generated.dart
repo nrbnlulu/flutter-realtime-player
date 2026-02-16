@@ -92,7 +92,6 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
     required WscRtpSessionConfig config,
-    required VideoInfo videoInfo,
   });
 
   Future<void> crateApiSimpleDestroyEngineStreams({
@@ -220,7 +219,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
     required WscRtpSessionConfig config,
-    required VideoInfo videoInfo,
   }) {
     final sink = RustStreamSink<StreamState>();
     unawaited(
@@ -231,7 +229,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             sse_encode_i_64(sessionId, serializer);
             sse_encode_i_64(engineHandle, serializer);
             sse_encode_box_autoadd_wsc_rtp_session_config(config, serializer);
-            sse_encode_box_autoadd_video_info(videoInfo, serializer);
             sse_encode_StreamSink_stream_state_Sse(sink, serializer);
             pdeCallFfi(
               generalizedFrbRustBinding,
@@ -245,7 +242,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             decodeErrorData: sse_decode_AnyhowException,
           ),
           constMeta: kCrateApiSimpleCreateWscRtpPlayableConstMeta,
-          argValues: [sessionId, engineHandle, config, videoInfo, sink],
+          argValues: [sessionId, engineHandle, config, sink],
           apiImpl: this,
         ),
       ),
@@ -256,7 +253,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleCreateWscRtpPlayableConstMeta =>
       const TaskConstMeta(
         debugName: "create_wsc_rtp_playable",
-        argNames: ["sessionId", "engineHandle", "config", "videoInfo", "sink"],
+        argNames: ["sessionId", "engineHandle", "config", "sink"],
       );
 
   @override

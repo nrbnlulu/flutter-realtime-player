@@ -152,7 +152,6 @@ fn wire__crate__api__simple__create_wsc_rtp_playable_impl(
             let api_engine_handle = <i64>::sse_decode(&mut deserializer);
             let api_config =
                 <crate::core::types::WscRtpSessionConfig>::sse_decode(&mut deserializer);
-            let api_video_info = <crate::core::types::VideoInfo>::sse_decode(&mut deserializer);
             let api_sink = <StreamSink<
                 crate::dart_types::StreamState,
                 flutter_rust_bridge::for_generated::SseCodec,
@@ -165,7 +164,6 @@ fn wire__crate__api__simple__create_wsc_rtp_playable_impl(
                             api_session_id,
                             api_engine_handle,
                             api_config,
-                            api_video_info,
                             api_sink,
                         )
                         .await?;

@@ -44,6 +44,7 @@ pub struct WscRtpSessionConfig {
     pub client_port: Option<u16>,
     /// Skip UDP negotiation and use WebSocket for RTP delivery from the start.
     pub force_websocket_transport: bool,
+    pub auto_restart: bool,
 }
 
 pub type DartStateStream = StreamSink<StreamState>;
