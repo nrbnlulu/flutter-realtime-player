@@ -12,10 +12,6 @@ dependencies:
     flutter:
         sdk: flutter
     flutter_rust_bridge:
-        git:
-            url: https://github.com/rlch/flutter_rust_bridge.git
-            ref: 'result-oxidized'
-            path: frb_dart
 
     plugin_platform_interface: ^2.0.2
     irondash_engine_context:

@@ -8,7 +8,7 @@ crate-type = ["cdylib", "staticlib"]
 
 
 [dependencies]
-flutter_rust_bridge = { ref = 'result-oxidized', version = "=2.11.1" }
+flutter_rust_bridge = "=2.11.1"
 
 # irondash
 irondash_texture = "*"

@@ -238,11 +238,10 @@ packages:
   flutter_rust_bridge:
     dependency: "direct main"
     description:
-      path: frb_dart
-      ref: result-oxidized
-      resolved-ref: "50cbd85fd3cbddabf5051d27f9a5d0366aef9e62"
-      url: "https://github.com/rlch/flutter_rust_bridge.git"
-    source: git
+      name: flutter_rust_bridge
+      sha256: "37ef40bc6f863652e865f0b2563ea07f0d3c58d8efad803cc01933a4b2ee067e"
+      url: "https://pub.dev"
+    source: hosted
     version: "2.11.1"
   flutter_test:
     dependency: "direct dev"

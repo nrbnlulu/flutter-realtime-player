@@ -144,12 +144,12 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
   }
 
   Future<void> _seekRelative(int seconds) async {
-    final sessionId = _sessionId;
-    if (sessionId == null) return;
+    final controller = _controller;
+    if (controller == null) return;
     final current =
         _sessionMode?.currentTimeMs ?? DateTime.now().millisecondsSinceEpoch;
     final target = current + (seconds * 1000);
-    final result = await rlib.seekToTimestamp(sessionId: sessionId, ts: target);
+    final result = await controller.seekToTimestampMs(target);
     if (result.isErr()) {
       final error = result.unwrapErr();
       debugPrint('Seek error: ${error.message}');
@@ -185,9 +185,9 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
   }
 
   Future<void> _seekToNow() async {
-    final sessionId = _sessionId;
-    if (sessionId == null) return;
-    final result = await rlib.wscRtpGoLive(sessionId: sessionId);
+    final controller = _controller;
+    if (controller == null) return;
+    final result = await controller.wscRtpGoLive();
     if (result.isErr()) {
       final error = result.unwrapErr();
       debugPrint('Go live error: ${error.message}');
@@ -246,11 +246,10 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
       time.hour,
       time.minute,
     );
-    final sessionId = _sessionId;
-    if (sessionId == null) return;
-    final result = await rlib.seekToTimestamp(
-      sessionId: sessionId,
-      ts: dt.millisecondsSinceEpoch,
+    final controller = _controller;
+    if (controller == null) return;
+    final result = await controller.seekToTimestampMs(
+      dt.millisecondsSinceEpoch,
     );
     if (result.isErr()) {
       final error = result.unwrapErr();
@@ -287,9 +286,9 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
   }
 
   Future<void> _setSpeed(double speed) async {
-    final sessionId = _sessionId;
-    if (sessionId == null) return;
-    final result = await rlib.setSpeed(sessionId: sessionId, speed: speed);
+    final controller = _controller;
+    if (controller == null) return;
+    final result = await controller.setSpeed(speed);
     if (result.isErr()) {
       final error = result.unwrapErr();
       debugPrint('Set speed error: ${error.message}');

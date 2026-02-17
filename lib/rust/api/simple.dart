@@ -43,7 +43,7 @@ Stream<StreamState> createWscRtpPlayable({
   config: config,
 );
 
-Future<Result<void, AnyhowException>> seekToTimestamp({
+Future<void> seekToTimestamp({
   required PlatformInt64 sessionId,
   required PlatformInt64 ts,
 }) => RustLib.instance.api.crateApiSimpleSeekToTimestamp(
@@ -51,11 +51,10 @@ Future<Result<void, AnyhowException>> seekToTimestamp({
   ts: ts,
 );
 
-Future<Result<void, AnyhowException>> wscRtpGoLive({
-  required PlatformInt64 sessionId,
-}) => RustLib.instance.api.crateApiSimpleWscRtpGoLive(sessionId: sessionId);
+Future<void> wscRtpGoLive({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleWscRtpGoLive(sessionId: sessionId);
 
-Future<Result<void, AnyhowException>> setSpeed({
+Future<void> setSpeed({
   required PlatformInt64 sessionId,
   required double speed,
 }) => RustLib.instance.api.crateApiSimpleSetSpeed(

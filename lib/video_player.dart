@@ -141,15 +141,36 @@ class VideoController {
   Future<oxidized.Result<void, AnyhowException>> seekToTimestampMs(
     int tsMs,
   ) async {
-    return await rlib.seekToTimestamp(sessionId: sessionId, ts: tsMs);
+    try {
+      await rlib.seekToTimestamp(sessionId: sessionId, ts: tsMs);
+      return oxidized.Result.ok(null);
+    } catch (e) {
+      return oxidized.Result.err(
+        e is AnyhowException ? e : AnyhowException(e.toString()),
+      );
+    }
   }
 
   Future<oxidized.Result<void, AnyhowException>> wscRtpGoLive() async {
-    return await rlib.wscRtpGoLive(sessionId: sessionId);
+    try {
+      await rlib.wscRtpGoLive(sessionId: sessionId);
+      return oxidized.Result.ok(null);
+    } catch (e) {
+      return oxidized.Result.err(
+        e is AnyhowException ? e : AnyhowException(e.toString()),
+      );
+    }
   }
 
   Future<oxidized.Result<void, AnyhowException>> setSpeed(double speed) async {
-    return await rlib.setSpeed(sessionId: sessionId, speed: speed);
+    try {
+      await rlib.setSpeed(sessionId: sessionId, speed: speed);
+      return oxidized.Result.ok(null);
+    } catch (e) {
+      return oxidized.Result.err(
+        e is AnyhowException ? e : AnyhowException(e.toString()),
+      );
+    }
   }
 }
 
