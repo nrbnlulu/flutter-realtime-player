@@ -4,7 +4,6 @@ import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
     show WscRtpSessionConfig;
 import 'package:flutter_realtime_player/video_player.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 import 'dart:async';
 import 'package:flutter_realtime_player/rust/dart_types.dart';
@@ -13,7 +12,6 @@ import 'wsc_rtp_seek_demo.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await fl_gst.init();
-  await windowManager.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -790,7 +788,36 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                   },
                   onChangeEnd: (value) async {
                     if (_controller != null) {
-                      await _controller!.seekTo(value.toInt());
+                      final result = await _controller!.seekToTimestampMs(
+                        value.toInt(),
+                      );
+                      if (result.isErr()) {
+                        final error = result.unwrapErr();
+                        debugPrint('Seek error: ${error.message}');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: ExpansionTile(
+                                title: const Text(
+                                  'Seek failed',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                children: [
+                                  SelectableText(
+                                    error.message,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              backgroundColor: Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
                     }
                     setState(() {
                       _isSeeking = false;
@@ -833,11 +860,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                       ),
                       onPressed: () async {
                         if (_controller != null) {
-                          try {
-                            await _controller!.seekTo(-10);
-                          } catch (e) {
-                            debugPrint('Error seeking backward: $e');
-                          }
+                          debugPrint("relative seeking is not implmeneted yet");
                         }
                       },
                     ),
@@ -853,11 +876,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                       ),
                       onPressed: () async {
                         if (_controller != null) {
-                          try {
-                            await _controller!.seekTo(10);
-                          } catch (e) {
-                            debugPrint('Error seeking forward: $e');
-                          }
+                          debugPrint("relative seeking is not implmeneted yet");
                         }
                       },
                     ),
@@ -958,6 +977,57 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final timestamp = _iso8601Controller.text.trim();
+                  final dt = DateTime.tryParse(timestamp);
+                  if (dt == null) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Invalid timestamp format'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  Navigator.pop(context);
+                  if (_controller != null) {
+                    final result = await _controller!.seekToTimestampMs(
+                      dt.millisecondsSinceEpoch,
+                    );
+                    if (result.isErr()) {
+                      final error = result.unwrapErr();
+                      debugPrint('Seek error: ${error.message}');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: ExpansionTile(
+                              title: const Text(
+                                'Seek failed',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              children: [
+                                SelectableText(
+                                  error.message,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                },
+                child: const Text('Seek'),
               ),
             ],
           ),

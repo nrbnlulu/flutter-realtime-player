@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:irondash_engine_context/irondash_engine_context.dart';
+import 'package:oxidized/oxidized.dart' as oxidized;
 import "package:rxdart/rxdart.dart" as rx;
 import 'rust/core/types.dart';
 
@@ -136,24 +138,20 @@ class VideoController {
     }
   }
 
-  /// Seek to a specific time in seconds within the video
-  Future<void> seekTo(int ts) async {
-    await rlib.seekToTimestamp(sessionId: sessionId, ts: ts);
+  Future<oxidized.Result<void, AnyhowException>> seekToTimestampMs(
+    int tsMs,
+  ) async {
+    return await rlib.seekToTimestamp(sessionId: sessionId, ts: tsMs);
   }
 
-  Future<void> seekToTimestampMs(int tsMs) async {
-    await rlib.seekToTimestamp(sessionId: sessionId, ts: tsMs);
+  Future<oxidized.Result<void, AnyhowException>> wscRtpGoLive() async {
+    return await rlib.wscRtpGoLive(sessionId: sessionId);
   }
 
-  Future<void> wscRtpGoLive() async {
-    await rlib.wscRtpGoLive(sessionId: sessionId);
-  }
-
-  Future<void> setSpeed(double speed) async {
-    await rlib.setSpeed(sessionId: sessionId, speed: speed);
+  Future<oxidized.Result<void, AnyhowException>> setSpeed(double speed) async {
+    return await rlib.setSpeed(sessionId: sessionId, speed: speed);
   }
 }
-// ignore: implementation_imports
 
 class VideoPlayer extends StatefulWidget {
   final VideoController controller;

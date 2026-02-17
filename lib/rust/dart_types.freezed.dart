@@ -1,6 +1,5 @@
-// dart format width=80
-// coverage:ignore-file
 // GENERATED CODE - DO NOT MODIFY BY HAND
+// coverage:ignore-file
 // ignore_for_file: type=lint
 // ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 
@@ -41,6 +40,154 @@ class $StreamEventCopyWith<$Res>  {
 $StreamEventCopyWith(StreamEvent _, $Res Function(StreamEvent) __);
 }
 
+
+/// Adds pattern-matching-related methods to [StreamEvent].
+extension StreamEventPatterns on StreamEvent {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( StreamEvent_Error value)?  error,TResult Function( StreamEvent_CurrentTime value)?  currentTime,TResult Function( StreamEvent_OriginVideoSize value)?  originVideoSize,TResult Function( StreamEvent_WscRtpSessionMode value)?  wscRtpSessionMode,TResult Function( StreamEvent_WscRtpStreamState value)?  wscRtpStreamState,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case StreamEvent_Error() when error != null:
+return error(_that);case StreamEvent_CurrentTime() when currentTime != null:
+return currentTime(_that);case StreamEvent_OriginVideoSize() when originVideoSize != null:
+return originVideoSize(_that);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
+return wscRtpSessionMode(_that);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
+return wscRtpStreamState(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( StreamEvent_Error value)  error,required TResult Function( StreamEvent_CurrentTime value)  currentTime,required TResult Function( StreamEvent_OriginVideoSize value)  originVideoSize,required TResult Function( StreamEvent_WscRtpSessionMode value)  wscRtpSessionMode,required TResult Function( StreamEvent_WscRtpStreamState value)  wscRtpStreamState,}){
+final _that = this;
+switch (_that) {
+case StreamEvent_Error():
+return error(_that);case StreamEvent_CurrentTime():
+return currentTime(_that);case StreamEvent_OriginVideoSize():
+return originVideoSize(_that);case StreamEvent_WscRtpSessionMode():
+return wscRtpSessionMode(_that);case StreamEvent_WscRtpStreamState():
+return wscRtpStreamState(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( StreamEvent_Error value)?  error,TResult? Function( StreamEvent_CurrentTime value)?  currentTime,TResult? Function( StreamEvent_OriginVideoSize value)?  originVideoSize,TResult? Function( StreamEvent_WscRtpSessionMode value)?  wscRtpSessionMode,TResult? Function( StreamEvent_WscRtpStreamState value)?  wscRtpStreamState,}){
+final _that = this;
+switch (_that) {
+case StreamEvent_Error() when error != null:
+return error(_that);case StreamEvent_CurrentTime() when currentTime != null:
+return currentTime(_that);case StreamEvent_OriginVideoSize() when originVideoSize != null:
+return originVideoSize(_that);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
+return wscRtpSessionMode(_that);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
+return wscRtpStreamState(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  error,TResult Function( PlatformInt64 field0)?  currentTime,TResult Function( BigInt width,  BigInt height)?  originVideoSize,TResult Function( bool isLive,  PlatformInt64 currentTimeMs,  double speed)?  wscRtpSessionMode,TResult Function( String field0)?  wscRtpStreamState,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case StreamEvent_Error() when error != null:
+return error(_that.field0);case StreamEvent_CurrentTime() when currentTime != null:
+return currentTime(_that.field0);case StreamEvent_OriginVideoSize() when originVideoSize != null:
+return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
+return wscRtpSessionMode(_that.isLive,_that.currentTimeMs,_that.speed);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
+return wscRtpStreamState(_that.field0);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  error,required TResult Function( PlatformInt64 field0)  currentTime,required TResult Function( BigInt width,  BigInt height)  originVideoSize,required TResult Function( bool isLive,  PlatformInt64 currentTimeMs,  double speed)  wscRtpSessionMode,required TResult Function( String field0)  wscRtpStreamState,}) {final _that = this;
+switch (_that) {
+case StreamEvent_Error():
+return error(_that.field0);case StreamEvent_CurrentTime():
+return currentTime(_that.field0);case StreamEvent_OriginVideoSize():
+return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode():
+return wscRtpSessionMode(_that.isLive,_that.currentTimeMs,_that.speed);case StreamEvent_WscRtpStreamState():
+return wscRtpStreamState(_that.field0);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  error,TResult? Function( PlatformInt64 field0)?  currentTime,TResult? Function( BigInt width,  BigInt height)?  originVideoSize,TResult? Function( bool isLive,  PlatformInt64 currentTimeMs,  double speed)?  wscRtpSessionMode,TResult? Function( String field0)?  wscRtpStreamState,}) {final _that = this;
+switch (_that) {
+case StreamEvent_Error() when error != null:
+return error(_that.field0);case StreamEvent_CurrentTime() when currentTime != null:
+return currentTime(_that.field0);case StreamEvent_OriginVideoSize() when originVideoSize != null:
+return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
+return wscRtpSessionMode(_that.isLive,_that.currentTimeMs,_that.speed);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
+return wscRtpStreamState(_that.field0);case _:
+  return null;
+
+}
+}
+
+}
 
 /// @nodoc
 
@@ -407,6 +554,148 @@ class $StreamStateCopyWith<$Res>  {
 $StreamStateCopyWith(StreamState _, $Res Function(StreamState) __);
 }
 
+
+/// Adds pattern-matching-related methods to [StreamState].
+extension StreamStatePatterns on StreamState {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( StreamState_Error value)?  error,TResult Function( StreamState_Loading value)?  loading,TResult Function( StreamState_Playing value)?  playing,TResult Function( StreamState_Stopped value)?  stopped,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case StreamState_Error() when error != null:
+return error(_that);case StreamState_Loading() when loading != null:
+return loading(_that);case StreamState_Playing() when playing != null:
+return playing(_that);case StreamState_Stopped() when stopped != null:
+return stopped(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( StreamState_Error value)  error,required TResult Function( StreamState_Loading value)  loading,required TResult Function( StreamState_Playing value)  playing,required TResult Function( StreamState_Stopped value)  stopped,}){
+final _that = this;
+switch (_that) {
+case StreamState_Error():
+return error(_that);case StreamState_Loading():
+return loading(_that);case StreamState_Playing():
+return playing(_that);case StreamState_Stopped():
+return stopped(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( StreamState_Error value)?  error,TResult? Function( StreamState_Loading value)?  loading,TResult? Function( StreamState_Playing value)?  playing,TResult? Function( StreamState_Stopped value)?  stopped,}){
+final _that = this;
+switch (_that) {
+case StreamState_Error() when error != null:
+return error(_that);case StreamState_Loading() when loading != null:
+return loading(_that);case StreamState_Playing() when playing != null:
+return playing(_that);case StreamState_Stopped() when stopped != null:
+return stopped(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  error,TResult Function()?  loading,TResult Function( PlatformInt64 textureId,  bool seekable)?  playing,TResult Function()?  stopped,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case StreamState_Error() when error != null:
+return error(_that.field0);case StreamState_Loading() when loading != null:
+return loading();case StreamState_Playing() when playing != null:
+return playing(_that.textureId,_that.seekable);case StreamState_Stopped() when stopped != null:
+return stopped();case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  error,required TResult Function()  loading,required TResult Function( PlatformInt64 textureId,  bool seekable)  playing,required TResult Function()  stopped,}) {final _that = this;
+switch (_that) {
+case StreamState_Error():
+return error(_that.field0);case StreamState_Loading():
+return loading();case StreamState_Playing():
+return playing(_that.textureId,_that.seekable);case StreamState_Stopped():
+return stopped();}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  error,TResult? Function()?  loading,TResult? Function( PlatformInt64 textureId,  bool seekable)?  playing,TResult? Function()?  stopped,}) {final _that = this;
+switch (_that) {
+case StreamState_Error() when error != null:
+return error(_that.field0);case StreamState_Loading() when loading != null:
+return loading();case StreamState_Playing() when playing != null:
+return playing(_that.textureId,_that.seekable);case StreamState_Stopped() when stopped != null:
+return stopped();case _:
+  return null;
+
+}
+}
+
+}
 
 /// @nodoc
 

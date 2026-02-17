@@ -75,6 +75,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
         stem: 'flutter_realtime_player',
         ioDirectory: 'rust/target/release/',
         webPrefix: 'pkg/',
+        wasmBindgenName: 'wasm_bindgen',
       );
 }
 
@@ -116,17 +117,19 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 sessionId,
   });
 
-  Future<void> crateApiSimpleSeekToTimestamp({
+  Future<Result<void, AnyhowException>> crateApiSimpleSeekToTimestamp({
     required PlatformInt64 sessionId,
     required PlatformInt64 ts,
   });
 
-  Future<void> crateApiSimpleSetSpeed({
+  Future<Result<void, AnyhowException>> crateApiSimpleSetSpeed({
     required PlatformInt64 sessionId,
     required double speed,
   });
 
-  Future<void> crateApiSimpleWscRtpGoLive({required PlatformInt64 sessionId});
+  Future<Result<void, AnyhowException>> crateApiSimpleWscRtpGoLive({
+    required PlatformInt64 sessionId,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -146,7 +149,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }) {
     final sink = RustStreamSink<StreamState>();
     unawaited(
-      handler.executeNormal(
+      handler.executeNormalAsResult(
         NormalTask(
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -222,7 +225,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }) {
     final sink = RustStreamSink<StreamState>();
     unawaited(
-      handler.executeNormal(
+      handler.executeNormalAsResult(
         NormalTask(
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -454,11 +457,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateApiSimpleSeekToTimestamp({
+  Future<Result<void, AnyhowException>> crateApiSimpleSeekToTimestamp({
     required PlatformInt64 sessionId,
     required PlatformInt64 ts,
   }) {
-    return handler.executeNormal(
+    return handler.executeNormalAsResult(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -489,11 +492,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateApiSimpleSetSpeed({
+  Future<Result<void, AnyhowException>> crateApiSimpleSetSpeed({
     required PlatformInt64 sessionId,
     required double speed,
   }) {
-    return handler.executeNormal(
+    return handler.executeNormalAsResult(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -523,8 +526,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<void> crateApiSimpleWscRtpGoLive({required PlatformInt64 sessionId}) {
-    return handler.executeNormal(
+  Future<Result<void, AnyhowException>> crateApiSimpleWscRtpGoLive({
+    required PlatformInt64 sessionId,
+  }) {
+    return handler.executeNormalAsResult(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);

@@ -149,7 +149,31 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
     final current =
         _sessionMode?.currentTimeMs ?? DateTime.now().millisecondsSinceEpoch;
     final target = current + (seconds * 1000);
-    await rlib.seekToTimestamp(sessionId: sessionId, ts: target);
+    final result = await rlib.seekToTimestamp(sessionId: sessionId, ts: target);
+    if (result.isErr()) {
+      final error = result.unwrapErr();
+      debugPrint('Seek error: ${error.message}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: ExpansionTile(
+            title: const Text(
+              'Seek failed',
+              style: TextStyle(color: Colors.white),
+            ),
+            children: [
+              SelectableText(
+                error.message,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _sessionMode = SessionMode(
@@ -163,7 +187,31 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
   Future<void> _seekToNow() async {
     final sessionId = _sessionId;
     if (sessionId == null) return;
-    await rlib.wscRtpGoLive(sessionId: sessionId);
+    final result = await rlib.wscRtpGoLive(sessionId: sessionId);
+    if (result.isErr()) {
+      final error = result.unwrapErr();
+      debugPrint('Go live error: ${error.message}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: ExpansionTile(
+            title: const Text(
+              'Go live failed',
+              style: TextStyle(color: Colors.white),
+            ),
+            children: [
+              SelectableText(
+                error.message,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _sessionMode = SessionMode(
@@ -200,10 +248,34 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
     );
     final sessionId = _sessionId;
     if (sessionId == null) return;
-    await rlib.seekToTimestamp(
+    final result = await rlib.seekToTimestamp(
       sessionId: sessionId,
       ts: dt.millisecondsSinceEpoch,
     );
+    if (result.isErr()) {
+      final error = result.unwrapErr();
+      debugPrint('Seek error: ${error.message}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: ExpansionTile(
+            title: const Text(
+              'Seek failed',
+              style: TextStyle(color: Colors.white),
+            ),
+            children: [
+              SelectableText(
+                error.message,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _sessionMode = SessionMode(
@@ -217,10 +289,30 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
   Future<void> _setSpeed(double speed) async {
     final sessionId = _sessionId;
     if (sessionId == null) return;
-    try {
-      await rlib.setSpeed(sessionId: sessionId, speed: speed);
-    } catch (e) {
-      debugPrint("Set speed failed: $e");
+    final result = await rlib.setSpeed(sessionId: sessionId, speed: speed);
+    if (result.isErr()) {
+      final error = result.unwrapErr();
+      debugPrint('Set speed error: ${error.message}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: ExpansionTile(
+            title: const Text(
+              'Set speed failed',
+              style: TextStyle(color: Colors.white),
+            ),
+            children: [
+              SelectableText(
+                error.message,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
     }
   }
 
