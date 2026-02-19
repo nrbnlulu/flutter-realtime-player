@@ -297,7 +297,11 @@ impl WscRtpSession {
 
                     // Backoff before retry
                     self.session_common.send_state_msg(StreamState::Loading);
-                    info!("WSC-RTP: retrying in {:?}", backoff);
+                    self.session_common
+                        .send_event_msg(StreamEvent::Error(format!(
+                            "WS connection failed retrying in {}s",
+                            backoff.as_secs()
+                        )));
                     tokio::select! {
                         _ = tokio::time::sleep(backoff) => {}
                         cmd = shutdown_rx.recv() => {
