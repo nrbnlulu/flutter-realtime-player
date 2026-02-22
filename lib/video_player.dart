@@ -30,6 +30,12 @@ class VideoController {
   bool _running = false;
   int? _engineHandle;
 
+  /// Cached texture ID from StreamState_Playing
+  int? _cachedTextureId;
+
+  /// Internal subscription for state updates (disposed with controller)
+  StreamSubscription<StreamState>? _stateSubscription;
+
   VideoController(
     StreamSubscription<StreamState> originalSub, {
     required this.url,
@@ -40,10 +46,17 @@ class VideoController {
     this.ffmpegOptions,
   }) : _originalSub = originalSub;
 
+  /// Returns the cached texture ID if available, null otherwise.
+  /// This allows VideoPlayer widgets to immediately render if a texture was already created.
+  int? get cachedTextureId => _cachedTextureId;
+
   Future<void> dispose() async {
     _running = false;
     await rlib.destroyStreamSession(sessionId: sessionId);
     _originalSub.cancel();
+    _stateSubscription?.cancel();
+    _stateSubscription = null;
+    _cachedTextureId = null;
   }
 
   static Future<(VideoController?, String?)> create({
@@ -80,6 +93,13 @@ class VideoController {
       );
       ret._engineHandle = handle;
       ret._running = true;
+
+      // Start internal task to cache texture ID from state updates
+      ret._stateSubscription = ret.stateBroadcast.listen((state) {
+        if (state is StreamState_Playing) {
+          ret._cachedTextureId = state.textureId;
+        }
+      });
 
       // start ping task
       Future.microtask(() async {
@@ -125,6 +145,13 @@ class VideoController {
       );
       ret._engineHandle = handle;
       ret._running = true;
+
+      // Start internal task to cache texture ID from state updates
+      ret._stateSubscription = ret.stateBroadcast.listen((state) {
+        if (state is StreamState_Playing) {
+          ret._cachedTextureId = state.textureId;
+        }
+      });
 
       Future.microtask(() async {
         while (ret._running) {
@@ -275,14 +302,24 @@ class _VideoPlayerWithSize extends StatefulWidget {
 class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
   StreamState? currentState;
   StreamSubscription<StreamState>? streamSubscription;
+  int? _currentTextureId;
 
   @override
   void initState() {
     super.initState();
 
+    // Check for cached texture ID first
+    final cachedTextureId = widget.controller.cachedTextureId;
+    if (cachedTextureId != null) {
+      _currentTextureId = cachedTextureId;
+    }
+
     streamSubscription = widget.controller.stateBroadcast.listen((state) {
       setState(() {
         currentState = state;
+        if (state is StreamState_Playing) {
+          _currentTextureId = state.textureId;
+        }
       });
     });
   }
@@ -302,6 +339,16 @@ class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // If we have a cached texture ID, render immediately
+        if (_currentTextureId != null) {
+          return Stack(
+            children: [
+              Texture(textureId: _currentTextureId!),
+              widget.child ?? const SizedBox(),
+            ],
+          );
+        }
+
         if (currentState == null) {
           return loadingWidget('initializing...');
         }
@@ -363,13 +410,10 @@ class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
 class _VideoPlayerState extends State<VideoPlayer> {
   @override
   Widget build(BuildContext context) {
-    // If a controller was provided, use it directly
     return _VideoPlayerWithSize(
       controller: widget.controller,
       autoDispose: widget.autoDispose,
       child: widget.child,
     );
-    // This case should not happen due to assertion, but we include it to avoid errors
-    return const SizedBox.shrink();
   }
 }
