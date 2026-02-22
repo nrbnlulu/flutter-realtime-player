@@ -84,7 +84,7 @@ pub async fn create_wsc_rtp_playable(
     Ok(())
 }
 
-pub async fn seek_to_timestamp(session_id: i64, ts: i64) -> anyhow::Result<()> {
+pub async fn seek_to_timestamp(session_id: i64, ts: u64) -> anyhow::Result<()> {
     info!("seeking to {ts}");
     registry::seek_session(session_id, ts).await
 }
@@ -93,8 +93,8 @@ pub async fn wsc_rtp_go_live(session_id: i64) -> anyhow::Result<()> {
     registry::wsc_rtp_live_session(session_id).await
 }
 
-pub fn set_speed(session_id: i64, speed: f64) -> anyhow::Result<()> {
-    registry::set_speed_session(session_id, speed)
+pub async fn set_speed(session_id: i64, speed: f64) -> anyhow::Result<()> {
+    registry::set_speed_session(session_id, speed).await
 }
 
 pub fn register_to_stream_events_sink(session_id: i64, sink: StreamSink<StreamEvent>) {

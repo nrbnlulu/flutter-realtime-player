@@ -1,5 +1,5 @@
 use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
+    net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -21,20 +21,21 @@ use url::Url;
 
 use crate::{
     core::{
-        input::{InputEvent, InputEventSender},
-        output::flutter_pixelbuffer::create_flutter_pixelbuffer,
         session::VideoSessionCommon,
         texture::{
             payload::{self, RawRgbaFrame, SharedPixelData},
             FlutterTextureSession,
         },
-        types::{VideoDimensions, WscRtpSessionConfig},
+        types::WscRtpSessionConfig,
     },
     dart_types::{StreamEvent, StreamState},
-    utils::{invoke_on_platform_main_thread, LogErr},
+    utils::invoke_on_platform_main_thread,
 };
 
-use media_server_api_models::{WscRtpClientMessage, WscRtpServerMessage};
+use media_server_api_models::{
+    SeekRequest, SessionMode, SessionModeResponse, SpeedRequest, WscRtpClientMessage,
+    WscRtpServerMessage,
+};
 
 const UDP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 const PING_INTERVAL: Duration = Duration::from_secs(2);
@@ -122,14 +123,19 @@ impl WscRtpSession {
                 .ok_or_else(|| anyhow::anyhow!("WSC-RTP websocket closed before SDP"))?
                 .context("WSC-RTP websocket error during handshake")?;
             if let Message::Text(text) = msg {
-                if let Ok(parsed) =
-                    serde_json::from_str::<media_server_api_models::WscRtpServerMessage>(&text)
-                {
+                if let Ok(parsed) = serde_json::from_str::<WscRtpServerMessage>(&text) {
                     match parsed {
                         WscRtpServerMessage::Init {
                             session_id: token,
                             holepunch_port,
-                        } => init_message = Some((token, holepunch_port)),
+                            ..
+                        } => {
+                            info!(
+                                "WSC-RTP Init: session={}, holepunch_port={}",
+                                token, holepunch_port
+                            );
+                            init_message = Some((token, holepunch_port));
+                        }
                         WscRtpServerMessage::Sdp { sdp } => initial_sdp = Some(sdp),
                         _ => {}
                     }
@@ -175,20 +181,22 @@ impl WscRtpSession {
 
     // ─── HTTP control methods (callable from any thread) ─────────────
 
-    pub async fn seek(&self, timestamp_ms: i64) -> Result<()> {
+    pub async fn seek(&self, timestamp_ms: u64) -> Result<()> {
         self.send_control_request(
             "seek",
-            Some(serde_json::json!({ "timestamp": timestamp_ms })),
+            SeekRequest {
+                timestamp: timestamp_ms,
+            },
         )
         .await
     }
 
     pub async fn go_live(&self) -> Result<()> {
-        self.send_control_request("live", None).await
+        self.send_control_request("live", ()).await
     }
 
     pub async fn set_speed(&self, speed: f64) -> Result<()> {
-        self.send_control_request("speed", Some(serde_json::json!({ "speed": speed })))
+        self.send_control_request("speed", SpeedRequest { speed })
             .await
     }
 
@@ -567,14 +575,21 @@ impl WscRtpSession {
 
     fn handle_server_message(&self, message: WscRtpServerMessage) {
         match message {
-            WscRtpServerMessage::Init { .. } => {}
+            WscRtpServerMessage::Init {
+                session_id,
+                holepunch_port,
+                ..
+            } => {
+                info!(
+                    "WSC-RTP session {} initialized, holepunch_port={}",
+                    session_id, holepunch_port
+                );
+            }
             WscRtpServerMessage::Sdp { .. } => {}
             WscRtpServerMessage::SessionMode(mode) => {
                 let (is_live, current_time_ms) = match mode {
-                    media_server_api_models::SessionMode::Live => (true, 0),
-                    media_server_api_models::SessionMode::Dvr { timestamp } => {
-                        (false, timestamp as i64)
-                    }
+                    SessionMode::Live => (true, 0),
+                    SessionMode::Dvr { timestamp } => (false, timestamp as i64),
                 };
                 self.session_common
                     .send_event_msg(StreamEvent::WscRtpSessionMode {
@@ -597,7 +612,7 @@ impl WscRtpSession {
     async fn send_control_request(
         &self,
         endpoint: &str,
-        body: Option<serde_json::Value>,
+        body: impl serde::Serialize,
     ) -> Result<()> {
         let session_id =
             self.active_session_id.read().clone().ok_or_else(|| {
@@ -606,22 +621,24 @@ impl WscRtpSession {
 
         let mut url = self.media_server_http_url.clone();
         url.set_path(&format!(
-            "/streams/{}/wsc-rtp/{}/{}",
-            self.source_id, session_id, endpoint
+            "/client-session-control/{}/{}",
+            session_id, endpoint
         ));
 
-        let mut req = self.http_client.post(url.as_str());
-        if let Some(body) = body {
-            req = req.json(&body);
-        }
+        let response = self
+            .http_client
+            .post(url.as_str())
+            .json(&body)
+            .send()
+            .await
+            .context("WSC-RTP control request failed")?;
 
-        let response = req.send().await.context("WSC-RTP control request failed")?;
         let status = response.status();
         if !status.is_success() {
             anyhow::bail!("WSC-RTP control request failed with status: {}", status);
         }
 
-        let mode: media_server_api_models::SessionModeResponse = response
+        let mode: SessionModeResponse = response
             .json()
             .await
             .context("parsing WSC-RTP control response")?;
@@ -643,7 +660,7 @@ enum ExitReason {
 
 #[async_trait]
 impl crate::core::session::VideoSession for WscRtpSession {
-    async fn seek(&self, ts: i64) -> anyhow::Result<()> {
+    async fn seek(&self, ts: u64) -> anyhow::Result<()> {
         Self::seek(&self, ts).await
     }
     async fn go_to_live_stream(&self) -> anyhow::Result<()> {

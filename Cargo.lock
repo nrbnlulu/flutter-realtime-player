@@ -1733,9 +1733,10 @@ dependencies = [
 [[package]]
 name = "media-server-api-models"
 version = "0.1.0"
-source = "git+https://github.com/nrbnlulu/media-server.git#8b3793b6e0531c74a05f8dbbe9bda52ddc741c94"
+source = "git+https://github.com/nrbnlulu/media-server.git?rev=3a29eda075f15d240f829fe0329645545055b2c3#3a29eda075f15d240f829fe0329645545055b2c3"
 dependencies = [
  "serde",
+ "url",
  "utoipa",
  "uuid",
 ]
@@ -3150,6 +3151,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]

@@ -120,7 +120,7 @@ pub fn destroy_stream_session(session_id: i64) {
     }
 }
 
-pub async fn seek_session(session_id: i64, ts: i64) -> anyhow::Result<()> {
+pub async fn seek_session(session_id: i64, ts: u64) -> anyhow::Result<()> {
     let session = get_session(session_id);
     if let Some(session) = session {
         session.seek(ts).await?;
@@ -135,9 +135,9 @@ pub async fn wsc_rtp_live_session(session_id: i64) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()> {
+pub async fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()> {
     if let Some(session) = get_session(session_id) {
-        session.set_speed(speed);
+        session.set_speed(speed).await?;
     }
     Ok(())
 }

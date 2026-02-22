@@ -789,7 +789,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                   onChangeEnd: (value) async {
                     if (_controller != null) {
                       final result = await _controller!.seekToTimestampMs(
-                        value.toInt(),
+                        BigInt.from(value),
                       );
                       if (result.isErr()) {
                         final error = result.unwrapErr();
@@ -996,7 +996,7 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                   Navigator.pop(context);
                   if (_controller != null) {
                     final result = await _controller!.seekToTimestampMs(
-                      dt.millisecondsSinceEpoch,
+                      BigInt.from(dt.millisecondsSinceEpoch),
                     );
                     if (result.isErr()) {
                       final error = result.unwrapErr();

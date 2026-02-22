@@ -118,7 +118,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiSimpleSeekToTimestamp({
     required PlatformInt64 sessionId,
-    required PlatformInt64 ts,
+    required BigInt ts,
   });
 
   Future<void> crateApiSimpleSetSpeed({
@@ -456,14 +456,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Future<void> crateApiSimpleSeekToTimestamp({
     required PlatformInt64 sessionId,
-    required PlatformInt64 ts,
+    required BigInt ts,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(sessionId, serializer);
-          sse_encode_i_64(ts, serializer);
+          sse_encode_u_64(ts, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,

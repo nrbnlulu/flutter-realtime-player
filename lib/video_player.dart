@@ -139,7 +139,7 @@ class VideoController {
   }
 
   Future<oxidized.Result<void, AnyhowException>> seekToTimestampMs(
-    int tsMs,
+    BigInt tsMs,
   ) async {
     try {
       await rlib.seekToTimestamp(sessionId: sessionId, ts: tsMs);

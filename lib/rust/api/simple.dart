@@ -45,7 +45,7 @@ Stream<StreamState> createWscRtpPlayable({
 
 Future<void> seekToTimestamp({
   required PlatformInt64 sessionId,
-  required PlatformInt64 ts,
+  required BigInt ts,
 }) => RustLib.instance.api.crateApiSimpleSeekToTimestamp(
   sessionId: sessionId,
   ts: ts,

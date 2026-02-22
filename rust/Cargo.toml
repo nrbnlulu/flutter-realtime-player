@@ -39,7 +39,7 @@ gst-video = {package = "gstreamer-video", version = "0.24.4"}
 log = "0.4"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-media-server-api-models = { version = "0.1.0", git = "https://github.com/nrbnlulu/media-server.git" }
+media-server-api-models = { version = "0.1.0", git = "https://github.com/nrbnlulu/media-server.git", rev="3a29eda075f15d240f829fe0329645545055b2c3"}
 sdp = "0.17.1"
 parking_lot = "0.12.5"
 async-trait = "0.1.89"

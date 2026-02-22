@@ -414,7 +414,7 @@ fn wire__crate__api__simple__seek_to_timestamp_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_session_id = <i64>::sse_decode(&mut deserializer);
-            let api_ts = <i64>::sse_decode(&mut deserializer);
+            let api_ts = <u64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
@@ -435,7 +435,7 @@ fn wire__crate__api__simple__set_speed_impl(
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "set_speed",
             port: Some(port_),
@@ -454,12 +454,14 @@ fn wire__crate__api__simple__set_speed_impl(
             let api_session_id = <i64>::sse_decode(&mut deserializer);
             let api_speed = <f64>::sse_decode(&mut deserializer);
             deserializer.end();
-            move |context| {
+            move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
-                        let output_ok = crate::api::simple::set_speed(api_session_id, api_speed)?;
+                    (move || async move {
+                        let output_ok =
+                            crate::api::simple::set_speed(api_session_id, api_speed).await?;
                         Ok(output_ok)
-                    })(),
+                    })()
+                    .await,
                 )
             }
         },

@@ -149,7 +149,7 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
     final current =
         _sessionMode?.currentTimeMs ?? DateTime.now().millisecondsSinceEpoch;
     final target = current + (seconds * 1000);
-    final result = await controller.seekToTimestampMs(target);
+    final result = await controller.seekToTimestampMs(BigInt.from(target));
     if (result.isErr()) {
       final error = result.unwrapErr();
       debugPrint('Seek error: ${error.message}');
@@ -249,7 +249,7 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
     final controller = _controller;
     if (controller == null) return;
     final result = await controller.seekToTimestampMs(
-      dt.millisecondsSinceEpoch,
+      BigInt.from(dt.millisecondsSinceEpoch),
     );
     if (result.isErr()) {
       final error = result.unwrapErr();
