@@ -37,12 +37,10 @@ Future<void> seekToTimestamp({
   required PlatformInt64 sessionId,
   required BigInt ts,
 }) async {
-  debugPrint('[RustAPI] seekToTimestamp called: sessionId=$sessionId, ts=$ts');
   await RustLib.instance.api.crateApiSimpleSeekToTimestamp(
     sessionId: sessionId,
     ts: ts,
   );
-  debugPrint('[RustAPI] seekToTimestamp completed');
 }
 
 Future<void> wscRtpGoLive({required PlatformInt64 sessionId}) =>
