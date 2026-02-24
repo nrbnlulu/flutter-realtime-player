@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use flume::{Receiver, Selector, Sender};
 use irondash_texture::Texture;
-use log::{debug, info, warn};
+use log::{debug, warn};
 
 use crate::{
     core::{
@@ -207,6 +207,6 @@ fn finalize_texture(session_id: i64, sendable_texture: SharedSendableTexture) {
     }
     invoke_on_platform_main_thread(move || {
         drop(sendable_texture);
-        info!("Destroyed stream session for session id: {}", session_id);
+        log::debug!("Destroyed stream session for session id: {}", session_id);
     });
 }

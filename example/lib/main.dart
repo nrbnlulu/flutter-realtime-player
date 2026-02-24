@@ -58,6 +58,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       isStreaming: false,
       autoRestart: false,
       useWscRtp: false,
+      forceWebsocketTransport: false,
     ),
   ];
 
@@ -94,6 +95,7 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
           isStreaming: false,
           autoRestart: false,
           useWscRtp: false,
+          forceWebsocketTransport: false,
         ),
       );
     });
@@ -209,6 +211,7 @@ class _StreamConfig {
     required this.isStreaming,
     required this.autoRestart,
     required this.useWscRtp,
+    this.forceWebsocketTransport = false,
   });
 }
 

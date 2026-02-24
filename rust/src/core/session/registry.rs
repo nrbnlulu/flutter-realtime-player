@@ -61,7 +61,7 @@ pub async fn stream_alive_tester_task() {
         }
 
         if !closed_sessions.is_empty() {
-            info!(
+            log::warn!(
                 "Closing sessions that was not pinged recently: {:?}",
                 closed_sessions
             );
@@ -81,7 +81,7 @@ pub fn mark_session_alive(session_id: i64) {
 }
 
 pub fn destroy_engine_streams(engine_handle: i64) {
-    info!("Destroying streams for engine handle: {}", engine_handle);
+    log::info!("Destroying streams for engine handle: {}", engine_handle);
     let holders = get_all_sessions()
         .into_iter()
         .filter_map(|session_id| get_session(session_id).map(|holder| (session_id, holder)))
@@ -97,7 +97,7 @@ pub fn destroy_engine_streams(engine_handle: i64) {
         })
         .collect::<Vec<_>>();
     for texture_id in &to_remove {
-        info!("Destroying stream with texture id: {}", texture_id);
+        log::debug!("Destroying stream with texture id: {}", texture_id);
     }
     for texture_id in &to_remove {
         destroy_stream_session(*texture_id);
@@ -105,18 +105,21 @@ pub fn destroy_engine_streams(engine_handle: i64) {
 }
 
 pub fn destroy_stream_session(session_id: i64) {
-    info!("Destroying stream session : {}", session_id);
+    log::debug!("Destroying stream session : {}", session_id);
     let active_sessions = get_all_sessions();
     debug!("Active sessions at destroy: {:?}", active_sessions);
     let session = remove_session(session_id);
     if let Some(holder) = session {
-        info!(
+        log::debug!(
             "Session {} removed from cache, destroying in a new thread",
             session_id
         );
         holder.terminate();
     } else {
-        info!("No stream session found for session id: {}", session_id);
+        info!(
+            "No stream session found for session id: {}, can't remove",
+            session_id
+        );
     }
 }
 
@@ -128,9 +131,9 @@ pub async fn seek_session(session_id: i64, ts: u64) -> anyhow::Result<()> {
     let session = get_session(session_id);
     match session {
         Some(session) => {
-            info!("Session found, seeking to {}", ts);
+            log::trace!("Session found, seeking to {}", ts);
             session.seek(ts).await?;
-            info!("Seek completed successfully for session {}", session_id);
+            log::trace!("Seek completed successfully for session {}", session_id);
             Ok(())
         }
         None => {
@@ -141,10 +144,10 @@ pub async fn seek_session(session_id: i64, ts: u64) -> anyhow::Result<()> {
 }
 
 pub async fn wsc_rtp_live_session(session_id: i64) -> anyhow::Result<()> {
-    info!("wsc_rtp_live_session called for session_id={}", session_id);
+    log::trace!("wsc_rtp_live_session called for session_id={}", session_id);
     if let Some(session) = get_session(session_id) {
         session.go_to_live_stream().await?;
-        info!("Go live completed successfully for session {}", session_id);
+        log::trace!("Go live completed successfully for session {}", session_id);
         Ok(())
     } else {
         error!("Session {} not found for go_live operation", session_id);
@@ -153,13 +156,14 @@ pub async fn wsc_rtp_live_session(session_id: i64) -> anyhow::Result<()> {
 }
 
 pub async fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()> {
-    info!(
+    log::trace!(
         "set_speed_session called for session_id={}, speed={}",
-        session_id, speed
+        session_id,
+        speed
     );
     if let Some(session) = get_session(session_id) {
         session.set_speed(speed).await?;
-        info!(
+        log::trace!(
             "Set speed completed successfully for session {}",
             session_id
         );

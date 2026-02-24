@@ -16,7 +16,6 @@ class VideoController {
   final rx.BehaviorSubject<StreamState> stateBroadcast;
   final StreamSubscription<StreamState> _originalSub;
   bool _running = false;
-  int? _engineHandle;
 
   VideoController(
     StreamSubscription<StreamState> originalSub, {
@@ -55,7 +54,6 @@ class VideoController {
         stateBroadcast: bs,
         config: config,
       );
-      ret._engineHandle = handle;
       ret._running = true;
 
       Future.microtask(() async {
@@ -121,7 +119,7 @@ class VideoPlayer extends StatefulWidget {
   });
 
   factory VideoPlayer.fromController({
-    GlobalKey? key,
+    Key? key,
     required VideoController controller,
     bool autoDispose = true,
     Widget? child,
@@ -135,7 +133,7 @@ class VideoPlayer extends StatefulWidget {
   }
 
   static Widget fromConfig({
-    GlobalKey? key,
+    Key? key,
     required VideoConfig config,
     bool autoDispose = true,
     Widget? child,
@@ -150,10 +148,10 @@ class VideoPlayer extends StatefulWidget {
         if (err != null) {
           return Text(err);
         }
-        return _VideoPlayerWithSize(
+        return VideoPlayer._(
+          key: key,
           controller: controller!,
           autoDispose: autoDispose,
-          child: child,
         );
       },
     );
@@ -163,30 +161,13 @@ class VideoPlayer extends StatefulWidget {
   State<VideoPlayer> createState() => _VideoPlayerState();
 }
 
-// New stateful widget that handles size changes
-class _VideoPlayerWithSize extends StatefulWidget {
-  final VideoController controller;
-  final Widget? child;
-  final bool autoDispose;
-
-  const _VideoPlayerWithSize({
-    required this.controller,
-    this.child,
-    this.autoDispose = true,
-  });
-
-  @override
-  State<_VideoPlayerWithSize> createState() => _VideoPlayerWithSizeState();
-}
-
-class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
+class _VideoPlayerState extends State<VideoPlayer> {
   StreamState? currentState;
   StreamSubscription<StreamState>? streamSubscription;
 
   @override
   void initState() {
     super.initState();
-
     streamSubscription = widget.controller.stateBroadcast.listen((state) {
       setState(() {
         currentState = state;
@@ -194,7 +175,7 @@ class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
     });
   }
 
-  Widget loadingWidget(String message) {
+  Widget _loadingWidget(String message) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -207,44 +188,27 @@ class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (currentState == null) {
-          return loadingWidget('initializing...');
-        }
-        switch (currentState!) {
-          case StreamState_Loading():
-            return loadingWidget('initializing stream...');
-          case StreamState_Error(field0: final message):
-            return Center(
-              child: Text(
-                'Error: $message',
-                style: const TextStyle(color: Colors.red, fontSize: 16),
-              ),
-            );
-          case StreamState_Playing(textureId: final textureId):
-            return Stack(
-              children: [
-                Texture(textureId: textureId),
-                widget.child ?? const SizedBox(),
-              ],
-            );
-          case StreamState_Stopped():
-            return Center(
-              child: Text(
-                'Video stopped',
-                style: const TextStyle(fontSize: 16),
-              ),
-            );
-        }
-      },
-    );
+    if (currentState == null) {
+      return _loadingWidget('initializing...');
+    }
+    return switch (currentState!) {
+      StreamState_Loading() => _loadingWidget('initializing stream...'),
+      StreamState_Error(field0: final message) => Center(
+        child: Text(
+          'Error: $message',
+          style: const TextStyle(color: Colors.red, fontSize: 16),
+        ),
+      ),
+      StreamState_Playing(:final textureId) => Texture(textureId: textureId),
+      StreamState_Stopped() => const Center(
+        child: Text('Video stopped', style: TextStyle(fontSize: 16)),
+      ),
+    };
   }
 
   @override
   void dispose() {
     super.dispose();
-
     Future.microtask(() async {
       streamSubscription?.cancel();
       if (widget.autoDispose) {
@@ -264,16 +228,5 @@ class _VideoPlayerWithSizeState extends State<_VideoPlayerWithSize> {
         }
       }
     });
-  }
-}
-
-class _VideoPlayerState extends State<VideoPlayer> {
-  @override
-  Widget build(BuildContext context) {
-    return _VideoPlayerWithSize(
-      controller: widget.controller,
-      autoDispose: widget.autoDispose,
-      child: widget.child,
-    );
   }
 }

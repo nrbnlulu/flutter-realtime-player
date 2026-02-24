@@ -13,7 +13,7 @@ use futures_util::{
 use gst::prelude::*;
 use gst_app::AppSrc;
 use irondash_texture::Texture;
-use log::{error, info, warn};
+use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
 use tokio::net::{TcpStream, UdpSocket};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
@@ -105,7 +105,7 @@ impl WscRtpSession {
             &self.source_id,
             self.config.force_websocket_transport,
         )?;
-        info!("WSC-RTP connecting to {}", wsc_rtp_url);
+        log::debug!("WSC-RTP connecting to {}", wsc_rtp_url);
 
         let (ws, _) = connect_async(wsc_rtp_url.to_string())
             .await
@@ -130,9 +130,10 @@ impl WscRtpSession {
                             holepunch_port,
                             ..
                         } => {
-                            info!(
+                            log::debug!(
                                 "WSC-RTP Init: session={}, holepunch_port={}",
-                                token, holepunch_port
+                                token,
+                                holepunch_port
                             );
                             init_message = Some((token, holepunch_port));
                         }
@@ -163,7 +164,7 @@ impl WscRtpSession {
         let (encoding, pt, clock_rate, sprop) = parse_rtp_caps_from_sdp(&initial_sdp)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse RTP caps from SDP"))?;
         let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop);
-        info!("WSC-RTP GStreamer pipeline: {}", pipeline_str);
+        log::trace!("WSC-RTP GStreamer pipeline: {}", pipeline_str);
 
         let pipeline = gst::parse::launch(&pipeline_str)
             .context("GStreamer pipeline launch")?
@@ -278,7 +279,7 @@ impl WscRtpSession {
                                 )));
 
                             if !self.config.auto_restart {
-                                info!("WSC-RTP: auto_restart disabled, stopping");
+                                log::debug!("WSC-RTP: auto_restart disabled, stopping");
                                 output = Err(e);
                                 break;
                             }
@@ -292,13 +293,13 @@ impl WscRtpSession {
                         .send_event_msg(StreamEvent::Error(format!("Connection failed: {}", e)));
 
                     if shutdown_rx.try_recv().is_ok() {
-                        info!("WSC-RTP: shutdown requested during connection");
+                        log::debug!("WSC-RTP: shutdown requested during connection");
                         output = Err(e);
                         break;
                     }
 
                     if !self.config.auto_restart {
-                        info!("WSC-RTP: auto_restart disabled, stopping");
+                        log::debug!("WSC-RTP: auto_restart disabled, stopping");
                         output = Err(e);
                         break;
                     }
@@ -314,7 +315,7 @@ impl WscRtpSession {
                         _ = tokio::time::sleep(backoff) => {}
                         cmd = shutdown_rx.recv() => {
                             if cmd.is_some() {
-                                info!("WSC-RTP: shutdown requested during backoff");
+                                log::debug!("WSC-RTP: shutdown requested during backoff");
                                 output = Err(e);
                                 break;
                             }
@@ -491,7 +492,7 @@ impl WscRtpSession {
                 // ── Session commands (shutdown only) ──────────────────
                 cmd = shutdown_rx.recv() => {
                     if let Some(_cmd) = cmd {
-                        info!("WSC-RTP: shutdown command received");
+                        log::debug!("WSC-RTP: shutdown command received");
                         // Cleanup before exit
                         if let Some(udp_rcv_task) = udp_packet_rcv_task {
                             udp_rcv_task.abort();
@@ -580,9 +581,10 @@ impl WscRtpSession {
                 holepunch_port,
                 ..
             } => {
-                info!(
+                log::debug!(
                     "WSC-RTP session {} initialized, holepunch_port={}",
-                    session_id, holepunch_port
+                    session_id,
+                    holepunch_port
                 );
             }
             WscRtpServerMessage::Sdp { .. } => {}
@@ -602,7 +604,7 @@ impl WscRtpSession {
                     .send_event_msg(StreamEvent::Error(message));
             }
             WscRtpServerMessage::FallingBackRtpToWs => {
-                info!("WSC-RTP: server falling back to WebSocket for RTP delivery");
+                log::debug!("WSC-RTP: server falling back to WebSocket for RTP delivery");
             }
             WscRtpServerMessage::Pong => {}
         }
@@ -744,7 +746,7 @@ async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> a
                 session_id
             );
             udp_sock.send(ack.as_bytes()).await?;
-            info!("WSC-RTP: UDP confirmed, starting UDP receive loop");
+            log::debug!("WSC-RTP: UDP confirmed, starting UDP receive loop");
         } else {
             bail!("WSC-RTP: unexpected UDP payload {:?}", payload);
         }
