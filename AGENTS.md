@@ -11,7 +11,7 @@ This is a library that focuses on realtime streams support for flutter using ffm
 
 ### commands
 - most commands are in `./Taskfile.yml`
-- `fvm exec flutter_rust_bridge_codegen generate` - generates rust bindings to dart, use this when you changed the api.
+- `task codegen` - generates rust bindings to dart, use this when you changed the api.
 ## Agents guidelines
 - always write plans into PLANS/<your-plan.md>
 

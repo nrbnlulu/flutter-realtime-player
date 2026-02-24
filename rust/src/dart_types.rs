@@ -8,6 +8,12 @@ pub enum StreamState {
 }
 
 #[derive(Debug, Clone)]
+pub enum WscRtpMode {
+    Live,
+    Dvr { current_time_ms: i64, speed: f64 },
+}
+
+#[derive(Debug, Clone)]
 pub enum StreamEvent {
     Error(String),
     CurrentTime(i64),
@@ -15,10 +21,6 @@ pub enum StreamEvent {
         width: u64,
         height: u64,
     },
-    WscRtpSessionMode {
-        is_live: bool,
-        current_time_ms: i64,
-        speed: f64,
-    },
+    WscRtpSessionMode(WscRtpMode),
     WscRtpStreamState(String),
 }

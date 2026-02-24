@@ -1,12 +1,11 @@
-import 'package:flutter/material.dart';
-
-import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
-import 'package:flutter_realtime_player/rust/core/types.dart'
-    show WscRtpSessionConfig, VideoConfig;
-import 'package:flutter_realtime_player/video_player.dart';
-import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 import 'dart:async';
-import 'package:flutter_realtime_player/rust/dart_types.dart';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
+import 'package:flutter_realtime_player/rust/core/types.dart'
+    show WscRtpSessionConfig, VideoConfig, VideoConfig_WscRtp;
+import 'package:flutter_realtime_player/video_player.dart';
+import 'wsc_rtp_player.dart';
 import 'wsc_rtp_seek_demo.dart';
 
 Future<void> main() async {
@@ -281,15 +280,14 @@ class _StreamGridItemState extends State<_StreamGridItem>
             // Full-screen video player
             _VideoPlayerWithControls(
               key: _playerKey,
-              url: stream.urlController.text,
-              autoRestart: stream.autoRestart,
-              ffmpegOptions: widget.collectFfmpegOptions(
-                stream.ffmpegOptionControllers,
+              config: VideoConfig.wscRtp(
+                WscRtpSessionConfig(
+                  baseUrl: stream.wscRtpBaseUrlController.text,
+                  sourceId: stream.wscRtpSourceIdController.text,
+                  forceWebsocketTransport: stream.forceWebsocketTransport,
+                  autoRestart: stream.autoRestart,
+                ),
               ),
-              useWscRtp: stream.useWscRtp,
-              wscRtpBaseUrl: stream.wscRtpBaseUrlController.text,
-              wscRtpSourceId: stream.wscRtpSourceIdController.text,
-              forceWebsocketTransport: stream.forceWebsocketTransport,
             ),
             // Overlay controls
             Positioned(
@@ -464,16 +462,15 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     // Video player
                     stream.isStreaming
                         ? _VideoPlayerWithControls(
-                          url: stream.urlController.text,
-                          autoRestart: stream.autoRestart,
-                          ffmpegOptions: widget.collectFfmpegOptions(
-                            stream.ffmpegOptionControllers,
+                          config: VideoConfig.wscRtp(
+                            WscRtpSessionConfig(
+                              baseUrl: stream.wscRtpBaseUrlController.text,
+                              sourceId: stream.wscRtpSourceIdController.text,
+                              forceWebsocketTransport:
+                                  stream.forceWebsocketTransport,
+                              autoRestart: stream.autoRestart,
+                            ),
                           ),
-                          useWscRtp: stream.useWscRtp,
-                          wscRtpBaseUrl: stream.wscRtpBaseUrlController.text,
-                          wscRtpSourceId: stream.wscRtpSourceIdController.text,
-                          forceWebsocketTransport:
-                              stream.forceWebsocketTransport,
                         )
                         : const Center(
                           child: Text(
@@ -556,24 +553,9 @@ class _StreamGridItemState extends State<_StreamGridItem>
 }
 
 class _VideoPlayerWithControls extends StatefulWidget {
-  final String url;
-  final bool autoRestart;
-  final Map<String, String>? ffmpegOptions;
-  final bool useWscRtp;
-  final String wscRtpBaseUrl;
-  final String wscRtpSourceId;
-  final bool forceWebsocketTransport;
+  final VideoConfig config;
 
-  const _VideoPlayerWithControls({
-    super.key,
-    required this.url,
-    required this.autoRestart,
-    this.ffmpegOptions,
-    required this.useWscRtp,
-    required this.wscRtpBaseUrl,
-    required this.wscRtpSourceId,
-    this.forceWebsocketTransport = false,
-  });
+  const _VideoPlayerWithControls({super.key, required this.config});
 
   @override
   State<_VideoPlayerWithControls> createState() =>
@@ -581,556 +563,15 @@ class _VideoPlayerWithControls extends StatefulWidget {
 }
 
 class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
-  VideoController? _controller;
-  bool _isLoading = true;
-  Duration _position = Duration.zero;
-  final Duration _duration = Duration.zero;
-  Timer? _positionTimer;
-  bool _isSeeking = false;
-  bool _isSeekable = false;
-  double _currentStreamTime = 0.0; // Stream time in seconds
-  int?
-  _streamStartTime; // Unix timestamp of stream start time (for HLS with EXT-X-PROGRAM-DATE-TIME)
-  final TextEditingController _iso8601Controller = TextEditingController();
-  bool _isLive = true; // Track live/playback mode for WSC-RTP
-
-  @override
-  void initState() {
-    super.initState();
-    // Initialize with current time, will be updated when we have stream time
-    _iso8601Controller.text = DateTime.now().toIso8601String();
-    _initializeVideo();
-  }
-
+  // Used by _StreamGridItemState to stop playback before toggling.
   Future<void> stop() async {
-    await _disposeController();
-  }
-
-  Future<void> _disposeController() async {
-    _positionTimer?.cancel();
-    _positionTimer = null;
-    final controller = _controller;
-    _controller = null;
-    debugPrint("flutter example: disposing session ${controller?.sessionId}");
-    if (controller != null) {
-      await controller.dispose();
-    }
-  }
-
-  Future<void> _initializeVideo() async {
-    final result = await VideoController.create(
-      config:
-          widget.useWscRtp
-              ? VideoConfig.wscRtp(
-                WscRtpSessionConfig(
-                  autoRestart: true,
-                  baseUrl: widget.wscRtpBaseUrl,
-                  sourceId: widget.wscRtpSourceId,
-                  forceWebsocketTransport: widget.forceWebsocketTransport,
-                ),
-              )
-              : throw UnimplementedError('Raw URL playback not yet supported'),
-    );
-
-    setState(() {
-      _controller = result.$1;
-      _isLoading = false;
-    });
-
-    if (_controller != null) {
-      _controller!.stateBroadcast.listen((state) {
-        if (state is StreamState_Playing) {
-          setState(() {
-            _isSeekable = state.seekable;
-          });
-        }
-      });
-
-      // Listen for WSC-RTP session mode changes (live/playback)
-      if (widget.useWscRtp) {
-        rlib
-            .registerToStreamEventsSink(sessionId: _controller!.sessionId)
-            .listen((event) {
-              if (event is StreamEvent_WscRtpSessionMode) {
-                setState(() {
-                  _isLive = event.isLive;
-                  _currentStreamTime = event.currentTimeMs / 1000.0;
-                });
-              }
-            });
-
-        // Start a timer to update stream time in real-time for live streams
-        _positionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          if (_isLive && mounted) {
-            setState(() {
-              _currentStreamTime += 1.0;
-            });
-          }
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _disposeController();
-    super.dispose();
+    // WscRtpPlayerWidget manages its own lifecycle; nothing to do here.
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_controller == null) {
-      return const Center(child: Text('Failed to load video'));
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: StreamBuilder<StreamEvent>(
-            stream:
-                _controller != null
-                    ? rlib.registerToStreamEventsSink(
-                      sessionId: _controller!.sessionId,
-                    )
-                    : null,
-            builder: (context, snapshot) {
-              double aspectRatio = 16 / 9; // Default aspect ratio
-
-              if (snapshot.hasData) {
-                final event = snapshot.data!;
-                if (event is StreamEvent_OriginVideoSize) {
-                  if (event.height > BigInt.zero) {
-                    aspectRatio =
-                        event.width.toDouble() / event.height.toDouble();
-                  }
-                }
-              }
-
-              return AspectRatio(
-                aspectRatio: aspectRatio,
-                child: VideoPlayer.fromController(
-                  controller: _controller!,
-                  autoDispose:
-                      false, // Don't auto dispose since we're managing it
-                ),
-              );
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: Column(
-            children: [
-              // Time display
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // LIVE/DVR badge for WSC-RTP streams
-                          if (widget.useWscRtp)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              margin: const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
-                                color: _isLive ? Colors.red : Colors.blue,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                _isLive ? 'LIVE' : 'DVR',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                          Text(
-                            'Position: ${_formatDuration(Duration(seconds: _currentStreamTime.floor()))}',
-                            style: const TextStyle(
-                              color: Colors.blue,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Show absolute time when stream has EXT-X-PROGRAM-DATE-TIME
-                      if (_streamStartTime != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Stream Start: ${_formatDateTime(DateTime.fromMillisecondsSinceEpoch(_streamStartTime! * 1000, isUtc: true))}',
-                          style: const TextStyle(
-                            color: Colors.green,
-                            fontSize: 10,
-                          ),
-                        ),
-                        Text(
-                          'Current Time: ${_formatDateTime(DateTime.fromMillisecondsSinceEpoch((_streamStartTime! + _currentStreamTime.floor()) * 1000, isUtc: true))}',
-                          style: const TextStyle(
-                            color: Colors.green,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (_isSeekable)
-                    const Text(
-                      '✓ Seekable',
-                      style: TextStyle(color: Colors.green, fontSize: 12),
-                    )
-                  else
-                    const Text(
-                      '✗ Not Seekable',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                ],
-              ),
-              // Seek bar - show for seekable streams with known duration
-              if (_isSeekable && _duration.inMilliseconds > 0) ...[
-                const SizedBox(height: 8),
-                Slider(
-                  value:
-                      _isSeeking
-                          ? _position.inMilliseconds.toDouble()
-                          : _position.inMilliseconds.toDouble(),
-                  onChanged: (value) {
-                    setState(() {
-                      _isSeeking = true;
-                      _position = Duration(milliseconds: value.round());
-                    });
-                  },
-                  onChangeEnd: (value) async {
-                    if (_controller != null) {
-                      final result = await _controller!.seekToTimestampMs(
-                        BigInt.from(value),
-                      );
-                      if (result.isErr()) {
-                        final error = result.unwrapErr();
-                        debugPrint('Seek error: ${error.message}');
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: ExpansionTile(
-                                title: const Text(
-                                  'Seek failed',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                children: [
-                                  SelectableText(
-                                    error.message,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              backgroundColor: Colors.red,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      }
-                    }
-                    setState(() {
-                      _isSeeking = false;
-                      _position = Duration(milliseconds: value.round());
-                    });
-                  },
-                  min: 0.0,
-                  max: _duration.inMilliseconds.toDouble(),
-                  label: _formatDuration(_position),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '0:00',
-                      style: const TextStyle(color: Colors.grey, fontSize: 10),
-                    ),
-                    Text(
-                      _formatDuration(_duration),
-                      style: const TextStyle(color: Colors.grey, fontSize: 10),
-                    ),
-                  ],
-                ),
-              ],
-              // Timeline slider for WSC-RTP streams (past hour)
-              if (widget.useWscRtp && _isSeekable) ...[
-                const SizedBox(height: 8),
-                // Timeline showing past hour
-                Row(
-                  children: [
-                    const Text(
-                      '-60min',
-                      style: TextStyle(color: Colors.grey, fontSize: 10),
-                    ),
-                    Expanded(
-                      child: Slider(
-                        value: _currentStreamTime.clamp(0, 3600),
-                        min: 0,
-                        max: 3600,
-                        onChanged: (value) async {
-                          if (_controller != null && _streamStartTime != null) {
-                            // Seek to the selected time (value is seconds ago from now)
-                            final targetMs =
-                                (_streamStartTime! +
-                                    (_currentStreamTime.floor() -
-                                        value.floor())) *
-                                1000;
-                            final result = await _controller!.seekToTimestampMs(
-                              BigInt.from(targetMs),
-                            );
-                            if (result.isErr()) {
-                              final error = result.unwrapErr();
-                              debugPrint('Seek error: ${error.message}');
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: ExpansionTile(
-                                      title: const Text(
-                                        'Seek failed',
-                                        style: TextStyle(color: Colors.white),
-                                      ),
-                                      children: [
-                                        SelectableText(
-                                          error.message,
-                                          style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    backgroundColor: Colors.red,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              }
-                            }
-                          }
-                        },
-                        label: '${(_currentStreamTime / 60).floor()}min',
-                      ),
-                    ),
-                    const Text(
-                      'LIVE',
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                // Go Live button for WSC-RTP streams (shown when not at live)
-                if (!_isLive)
-                  Center(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.fiber_dvr, color: Colors.red),
-                      label: const Text('GO LIVE'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                      ),
-                      onPressed: () async {
-                        if (_controller != null) {
-                          final result = await _controller!.wscRtpGoLive();
-                          if (result.isErr()) {
-                            final error = result.unwrapErr();
-                            debugPrint('Go live error: ${error.message}');
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: ExpansionTile(
-                                    title: const Text(
-                                      'Go live failed',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                    children: [
-                                      SelectableText(
-                                        error.message,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  backgroundColor: Colors.red,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            }
-                          }
-                        }
-                      },
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showIso8601SeekDialog(BuildContext context) {
-    // Pre-populate with current stream time
-    final currentDateTime =
-        _streamStartTime != null && _currentStreamTime >= 0
-            ? DateTime.fromMillisecondsSinceEpoch(
-              (_streamStartTime! + _currentStreamTime.floor()) * 1000,
-              isUtc: true,
-            )
-            : DateTime.now().toUtc();
-
-    _iso8601Controller.text = currentDateTime.toIso8601String();
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Seek to Absolute Time'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Enter an ISO 8601 timestamp to seek to a specific absolute time in the stream:',
-                  style: TextStyle(fontSize: 12),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _iso8601Controller,
-                  decoration: const InputDecoration(
-                    labelText: 'ISO 8601 Timestamp',
-                    hintText: '2025-12-04T12:00:00Z',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        // Set to stream start
-                        if (_streamStartTime != null) {
-                          _iso8601Controller.text =
-                              DateTime.fromMillisecondsSinceEpoch(
-                                _streamStartTime! * 1000,
-                                isUtc: true,
-                              ).toIso8601String();
-                        }
-                      },
-                      child: const Text('Stream Start'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        // Set to current time
-                        if (_streamStartTime != null &&
-                            _currentStreamTime >= 0) {
-                          _iso8601Controller.text =
-                              DateTime.fromMillisecondsSinceEpoch(
-                                (_streamStartTime! +
-                                        _currentStreamTime.floor()) *
-                                    1000,
-                                isUtc: true,
-                              ).toIso8601String();
-                        }
-                      },
-                      child: const Text('Current'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  final timestamp = _iso8601Controller.text.trim();
-                  final dt = DateTime.tryParse(timestamp);
-                  if (dt == null) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Invalid timestamp format'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                    return;
-                  }
-                  Navigator.pop(context);
-                  if (_controller != null) {
-                    final result = await _controller!.seekToTimestampMs(
-                      BigInt.from(dt.millisecondsSinceEpoch),
-                    );
-                    if (result.isErr()) {
-                      final error = result.unwrapErr();
-                      debugPrint('Seek error: ${error.message}');
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: ExpansionTile(
-                              title: const Text(
-                                'Seek failed',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                              children: [
-                                SelectableText(
-                                  error.message,
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            backgroundColor: Colors.red,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    }
-                  }
-                },
-                child: const Text('Seek'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  String _formatDateTime(DateTime dt) {
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')} UTC';
-  }
-
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
-    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
-    return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
+    return switch (widget.config) {
+      VideoConfig_WscRtp(:final field0) => WscRtpPlayerWidget(config: field0),
+    };
   }
 }

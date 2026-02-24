@@ -128,13 +128,13 @@ return wscRtpStreamState(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  error,TResult Function( PlatformInt64 field0)?  currentTime,TResult Function( BigInt width,  BigInt height)?  originVideoSize,TResult Function( bool isLive,  PlatformInt64 currentTimeMs,  double speed)?  wscRtpSessionMode,TResult Function( String field0)?  wscRtpStreamState,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  error,TResult Function( PlatformInt64 field0)?  currentTime,TResult Function( BigInt width,  BigInt height)?  originVideoSize,TResult Function( WscRtpMode field0)?  wscRtpSessionMode,TResult Function( String field0)?  wscRtpStreamState,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case StreamEvent_Error() when error != null:
 return error(_that.field0);case StreamEvent_CurrentTime() when currentTime != null:
 return currentTime(_that.field0);case StreamEvent_OriginVideoSize() when originVideoSize != null:
 return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
-return wscRtpSessionMode(_that.isLive,_that.currentTimeMs,_that.speed);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
+return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
 return wscRtpStreamState(_that.field0);case _:
   return orElse();
 
@@ -153,13 +153,13 @@ return wscRtpStreamState(_that.field0);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  error,required TResult Function( PlatformInt64 field0)  currentTime,required TResult Function( BigInt width,  BigInt height)  originVideoSize,required TResult Function( bool isLive,  PlatformInt64 currentTimeMs,  double speed)  wscRtpSessionMode,required TResult Function( String field0)  wscRtpStreamState,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  error,required TResult Function( PlatformInt64 field0)  currentTime,required TResult Function( BigInt width,  BigInt height)  originVideoSize,required TResult Function( WscRtpMode field0)  wscRtpSessionMode,required TResult Function( String field0)  wscRtpStreamState,}) {final _that = this;
 switch (_that) {
 case StreamEvent_Error():
 return error(_that.field0);case StreamEvent_CurrentTime():
 return currentTime(_that.field0);case StreamEvent_OriginVideoSize():
 return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode():
-return wscRtpSessionMode(_that.isLive,_that.currentTimeMs,_that.speed);case StreamEvent_WscRtpStreamState():
+return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpStreamState():
 return wscRtpStreamState(_that.field0);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -174,13 +174,13 @@ return wscRtpStreamState(_that.field0);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  error,TResult? Function( PlatformInt64 field0)?  currentTime,TResult? Function( BigInt width,  BigInt height)?  originVideoSize,TResult? Function( bool isLive,  PlatformInt64 currentTimeMs,  double speed)?  wscRtpSessionMode,TResult? Function( String field0)?  wscRtpStreamState,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  error,TResult? Function( PlatformInt64 field0)?  currentTime,TResult? Function( BigInt width,  BigInt height)?  originVideoSize,TResult? Function( WscRtpMode field0)?  wscRtpSessionMode,TResult? Function( String field0)?  wscRtpStreamState,}) {final _that = this;
 switch (_that) {
 case StreamEvent_Error() when error != null:
 return error(_that.field0);case StreamEvent_CurrentTime() when currentTime != null:
 return currentTime(_that.field0);case StreamEvent_OriginVideoSize() when originVideoSize != null:
 return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
-return wscRtpSessionMode(_that.isLive,_that.currentTimeMs,_that.speed);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
+return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
 return wscRtpStreamState(_that.field0);case _:
   return null;
 
@@ -393,12 +393,10 @@ as BigInt,
 
 
 class StreamEvent_WscRtpSessionMode extends StreamEvent {
-  const StreamEvent_WscRtpSessionMode({required this.isLive, required this.currentTimeMs, required this.speed}): super._();
+  const StreamEvent_WscRtpSessionMode(this.field0): super._();
   
 
- final  bool isLive;
- final  PlatformInt64 currentTimeMs;
- final  double speed;
+ final  WscRtpMode field0;
 
 /// Create a copy of StreamEvent
 /// with the given fields replaced by the non-null parameter values.
@@ -410,16 +408,16 @@ $StreamEvent_WscRtpSessionModeCopyWith<StreamEvent_WscRtpSessionMode> get copyWi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamEvent_WscRtpSessionMode&&(identical(other.isLive, isLive) || other.isLive == isLive)&&(identical(other.currentTimeMs, currentTimeMs) || other.currentTimeMs == currentTimeMs)&&(identical(other.speed, speed) || other.speed == speed));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamEvent_WscRtpSessionMode&&(identical(other.field0, field0) || other.field0 == field0));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,isLive,currentTimeMs,speed);
+int get hashCode => Object.hash(runtimeType,field0);
 
 @override
 String toString() {
-  return 'StreamEvent.wscRtpSessionMode(isLive: $isLive, currentTimeMs: $currentTimeMs, speed: $speed)';
+  return 'StreamEvent.wscRtpSessionMode(field0: $field0)';
 }
 
 
@@ -430,11 +428,11 @@ abstract mixin class $StreamEvent_WscRtpSessionModeCopyWith<$Res> implements $St
   factory $StreamEvent_WscRtpSessionModeCopyWith(StreamEvent_WscRtpSessionMode value, $Res Function(StreamEvent_WscRtpSessionMode) _then) = _$StreamEvent_WscRtpSessionModeCopyWithImpl;
 @useResult
 $Res call({
- bool isLive, PlatformInt64 currentTimeMs, double speed
+ WscRtpMode field0
 });
 
 
-
+$WscRtpModeCopyWith<$Res> get field0;
 
 }
 /// @nodoc
@@ -447,16 +445,23 @@ class _$StreamEvent_WscRtpSessionModeCopyWithImpl<$Res>
 
 /// Create a copy of StreamEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? isLive = null,Object? currentTimeMs = null,Object? speed = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
   return _then(StreamEvent_WscRtpSessionMode(
-isLive: null == isLive ? _self.isLive : isLive // ignore: cast_nullable_to_non_nullable
-as bool,currentTimeMs: null == currentTimeMs ? _self.currentTimeMs : currentTimeMs // ignore: cast_nullable_to_non_nullable
-as PlatformInt64,speed: null == speed ? _self.speed : speed // ignore: cast_nullable_to_non_nullable
-as double,
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as WscRtpMode,
   ));
 }
 
-
+/// Create a copy of StreamEvent
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$WscRtpModeCopyWith<$Res> get field0 {
+  
+  return $WscRtpModeCopyWith<$Res>(_self.field0, (value) {
+    return _then(_self.copyWith(field0: value));
+  });
+}
 }
 
 /// @nodoc
@@ -894,5 +899,265 @@ String toString() {
 
 
 
+
+/// @nodoc
+mixin _$WscRtpMode {
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpMode);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'WscRtpMode()';
+}
+
+
+}
+
+/// @nodoc
+class $WscRtpModeCopyWith<$Res>  {
+$WscRtpModeCopyWith(WscRtpMode _, $Res Function(WscRtpMode) __);
+}
+
+
+/// Adds pattern-matching-related methods to [WscRtpMode].
+extension WscRtpModePatterns on WscRtpMode {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( WscRtpMode_Live value)?  live,TResult Function( WscRtpMode_Dvr value)?  dvr,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case WscRtpMode_Live() when live != null:
+return live(_that);case WscRtpMode_Dvr() when dvr != null:
+return dvr(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( WscRtpMode_Live value)  live,required TResult Function( WscRtpMode_Dvr value)  dvr,}){
+final _that = this;
+switch (_that) {
+case WscRtpMode_Live():
+return live(_that);case WscRtpMode_Dvr():
+return dvr(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( WscRtpMode_Live value)?  live,TResult? Function( WscRtpMode_Dvr value)?  dvr,}){
+final _that = this;
+switch (_that) {
+case WscRtpMode_Live() when live != null:
+return live(_that);case WscRtpMode_Dvr() when dvr != null:
+return dvr(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  live,TResult Function( PlatformInt64 currentTimeMs,  double speed)?  dvr,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case WscRtpMode_Live() when live != null:
+return live();case WscRtpMode_Dvr() when dvr != null:
+return dvr(_that.currentTimeMs,_that.speed);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  live,required TResult Function( PlatformInt64 currentTimeMs,  double speed)  dvr,}) {final _that = this;
+switch (_that) {
+case WscRtpMode_Live():
+return live();case WscRtpMode_Dvr():
+return dvr(_that.currentTimeMs,_that.speed);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  live,TResult? Function( PlatformInt64 currentTimeMs,  double speed)?  dvr,}) {final _that = this;
+switch (_that) {
+case WscRtpMode_Live() when live != null:
+return live();case WscRtpMode_Dvr() when dvr != null:
+return dvr(_that.currentTimeMs,_that.speed);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class WscRtpMode_Live extends WscRtpMode {
+  const WscRtpMode_Live(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpMode_Live);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'WscRtpMode.live()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
+class WscRtpMode_Dvr extends WscRtpMode {
+  const WscRtpMode_Dvr({required this.currentTimeMs, required this.speed}): super._();
+  
+
+ final  PlatformInt64 currentTimeMs;
+ final  double speed;
+
+/// Create a copy of WscRtpMode
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$WscRtpMode_DvrCopyWith<WscRtpMode_Dvr> get copyWith => _$WscRtpMode_DvrCopyWithImpl<WscRtpMode_Dvr>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpMode_Dvr&&(identical(other.currentTimeMs, currentTimeMs) || other.currentTimeMs == currentTimeMs)&&(identical(other.speed, speed) || other.speed == speed));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,currentTimeMs,speed);
+
+@override
+String toString() {
+  return 'WscRtpMode.dvr(currentTimeMs: $currentTimeMs, speed: $speed)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $WscRtpMode_DvrCopyWith<$Res> implements $WscRtpModeCopyWith<$Res> {
+  factory $WscRtpMode_DvrCopyWith(WscRtpMode_Dvr value, $Res Function(WscRtpMode_Dvr) _then) = _$WscRtpMode_DvrCopyWithImpl;
+@useResult
+$Res call({
+ PlatformInt64 currentTimeMs, double speed
+});
+
+
+
+
+}
+/// @nodoc
+class _$WscRtpMode_DvrCopyWithImpl<$Res>
+    implements $WscRtpMode_DvrCopyWith<$Res> {
+  _$WscRtpMode_DvrCopyWithImpl(this._self, this._then);
+
+  final WscRtpMode_Dvr _self;
+  final $Res Function(WscRtpMode_Dvr) _then;
+
+/// Create a copy of WscRtpMode
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? currentTimeMs = null,Object? speed = null,}) {
+  return _then(WscRtpMode_Dvr(
+currentTimeMs: null == currentTimeMs ? _self.currentTimeMs : currentTimeMs // ignore: cast_nullable_to_non_nullable
+as PlatformInt64,speed: null == speed ? _self.speed : speed // ignore: cast_nullable_to_non_nullable
+as double,
+  ));
+}
+
+
+}
 
 // dart format on

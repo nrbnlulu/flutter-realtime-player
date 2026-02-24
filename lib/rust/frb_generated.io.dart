@@ -46,6 +46,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoConfig dco_decode_box_autoadd_video_config(dynamic raw);
 
   @protected
+  WscRtpMode dco_decode_box_autoadd_wsc_rtp_mode(dynamic raw);
+
+  @protected
   WscRtpSessionConfig dco_decode_box_autoadd_wsc_rtp_session_config(
     dynamic raw,
   );
@@ -84,6 +87,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoConfig dco_decode_video_config(dynamic raw);
 
   @protected
+  WscRtpMode dco_decode_wsc_rtp_mode(dynamic raw);
+
+  @protected
   WscRtpSessionConfig dco_decode_wsc_rtp_session_config(dynamic raw);
 
   @protected
@@ -110,6 +116,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   VideoConfig sse_decode_box_autoadd_video_config(SseDeserializer deserializer);
+
+  @protected
+  WscRtpMode sse_decode_box_autoadd_wsc_rtp_mode(SseDeserializer deserializer);
 
   @protected
   WscRtpSessionConfig sse_decode_box_autoadd_wsc_rtp_session_config(
@@ -150,6 +159,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoConfig sse_decode_video_config(SseDeserializer deserializer);
 
   @protected
+  WscRtpMode sse_decode_wsc_rtp_mode(SseDeserializer deserializer);
+
+  @protected
   WscRtpSessionConfig sse_decode_wsc_rtp_session_config(
     SseDeserializer deserializer,
   );
@@ -187,6 +199,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_video_config(
     VideoConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_wsc_rtp_mode(
+    WscRtpMode self,
     SseSerializer serializer,
   );
 
@@ -231,6 +249,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_video_config(VideoConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wsc_rtp_mode(WscRtpMode self, SseSerializer serializer);
 
   @protected
   void sse_encode_wsc_rtp_session_config(

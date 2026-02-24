@@ -558,14 +558,8 @@ impl SseDecode for crate::dart_types::StreamEvent {
                 };
             }
             3 => {
-                let mut var_isLive = <bool>::sse_decode(deserializer);
-                let mut var_currentTimeMs = <i64>::sse_decode(deserializer);
-                let mut var_speed = <f64>::sse_decode(deserializer);
-                return crate::dart_types::StreamEvent::WscRtpSessionMode {
-                    is_live: var_isLive,
-                    current_time_ms: var_currentTimeMs,
-                    speed: var_speed,
-                };
+                let mut var_field0 = <crate::dart_types::WscRtpMode>::sse_decode(deserializer);
+                return crate::dart_types::StreamEvent::WscRtpSessionMode(var_field0);
             }
             4 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
@@ -643,6 +637,29 @@ impl SseDecode for crate::core::types::VideoConfig {
                 let mut var_field0 =
                     <crate::core::types::WscRtpSessionConfig>::sse_decode(deserializer);
                 return crate::core::types::VideoConfig::WscRtp(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::dart_types::WscRtpMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                return crate::dart_types::WscRtpMode::Live;
+            }
+            1 => {
+                let mut var_currentTimeMs = <i64>::sse_decode(deserializer);
+                let mut var_speed = <f64>::sse_decode(deserializer);
+                return crate::dart_types::WscRtpMode::Dvr {
+                    current_time_ms: var_currentTimeMs,
+                    speed: var_speed,
+                };
             }
             _ => {
                 unimplemented!("");
@@ -744,17 +761,9 @@ impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamEvent {
                 height.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            crate::dart_types::StreamEvent::WscRtpSessionMode {
-                is_live,
-                current_time_ms,
-                speed,
-            } => [
-                3.into_dart(),
-                is_live.into_into_dart().into_dart(),
-                current_time_ms.into_into_dart().into_dart(),
-                speed.into_into_dart().into_dart(),
-            ]
-            .into_dart(),
+            crate::dart_types::StreamEvent::WscRtpSessionMode(field0) => {
+                [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
             crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
                 [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
@@ -831,6 +840,34 @@ impl flutter_rust_bridge::IntoIntoDart<crate::core::types::VideoConfig>
     for crate::core::types::VideoConfig
 {
     fn into_into_dart(self) -> crate::core::types::VideoConfig {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::dart_types::WscRtpMode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::dart_types::WscRtpMode::Live => [0.into_dart()].into_dart(),
+            crate::dart_types::WscRtpMode::Dvr {
+                current_time_ms,
+                speed,
+            } => [
+                1.into_dart(),
+                current_time_ms.into_into_dart().into_dart(),
+                speed.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::dart_types::WscRtpMode {}
+impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::WscRtpMode>
+    for crate::dart_types::WscRtpMode
+{
+    fn into_into_dart(self) -> crate::dart_types::WscRtpMode {
         self
     }
 }
@@ -949,15 +986,9 @@ impl SseEncode for crate::dart_types::StreamEvent {
                 <u64>::sse_encode(width, serializer);
                 <u64>::sse_encode(height, serializer);
             }
-            crate::dart_types::StreamEvent::WscRtpSessionMode {
-                is_live,
-                current_time_ms,
-                speed,
-            } => {
+            crate::dart_types::StreamEvent::WscRtpSessionMode(field0) => {
                 <i32>::sse_encode(3, serializer);
-                <bool>::sse_encode(is_live, serializer);
-                <i64>::sse_encode(current_time_ms, serializer);
-                <f64>::sse_encode(speed, serializer);
+                <crate::dart_types::WscRtpMode>::sse_encode(field0, serializer);
             }
             crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
                 <i32>::sse_encode(4, serializer);
@@ -1032,6 +1063,28 @@ impl SseEncode for crate::core::types::VideoConfig {
             crate::core::types::VideoConfig::WscRtp(field0) => {
                 <i32>::sse_encode(0, serializer);
                 <crate::core::types::WscRtpSessionConfig>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::dart_types::WscRtpMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::dart_types::WscRtpMode::Live => {
+                <i32>::sse_encode(0, serializer);
+            }
+            crate::dart_types::WscRtpMode::Dvr {
+                current_time_ms,
+                speed,
+            } => {
+                <i32>::sse_encode(1, serializer);
+                <i64>::sse_encode(current_time_ms, serializer);
+                <f64>::sse_encode(speed, serializer);
             }
             _ => {
                 unimplemented!("");

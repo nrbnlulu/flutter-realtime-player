@@ -7,7 +7,10 @@ vars:
 tasks:
     codegen:
         cmds:
-            - "{{.DART_BIN}} run build_runner build --delete-conflicting-outputs"
+            - rm -rf .dart_tool
+            - "{{.FLUTTER_BIN}} clean"
+            - cd ./example  && {{.FLUTTER_BIN}} clean
+            - flutter_rust_bridge_codegen generate
     test:
         cmds:
             - "{{.FLUTTER_BIN}} test --fail-fast --reporter=compact --coverage"

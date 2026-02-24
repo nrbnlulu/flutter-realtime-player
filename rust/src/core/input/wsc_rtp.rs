@@ -28,7 +28,7 @@ use crate::{
         },
         types::WscRtpSessionConfig,
     },
-    dart_types::{StreamEvent, StreamState},
+    dart_types::{StreamEvent, StreamState, WscRtpMode},
     utils::invoke_on_platform_main_thread,
 };
 
@@ -587,16 +587,15 @@ impl WscRtpSession {
             }
             WscRtpServerMessage::Sdp { .. } => {}
             WscRtpServerMessage::SessionMode(mode) => {
-                let (is_live, current_time_ms) = match mode {
-                    SessionMode::Live => (true, 0),
-                    SessionMode::Dvr { timestamp } => (false, timestamp as i64),
+                let wsc_mode = match mode {
+                    SessionMode::Live => WscRtpMode::Live,
+                    SessionMode::Dvr { timestamp } => WscRtpMode::Dvr {
+                        current_time_ms: timestamp as i64,
+                        speed: 1.0,
+                    },
                 };
                 self.session_common
-                    .send_event_msg(StreamEvent::WscRtpSessionMode {
-                        is_live,
-                        current_time_ms,
-                        speed: 1.0,
-                    });
+                    .send_event_msg(StreamEvent::WscRtpSessionMode(wsc_mode));
             }
             WscRtpServerMessage::Error { message } => {
                 self.session_common
@@ -615,7 +614,7 @@ impl WscRtpSession {
         body: impl serde::Serialize,
     ) -> Result<()> {
         let session_id = self.active_session_id.read().clone().ok_or_else(|| {
-            let msg = "session is reconnecting, no active server session".to_string();
+            let msg = "session is reconnecting, seek is not available yet".to_string();
             self.session_common
                 .send_event_msg(StreamEvent::Error(msg.clone()));
             anyhow::anyhow!(msg)
@@ -634,7 +633,8 @@ impl WscRtpSession {
             .send()
             .await
             .map_err(|e| {
-                let msg = format!("WSC-RTP control request failed: {}", e);
+                error!("WSC-RTP control request to {} failed: {:#}", endpoint, e);
+                let msg = format!("Control request failed: {}", e.without_url());
                 self.session_common
                     .send_event_msg(StreamEvent::Error(msg.clone()));
                 anyhow::anyhow!(msg)
@@ -642,19 +642,37 @@ impl WscRtpSession {
 
         let status = response.status();
         if !status.is_success() {
-            let msg = format!("WSC-RTP control request failed with status: {}", status);
+            let body_text = response.text().await.unwrap_or_default();
+            error!(
+                "WSC-RTP control request to {} returned {}: {}",
+                endpoint, status, body_text
+            );
+            let msg = format!("Server returned {status}: {body_text}");
             self.session_common
                 .send_event_msg(StreamEvent::Error(msg.clone()));
             anyhow::bail!(msg);
         }
 
-        let mode: SessionModeResponse = response.json().await.context("parsing WSC-RTP control response")?;
-        self.session_common
-            .send_event_msg(StreamEvent::WscRtpSessionMode {
-                is_live: mode.is_live,
+        let mode: SessionModeResponse = response
+            .json()
+            .await
+            .map_err(|e| {
+                error!("WSC-RTP: failed to parse control response from {}: {:#}", endpoint, e);
+                let msg = "Invalid response from server".to_string();
+                self.session_common
+                    .send_event_msg(StreamEvent::Error(msg.clone()));
+                anyhow::anyhow!(msg)
+            })?;
+        let wsc_mode = if mode.is_live {
+            WscRtpMode::Live
+        } else {
+            WscRtpMode::Dvr {
                 current_time_ms: mode.current_time_ms.unwrap_or(0) as i64,
                 speed: mode.speed,
-            });
+            }
+        };
+        self.session_common
+            .send_event_msg(StreamEvent::WscRtpSessionMode(wsc_mode));
         Ok(())
     }
 }
