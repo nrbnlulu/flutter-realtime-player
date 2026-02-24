@@ -110,7 +110,7 @@ impl WscRtpSession {
         let (ws, _) = connect_async(wsc_rtp_url.to_string())
             .await
             .context(format!("connecting to WSC-RTP ws at {}", wsc_rtp_url))?;
-        let (mut ws_sink, mut ws_stream) = ws.split();
+        let (ws_sink, mut ws_stream) = ws.split();
 
         let deadline = tokio::time::Instant::now() + SDP_TIMEOUT;
         let mut init_message = None;
@@ -490,7 +490,7 @@ impl WscRtpSession {
             tokio::select! {
                 // ── Session commands (shutdown only) ──────────────────
                 cmd = shutdown_rx.recv() => {
-                    if let Some(cmd) = cmd {
+                    if let Some(_cmd) = cmd {
                         info!("WSC-RTP: shutdown command received");
                         // Cleanup before exit
                         if let Some(udp_rcv_task) = udp_packet_rcv_task {
@@ -653,16 +653,16 @@ impl WscRtpSession {
             anyhow::bail!(msg);
         }
 
-        let mode: SessionModeResponse = response
-            .json()
-            .await
-            .map_err(|e| {
-                error!("WSC-RTP: failed to parse control response from {}: {:#}", endpoint, e);
-                let msg = "Invalid response from server".to_string();
-                self.session_common
-                    .send_event_msg(StreamEvent::Error(msg.clone()));
-                anyhow::anyhow!(msg)
-            })?;
+        let mode: SessionModeResponse = response.json().await.map_err(|e| {
+            error!(
+                "WSC-RTP: failed to parse control response from {}: {:#}",
+                endpoint, e
+            );
+            let msg = "Invalid response from server".to_string();
+            self.session_common
+                .send_event_msg(StreamEvent::Error(msg.clone()));
+            anyhow::anyhow!(msg)
+        })?;
         let wsc_mode = if mode.is_live {
             WscRtpMode::Live
         } else {

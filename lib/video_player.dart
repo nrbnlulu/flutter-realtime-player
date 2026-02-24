@@ -10,7 +10,6 @@ import 'package:oxidized/oxidized.dart' as oxidized;
 import "package:rxdart/rxdart.dart" as rx;
 import 'rust/core/types.dart';
 
-
 class VideoController {
   final int sessionId;
   final VideoConfig config;
@@ -23,7 +22,7 @@ class VideoController {
     StreamSubscription<StreamState> originalSub, {
     required this.sessionId,
     required this.stateBroadcast,
-    required this.config
+    required this.config,
   }) : _originalSub = originalSub;
 
   Future<void> dispose() async {

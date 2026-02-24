@@ -1,7 +1,6 @@
 use std::thread;
 
-use lazy_static::lazy_static;
-use log::{debug, info, trace};
+use log::{debug, error, trace};
 
 use crate::{
     core::{
@@ -73,16 +72,38 @@ pub async fn create_playable(
 }
 
 pub async fn seek_to_timestamp(session_id: i64, ts: u64) -> anyhow::Result<()> {
-    info!("seeking to {ts}");
-    registry::seek_session(session_id, ts).await
+    log::debug!(
+        "seek_to_timestamp called: session_id={}, ts={}",
+        session_id,
+        ts
+    );
+    let result = registry::seek_session(session_id, ts).await;
+    if let Err(e) = &result {
+        log::error!("seek_to_timestamp failed: {}", e);
+    }
+    result
 }
 
 pub async fn wsc_rtp_go_live(session_id: i64) -> anyhow::Result<()> {
-    registry::wsc_rtp_live_session(session_id).await
+    log::debug!("wsc_rtp_go_live called: session_id={}", session_id);
+    let result = registry::wsc_rtp_live_session(session_id).await;
+    if let Err(e) = &result {
+        log::error!("wsc_rtp_go_live failed: {}", e);
+    }
+    result
 }
 
 pub async fn set_speed(session_id: i64, speed: f64) -> anyhow::Result<()> {
-    registry::set_speed_session(session_id, speed).await
+    log::debug!(
+        "set_speed called: session_id={}, speed={}",
+        session_id,
+        speed
+    );
+    let result = registry::set_speed_session(session_id, speed).await;
+    if let Err(e) = &result {
+        error!("set_speed failed: {}", e);
+    }
+    result
 }
 
 pub fn register_to_stream_events_sink(session_id: i64, sink: StreamSink<StreamEvent>) {

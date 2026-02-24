@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use irondash_texture::{BoxedPixelData, PayloadProvider, PixelData, PixelDataProvider};
-use log::{debug, error, trace};
+use log::{debug, error};
 
 /// Unified RGBA frame used by all decoder backends (FFmpeg, GStreamer, etc.).
 #[derive(Clone)]

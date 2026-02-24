@@ -1,8 +1,6 @@
 pub mod wsc_rtp;
 
-use anyhow::Result;
-
-use crate::{core::types::VideoDimensions, dart_types::StreamState};
+use crate::dart_types::StreamState;
 
 #[derive(Debug, Clone)]
 pub enum InputCommand {

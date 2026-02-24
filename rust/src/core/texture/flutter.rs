@@ -1,6 +1,5 @@
 use std::sync::{Arc, Weak};
 
-use anyhow::Result;
 use irondash_texture::SendableTexture;
 
 use crate::core::texture::{payload::PayloadHolder, FlutterTextureSession};

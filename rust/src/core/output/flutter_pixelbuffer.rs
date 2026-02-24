@@ -149,7 +149,7 @@ fn run_output_loop(
 }
 
 fn handle_command(
-    session_id: i64,
+    _session_id: i64,
     command: OutputCommand,
     input_command_tx: &InputCommandSender,
     texture_session: &Arc<dyn FlutterTextureSession>,

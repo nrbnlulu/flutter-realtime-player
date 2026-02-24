@@ -17,10 +17,7 @@ pub enum WscRtpMode {
 pub enum StreamEvent {
     Error(String),
     CurrentTime(i64),
-    OriginVideoSize {
-        width: u64,
-        height: u64,
-    },
+    OriginVideoSize { width: u64, height: u64 },
     WscRtpSessionMode(WscRtpMode),
     WscRtpStreamState(String),
 }

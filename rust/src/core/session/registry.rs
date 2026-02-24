@@ -4,7 +4,7 @@ use std::{
     time::SystemTime,
 };
 
-use log::{debug, info};
+use log::{debug, error, info};
 
 use crate::core::{
     session::VideoSession,
@@ -121,25 +121,53 @@ pub fn destroy_stream_session(session_id: i64) {
 }
 
 pub async fn seek_session(session_id: i64, ts: u64) -> anyhow::Result<()> {
+    info!(
+        "seek_session called for session_id={}, ts={}",
+        session_id, ts
+    );
     let session = get_session(session_id);
-    if let Some(session) = session {
-        session.seek(ts).await?;
+    match session {
+        Some(session) => {
+            info!("Session found, seeking to {}", ts);
+            session.seek(ts).await?;
+            info!("Seek completed successfully for session {}", session_id);
+            Ok(())
+        }
+        None => {
+            error!("Session {} not found for seek operation", session_id);
+            anyhow::bail!("Session {} not found", session_id);
+        }
     }
-    Ok(())
 }
 
 pub async fn wsc_rtp_live_session(session_id: i64) -> anyhow::Result<()> {
+    info!("wsc_rtp_live_session called for session_id={}", session_id);
     if let Some(session) = get_session(session_id) {
         session.go_to_live_stream().await?;
+        info!("Go live completed successfully for session {}", session_id);
+        Ok(())
+    } else {
+        error!("Session {} not found for go_live operation", session_id);
+        anyhow::bail!("Session {} not found", session_id);
     }
-    Ok(())
 }
 
 pub async fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()> {
+    info!(
+        "set_speed_session called for session_id={}, speed={}",
+        session_id, speed
+    );
     if let Some(session) = get_session(session_id) {
         session.set_speed(speed).await?;
+        info!(
+            "Set speed completed successfully for session {}",
+            session_id
+        );
+        Ok(())
+    } else {
+        error!("Session {} not found for set_speed operation", session_id);
+        anyhow::bail!("Session {} not found", session_id);
     }
-    Ok(())
 }
 
 pub fn register_events_sink(session_id: i64, sink: types::DartEventsStream) {

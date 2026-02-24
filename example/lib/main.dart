@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 import 'package:flutter_realtime_player/rust/core/types.dart'
     show WscRtpSessionConfig, VideoConfig, VideoConfig_WscRtp;
-import 'package:flutter_realtime_player/video_player.dart';
 import 'wsc_rtp_player.dart';
 import 'wsc_rtp_seek_demo.dart';
 
@@ -210,7 +209,6 @@ class _StreamConfig {
     required this.isStreaming,
     required this.autoRestart,
     required this.useWscRtp,
-    this.forceWebsocketTransport = false,
   });
 }
 

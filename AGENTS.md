@@ -15,12 +15,3 @@ This is a library that focuses on realtime streams support for flutter using ffm
 ## Agents guidelines
 - always write plans into PLANS/<your-plan.md>
 
-## Knowledge memory
-- Session lifecycle is now command/event channel driven; avoid direct resize/terminate calls on inputs.
-- `FlutterPixelBuffer` runs a selector loop over input events and output commands, and performs main-thread texture drop.
-- Flume channels are used for input/output command/event paths; prefer `Selector` for blocking waits.
-
-### WscRtp
-- WSC-RTP setup runs in `rust/src/core/input/wsc_rtp.rs` and returns `WscRtpSetup` with `sdp_data` and WSC-RTP control/cleanup handles.
-- WSC-RTP control uses a WebSocket channel (`/streams/{source_id}/wsc-rtp`) for init, SDP push, and DVR commands (seek/live/speed).
-- `create_wsc_rtp_playable` applies WSC-RTP-specific ffmpeg defaults, passes SDP via custom IO, and delegates session teardown to the WS lifecycle.
