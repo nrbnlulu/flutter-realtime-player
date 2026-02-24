@@ -113,6 +113,28 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
       if (_sessionId != sessionId) return;
       if (event is StreamEvent_Error) {
         debugPrint('WSC-RTP error: ${event.field0}');
+        // Show error in UI if it's a control operation error (seek/go-live/speed)
+        // Connection errors during startup are shown via _errorMessage
+        if (_controller != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: ExpansionTile(
+                title: const Text(
+                  'Stream Error',
+                  style: TextStyle(color: Colors.white),
+                ),
+                children: [
+                  SelectableText(
+                    event.field0,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
         return;
       }
       if (event is StreamEvent_WscRtpStreamState) {

@@ -614,10 +614,12 @@ impl WscRtpSession {
         endpoint: &str,
         body: impl serde::Serialize,
     ) -> Result<()> {
-        let session_id =
-            self.active_session_id.read().clone().ok_or_else(|| {
-                anyhow::anyhow!("session is reconnecting, no active server session")
-            })?;
+        let session_id = self.active_session_id.read().clone().ok_or_else(|| {
+            let msg = "session is reconnecting, no active server session".to_string();
+            self.session_common
+                .send_event_msg(StreamEvent::Error(msg.clone()));
+            anyhow::anyhow!(msg)
+        })?;
 
         let mut url = self.media_server_http_url.clone();
         url.set_path(&format!(
@@ -631,17 +633,22 @@ impl WscRtpSession {
             .json(&body)
             .send()
             .await
-            .context("WSC-RTP control request failed")?;
+            .map_err(|e| {
+                let msg = format!("WSC-RTP control request failed: {}", e);
+                self.session_common
+                    .send_event_msg(StreamEvent::Error(msg.clone()));
+                anyhow::anyhow!(msg)
+            })?;
 
         let status = response.status();
         if !status.is_success() {
-            anyhow::bail!("WSC-RTP control request failed with status: {}", status);
+            let msg = format!("WSC-RTP control request failed with status: {}", status);
+            self.session_common
+                .send_event_msg(StreamEvent::Error(msg.clone()));
+            anyhow::bail!(msg);
         }
 
-        let mode: SessionModeResponse = response
-            .json()
-            .await
-            .context("parsing WSC-RTP control response")?;
+        let mode: SessionModeResponse = response.json().await.context("parsing WSC-RTP control response")?;
         self.session_common
             .send_event_msg(StreamEvent::WscRtpSessionMode {
                 is_live: mode.is_live,
