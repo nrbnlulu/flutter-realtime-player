@@ -47,5 +47,11 @@ pub struct WscRtpSessionConfig {
     pub auto_restart: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[flutter_rust_bridge::frb(sync)]
+pub enum VideoConfig {
+    WscRtp(WscRtpSessionConfig),
+}
+
 pub type DartStateStream = StreamSink<StreamState>;
 pub type DartEventsStream = StreamSink<StreamEvent>;

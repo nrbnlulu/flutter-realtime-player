@@ -21,23 +21,11 @@ Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
 Future<PlatformInt64> createNewSession() =>
     RustLib.instance.api.crateApiSimpleCreateNewSession();
 
-Stream<StreamState> createNewPlayable({
+Stream<StreamState> createPlayable({
   required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
-  required VideoInfo videoInfo,
-  Map<String, String>? ffmpegOptions,
-}) => RustLib.instance.api.crateApiSimpleCreateNewPlayable(
-  sessionId: sessionId,
-  engineHandle: engineHandle,
-  videoInfo: videoInfo,
-  ffmpegOptions: ffmpegOptions,
-);
-
-Stream<StreamState> createWscRtpPlayable({
-  required PlatformInt64 sessionId,
-  required PlatformInt64 engineHandle,
-  required WscRtpSessionConfig config,
-}) => RustLib.instance.api.crateApiSimpleCreateWscRtpPlayable(
+  required VideoConfig config,
+}) => RustLib.instance.api.crateApiSimpleCreatePlayable(
   sessionId: sessionId,
   engineHandle: engineHandle,
   config: config,

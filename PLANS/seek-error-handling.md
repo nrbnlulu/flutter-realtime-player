@@ -86,13 +86,22 @@ Updated `send_control_request()` to emit `StreamEvent::Error` in three failure s
 3. **HTTP error status**: When the server returns a non-success status code (4xx, 5xx)
 4. **JSON parsing failure**: When the response cannot be parsed
 
-### Dart Changes (`example/lib/wsc_rtp_seek_demo.dart`)
+### Dart Changes
+
+#### `example/lib/wsc_rtp_seek_demo.dart`
 Enhanced `_startEventListener()` to:
 1. Display error events from the stream as SnackBars when the controller is active
 2. Distinguish between connection errors (shown via `_errorMessage`) and control operation errors (shown via SnackBar)
 
+#### `example/lib/main.dart` (StreamControlWidget)
+Updated the main example to properly use WSC-RTP seeking:
+1. **Fixed -10s/+10s seek buttons**: Now properly calculate target timestamps and call `seekToTimestampMs()`
+2. **Added GO LIVE button**: Shows when in DVR mode (not live), calls `wscRtpGoLive()` to return to live
+3. **Added LIVE/DVR badge**: Visual indicator showing current mode (red LIVE / blue DVR)
+4. **Mode tracking**: Listens to `StreamEvent::WscRtpSessionMode` events to track live/playback state
+
 ### Mode Tracking
-The example demo already properly tracks and displays:
+The examples now properly track and display:
 - **LIVE/DVR badge**: Red "LIVE" badge when live, blue "DVR" badge when in playback mode
 - **Current time**: Formatted time display from `SessionMode.currentTimeMs`
 - **Speed**: Current playback speed from `SessionMode.speed`

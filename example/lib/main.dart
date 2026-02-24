@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show WscRtpSessionConfig;
+    show WscRtpSessionConfig, VideoConfig;
 import 'package:flutter_realtime_player/video_player.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 import 'dart:async';
@@ -50,17 +50,16 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
   final List<_StreamConfig> _streams = [
     _StreamConfig(
       urlController: TextEditingController(text: "rtsp://your_stream_url_here"),
-      tsdpBaseUrlController: TextEditingController(
+      wscRtpBaseUrlController: TextEditingController(
         text: "https://your_backend_here",
       ),
-      tsdpSourceIdController: TextEditingController(text: "source-id"),
-      tsdpClientPortController: TextEditingController(),
+      wscRtpSourceIdController: TextEditingController(text: "source-id"),
       ffmpegOptionControllers: [
         MapEntry(TextEditingController(), TextEditingController()),
       ],
       isStreaming: false,
       autoRestart: false,
-      useTsdp: false,
+      useWscRtp: false,
     ),
   ];
 
@@ -68,9 +67,8 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
   void dispose() {
     for (final stream in _streams) {
       stream.urlController.dispose();
-      stream.tsdpBaseUrlController.dispose();
-      stream.tsdpSourceIdController.dispose();
-      stream.tsdpClientPortController.dispose();
+      stream.wscRtpBaseUrlController.dispose();
+      stream.wscRtpSourceIdController.dispose();
       for (final entry in stream.ffmpegOptionControllers) {
         entry.key.dispose();
         entry.value.dispose();
@@ -90,15 +88,14 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       _streams.add(
         _StreamConfig(
           urlController: TextEditingController(),
-          tsdpBaseUrlController: TextEditingController(),
-          tsdpSourceIdController: TextEditingController(),
-          tsdpClientPortController: TextEditingController(),
+          wscRtpBaseUrlController: TextEditingController(),
+          wscRtpSourceIdController: TextEditingController(),
           ffmpegOptionControllers: [
             MapEntry(TextEditingController(), TextEditingController()),
           ],
           isStreaming: false,
           autoRestart: false,
-          useTsdp: false,
+          useWscRtp: false,
         ),
       );
     });
@@ -109,9 +106,8 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       if (_streams.length > 1) {
         final stream = _streams.removeAt(index);
         stream.urlController.dispose();
-        stream.tsdpBaseUrlController.dispose();
-        stream.tsdpSourceIdController.dispose();
-        stream.tsdpClientPortController.dispose();
+        stream.wscRtpBaseUrlController.dispose();
+        stream.wscRtpSourceIdController.dispose();
         for (final entry in stream.ffmpegOptionControllers) {
           entry.key.dispose();
           entry.value.dispose();
@@ -198,25 +194,23 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
 
 class _StreamConfig {
   final TextEditingController urlController;
-  final TextEditingController tsdpBaseUrlController;
-  final TextEditingController tsdpSourceIdController;
-  final TextEditingController tsdpClientPortController;
+  final TextEditingController wscRtpBaseUrlController;
+  final TextEditingController wscRtpSourceIdController;
   final List<MapEntry<TextEditingController, TextEditingController>>
   ffmpegOptionControllers;
   bool isStreaming;
   bool autoRestart;
-  bool useTsdp;
+  bool useWscRtp;
   bool forceWebsocketTransport;
 
   _StreamConfig({
     required this.urlController,
-    required this.tsdpBaseUrlController,
-    required this.tsdpSourceIdController,
-    required this.tsdpClientPortController,
+    required this.wscRtpBaseUrlController,
+    required this.wscRtpSourceIdController,
     required this.ffmpegOptionControllers,
     required this.isStreaming,
     required this.autoRestart,
-    required this.useTsdp,
+    required this.useWscRtp,
     this.forceWebsocketTransport = false,
   });
 }
@@ -292,10 +286,9 @@ class _StreamGridItemState extends State<_StreamGridItem>
               ffmpegOptions: widget.collectFfmpegOptions(
                 stream.ffmpegOptionControllers,
               ),
-              useTsdp: stream.useTsdp,
-              tsdpBaseUrl: stream.tsdpBaseUrlController.text,
-              tsdpSourceId: stream.tsdpSourceIdController.text,
-              tsdpClientPort: stream.tsdpClientPortController.text,
+              useWscRtp: stream.useWscRtp,
+              wscRtpBaseUrl: stream.wscRtpBaseUrlController.text,
+              wscRtpSourceId: stream.wscRtpSourceIdController.text,
               forceWebsocketTransport: stream.forceWebsocketTransport,
             ),
             // Overlay controls
@@ -344,14 +337,14 @@ class _StreamGridItemState extends State<_StreamGridItem>
               Row(
                 children: [
                   Switch(
-                    value: stream.useTsdp,
+                    value: stream.useWscRtp,
                     onChanged: (value) {
                       setState(() {
-                        stream.useTsdp = value;
+                        stream.useWscRtp = value;
                       });
                     },
                   ),
-                  const Text('Use TSDP'),
+                  const Text('Use WSC-RTP'),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -361,7 +354,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                 ],
               ),
               const SizedBox(height: 12.0),
-              if (!stream.useTsdp)
+              if (!stream.useWscRtp)
                 TextField(
                   controller: stream.urlController,
                   decoration: const InputDecoration(
@@ -369,28 +362,19 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     border: OutlineInputBorder(),
                   ),
                 ),
-              if (stream.useTsdp) ...[
+              if (stream.useWscRtp) ...[
                 TextField(
-                  controller: stream.tsdpBaseUrlController,
+                  controller: stream.wscRtpBaseUrlController,
                   decoration: const InputDecoration(
-                    labelText: 'TSDP Base URL (e.g., https://api.example)',
+                    labelText: 'WSC-RTP Base URL (e.g., https://api.example)',
                     border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12.0),
                 TextField(
-                  controller: stream.tsdpSourceIdController,
+                  controller: stream.wscRtpSourceIdController,
                   decoration: const InputDecoration(
-                    labelText: 'TSDP Source ID',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12.0),
-                TextField(
-                  controller: stream.tsdpClientPortController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'TSDP Client Port (optional)',
+                    labelText: 'WSC-RTP Source ID',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -485,10 +469,9 @@ class _StreamGridItemState extends State<_StreamGridItem>
                           ffmpegOptions: widget.collectFfmpegOptions(
                             stream.ffmpegOptionControllers,
                           ),
-                          useTsdp: stream.useTsdp,
-                          tsdpBaseUrl: stream.tsdpBaseUrlController.text,
-                          tsdpSourceId: stream.tsdpSourceIdController.text,
-                          tsdpClientPort: stream.tsdpClientPortController.text,
+                          useWscRtp: stream.useWscRtp,
+                          wscRtpBaseUrl: stream.wscRtpBaseUrlController.text,
+                          wscRtpSourceId: stream.wscRtpSourceIdController.text,
                           forceWebsocketTransport:
                               stream.forceWebsocketTransport,
                         )
@@ -576,10 +559,9 @@ class _VideoPlayerWithControls extends StatefulWidget {
   final String url;
   final bool autoRestart;
   final Map<String, String>? ffmpegOptions;
-  final bool useTsdp;
-  final String tsdpBaseUrl;
-  final String tsdpSourceId;
-  final String tsdpClientPort;
+  final bool useWscRtp;
+  final String wscRtpBaseUrl;
+  final String wscRtpSourceId;
   final bool forceWebsocketTransport;
 
   const _VideoPlayerWithControls({
@@ -587,10 +569,9 @@ class _VideoPlayerWithControls extends StatefulWidget {
     required this.url,
     required this.autoRestart,
     this.ffmpegOptions,
-    required this.useTsdp,
-    required this.tsdpBaseUrl,
-    required this.tsdpSourceId,
-    required this.tsdpClientPort,
+    required this.useWscRtp,
+    required this.wscRtpBaseUrl,
+    required this.wscRtpSourceId,
     this.forceWebsocketTransport = false,
   });
 
@@ -607,10 +588,11 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   Timer? _positionTimer;
   bool _isSeeking = false;
   bool _isSeekable = false;
-  final double _currentStreamTime = 0.0; // Stream time in seconds
+  double _currentStreamTime = 0.0; // Stream time in seconds
   int?
   _streamStartTime; // Unix timestamp of stream start time (for HLS with EXT-X-PROGRAM-DATE-TIME)
   final TextEditingController _iso8601Controller = TextEditingController();
+  bool _isLive = true; // Track live/playback mode for WSC-RTP
 
   @override
   void initState() {
@@ -636,23 +618,19 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   }
 
   Future<void> _initializeVideo() async {
-    final result =
-        widget.useTsdp
-            ? await VideoController.createWscRtp(
-              config: WscRtpSessionConfig(
-                autoRestart: true,
-                baseUrl: widget.tsdpBaseUrl,
-                sourceId: widget.tsdpSourceId,
-                clientPort: int.tryParse(widget.tsdpClientPort.trim()),
-                forceWebsocketTransport: widget.forceWebsocketTransport,
-              ),
-              autoRestart: true,
-            )
-            : await VideoController.create(
-              url: widget.url,
-              autoRestart: true,
-              ffmpegOptions: widget.ffmpegOptions,
-            );
+    final result = await VideoController.create(
+      config:
+          widget.useWscRtp
+              ? VideoConfig.wscRtp(
+                WscRtpSessionConfig(
+                  autoRestart: true,
+                  baseUrl: widget.wscRtpBaseUrl,
+                  sourceId: widget.wscRtpSourceId,
+                  forceWebsocketTransport: widget.forceWebsocketTransport,
+                ),
+              )
+              : throw UnimplementedError('Raw URL playback not yet supported'),
+    );
 
     setState(() {
       _controller = result.$1;
@@ -667,6 +645,29 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
           });
         }
       });
+
+      // Listen for WSC-RTP session mode changes (live/playback)
+      if (widget.useWscRtp) {
+        rlib
+            .registerToStreamEventsSink(sessionId: _controller!.sessionId)
+            .listen((event) {
+              if (event is StreamEvent_WscRtpSessionMode) {
+                setState(() {
+                  _isLive = event.isLive;
+                  _currentStreamTime = event.currentTimeMs / 1000.0;
+                });
+              }
+            });
+
+        // Start a timer to update stream time in real-time for live streams
+        _positionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (_isLive && mounted) {
+            setState(() {
+              _currentStreamTime += 1.0;
+            });
+          }
+        });
+      }
     }
   }
 
@@ -732,13 +733,39 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Position: ${_formatDuration(Duration(seconds: _currentStreamTime.floor()))}',
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // LIVE/DVR badge for WSC-RTP streams
+                          if (widget.useWscRtp)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: _isLive ? Colors.red : Colors.blue,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                _isLive ? 'LIVE' : 'DVR',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                          Text(
+                            'Position: ${_formatDuration(Duration(seconds: _currentStreamTime.floor()))}',
+                            style: const TextStyle(
+                              color: Colors.blue,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                       // Show absolute time when stream has EXT-X-PROGRAM-DATE-TIME
                       if (_streamStartTime != null) ...[
@@ -842,59 +869,120 @@ class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
                   ],
                 ),
               ],
-              // Seeking controls for seekable streams
-              if (_isSeekable) ...[
+              // Timeline slider for WSC-RTP streams (past hour)
+              if (widget.useWscRtp && _isSeekable) ...[
                 const SizedBox(height: 8),
+                // Timeline showing past hour
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // Seek backward button
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.replay_10, size: 18),
-                      label: const Text('-10s'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                      ),
-                      onPressed: () async {
-                        if (_controller != null) {
-                          debugPrint("relative seeking is not implmeneted yet");
-                        }
-                      },
+                    const Text(
+                      '-60min',
+                      style: TextStyle(color: Colors.grey, fontSize: 10),
                     ),
-                    // Seek forward button
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.forward_10, size: 18),
-                      label: const Text('+10s'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
+                    Expanded(
+                      child: Slider(
+                        value: _currentStreamTime.clamp(0, 3600),
+                        min: 0,
+                        max: 3600,
+                        onChanged: (value) async {
+                          if (_controller != null && _streamStartTime != null) {
+                            // Seek to the selected time (value is seconds ago from now)
+                            final targetMs =
+                                (_streamStartTime! +
+                                    (_currentStreamTime.floor() -
+                                        value.floor())) *
+                                1000;
+                            final result = await _controller!.seekToTimestampMs(
+                              BigInt.from(targetMs),
+                            );
+                            if (result.isErr()) {
+                              final error = result.unwrapErr();
+                              debugPrint('Seek error: ${error.message}');
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: ExpansionTile(
+                                      title: const Text(
+                                        'Seek failed',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                      children: [
+                                        SelectableText(
+                                          error.message,
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    backgroundColor: Colors.red,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        },
+                        label: '${(_currentStreamTime / 60).floor()}min',
                       ),
-                      onPressed: () async {
-                        if (_controller != null) {
-                          debugPrint("relative seeking is not implmeneted yet");
-                        }
-                      },
                     ),
-                    // ISO 8601 time seeking for HLS streams with program date time
-                    if (_streamStartTime != null)
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.access_time, size: 18),
-                        label: const Text('Seek to Time'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                        ),
-                        onPressed: () => _showIso8601SeekDialog(context),
+                    const Text(
+                      'LIVE',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
                   ],
                 ),
+                // Go Live button for WSC-RTP streams (shown when not at live)
+                if (!_isLive)
+                  Center(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.fiber_dvr, color: Colors.red),
+                      label: const Text('GO LIVE'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                      ),
+                      onPressed: () async {
+                        if (_controller != null) {
+                          final result = await _controller!.wscRtpGoLive();
+                          if (result.isErr()) {
+                            final error = result.unwrapErr();
+                            debugPrint('Go live error: ${error.message}');
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: ExpansionTile(
+                                    title: const Text(
+                                      'Go live failed',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                    children: [
+                                      SelectableText(
+                                        error.message,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          }
+                        }
+                      },
+                    ),
+                  ),
               ],
             ],
           ),

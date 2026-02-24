@@ -10,21 +10,10 @@ import 'package:oxidized/oxidized.dart' as oxidized;
 import "package:rxdart/rxdart.dart" as rx;
 import 'rust/core/types.dart';
 
-// Define VideoDimensions for internal compatibility
-class VideoDimensions {
-  final int width;
-  final int height;
-
-  const VideoDimensions({required this.width, required this.height});
-}
 
 class VideoController {
-  final String url;
-  final bool mute;
-  final bool autoRestart;
-  Map<String, String>? ffmpegOptions;
-
   final int sessionId;
+  final VideoConfig config;
   final rx.BehaviorSubject<StreamState> stateBroadcast;
   final StreamSubscription<StreamState> _originalSub;
   bool _running = false;
@@ -32,12 +21,9 @@ class VideoController {
 
   VideoController(
     StreamSubscription<StreamState> originalSub, {
-    required this.url,
     required this.sessionId,
     required this.stateBroadcast,
-    this.mute = true,
-    this.autoRestart = false,
-    this.ffmpegOptions,
+    required this.config
   }) : _originalSub = originalSub;
 
   Future<void> dispose() async {
@@ -47,64 +33,13 @@ class VideoController {
   }
 
   static Future<(VideoController?, String?)> create({
-    required String url,
-    bool mute = true,
-    bool autoRestart = false,
-    Map<String, String>? ffmpegOptions,
-  }) async {
-    final handle = await EngineContext.instance.getEngineHandle();
-    final sessionId = await rlib.createNewSession();
-
-    // play demo video
-    try {
-      final stream = rlib.createNewPlayable(
-        sessionId: sessionId,
-        engineHandle: handle,
-        ffmpegOptions: ffmpegOptions,
-        videoInfo: VideoInfo(uri: url, mute: mute, autoRestart: autoRestart),
-      );
-      final bs = rx.BehaviorSubject<StreamState>.seeded(StreamState.loading());
-      final origSub = stream.listen(
-        bs.add,
-        onError: bs.addError,
-        onDone: () => bs.close(),
-      );
-      final ret = VideoController(
-        origSub,
-        sessionId: sessionId,
-        stateBroadcast: bs,
-        url: url,
-        autoRestart: autoRestart,
-        ffmpegOptions: ffmpegOptions,
-        mute: mute,
-      );
-      ret._engineHandle = handle;
-      ret._running = true;
-
-      // start ping task
-      Future.microtask(() async {
-        while (ret._running) {
-          // ping rust side to announce we still want the stream.
-          rlib.markSessionAlive(sessionId: sessionId);
-          await Future.delayed(const Duration(seconds: 1));
-        }
-      });
-      return (ret, null);
-    } catch (e) {
-      return (null, e.toString());
-    }
-  }
-
-  static Future<(VideoController?, String?)> createWscRtp({
-    required WscRtpSessionConfig config,
-    bool mute = true,
-    bool autoRestart = false,
+    required VideoConfig config,
   }) async {
     final handle = await EngineContext.instance.getEngineHandle();
     final sessionId = await rlib.createNewSession();
 
     try {
-      final stream = rlib.createWscRtpPlayable(
+      final stream = rlib.createPlayable(
         sessionId: sessionId,
         engineHandle: handle,
         config: config,
@@ -119,9 +54,7 @@ class VideoController {
         origSub,
         sessionId: sessionId,
         stateBroadcast: bs,
-        url: '${config.baseUrl}/streams/${config.sourceId}',
-        autoRestart: autoRestart,
-        mute: mute,
+        config: config,
       );
       ret._engineHandle = handle;
       ret._running = true;
@@ -204,22 +137,12 @@ class VideoPlayer extends StatefulWidget {
 
   static Widget fromConfig({
     GlobalKey? key,
-    required String url,
-    Map<String, String>? ffmpegOptions,
-    bool mute = true,
-    bool autoRestart = false,
+    required VideoConfig config,
     bool autoDispose = true,
     Widget? child,
   }) {
     return FutureBuilder(
-      future: _createControllerWithSize(
-        url,
-        // Pass dummy dimensions since the API still expects them but ignores them
-        const VideoDimensions(width: 1280, height: 720),
-        mute,
-        autoRestart,
-        ffmpegOptions,
-      ),
+      future: VideoController.create(config: config),
       builder: (ctx, res) {
         if (res.hasError) {
           return Text(res.error.toString());
@@ -234,21 +157,6 @@ class VideoPlayer extends StatefulWidget {
           child: child,
         );
       },
-    );
-  }
-
-  static Future<(VideoController?, String?)> _createControllerWithSize(
-    String url,
-    VideoDimensions dimensions,
-    bool mute,
-    bool autoRestart,
-    Map<String, String>? ffmpegOptions,
-  ) async {
-    return VideoController.create(
-      url: url,
-      mute: mute,
-      autoRestart: autoRestart,
-      ffmpegOptions: ffmpegOptions,
     );
   }
 

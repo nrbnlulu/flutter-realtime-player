@@ -5,33 +5,15 @@
 
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
+part 'types.freezed.dart';
 
-class VideoInfo {
-  final String uri;
-  final int? framerate;
-  final bool mute;
-  final bool autoRestart;
+@freezed
+sealed class VideoConfig with _$VideoConfig {
+  const VideoConfig._();
 
-  const VideoInfo({
-    required this.uri,
-    this.framerate,
-    required this.mute,
-    required this.autoRestart,
-  });
-
-  @override
-  int get hashCode =>
-      uri.hashCode ^ framerate.hashCode ^ mute.hashCode ^ autoRestart.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is VideoInfo &&
-          runtimeType == other.runtimeType &&
-          uri == other.uri &&
-          framerate == other.framerate &&
-          mute == other.mute &&
-          autoRestart == other.autoRestart;
+  const factory VideoConfig.wscRtp(WscRtpSessionConfig field0) =
+      VideoConfig_WscRtp;
 }
 
 class WscRtpSessionConfig {

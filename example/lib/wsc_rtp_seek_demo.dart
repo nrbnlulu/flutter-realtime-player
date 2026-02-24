@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show WscRtpSessionConfig;
+    show WscRtpSessionConfig, VideoConfig;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:flutter_realtime_player/video_player.dart';
 
@@ -65,15 +65,16 @@ class _WscRtpSeekDemoState extends State<WscRtpSeekDemo> {
 
     try {
       final requestedPort = int.tryParse(_clientPortController.text.trim());
-      final result = await VideoController.createWscRtp(
-        config: WscRtpSessionConfig(
-          autoRestart: true,
-          baseUrl: _baseUrlController.text.trim(),
-          sourceId: _sourceIdController.text.trim(),
-          clientPort: requestedPort,
-          forceWebsocketTransport: _forceWebsocketTransport,
+      final result = await VideoController.create(
+        config: VideoConfig.wscRtp(
+          WscRtpSessionConfig(
+            autoRestart: true,
+            baseUrl: _baseUrlController.text.trim(),
+            sourceId: _sourceIdController.text.trim(),
+            clientPort: requestedPort,
+            forceWebsocketTransport: _forceWebsocketTransport,
+          ),
         ),
-        autoRestart: true,
       );
 
       if (result.$1 == null) {

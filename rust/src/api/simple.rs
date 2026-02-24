@@ -1,4 +1,4 @@
-use std::{collections::HashMap, thread};
+use std::thread;
 
 use lazy_static::lazy_static;
 use log::{debug, info, trace};
@@ -10,7 +10,7 @@ use crate::{
             registry::{self, insert_session},
             VideoSessionCommon,
         },
-        types::{VideoInfo, WscRtpSessionConfig},
+        types::VideoConfig,
         HTTP_CLIENT, IS_INITIALIZED,
     },
     dart_types::{StreamEvent, StreamState},
@@ -47,40 +47,28 @@ pub fn create_new_session() -> i64 {
     *session_counter
 }
 
-pub fn create_new_playable(
+pub async fn create_playable(
     session_id: i64,
     engine_handle: i64,
-    video_info: VideoInfo,
-    ffmpeg_options: Option<HashMap<String, String>>,
+    config: VideoConfig,
     sink: StreamSink<StreamState>,
 ) -> anyhow::Result<()> {
     trace!(
-        "get_texture was called with engine_handle: {}, video_info: {:?}, session_id: {}",
+        "create_playable was called with engine_handle: {}, session_id: {}",
         engine_handle,
-        video_info,
         session_id
     );
-    todo!("implement non wsc-rtp videos support");
-    Ok(())
-}
-pub async fn create_wsc_rtp_playable(
-    session_id: i64,
-    engine_handle: i64,
-    config: WscRtpSessionConfig,
-    sink: StreamSink<StreamState>,
-) -> anyhow::Result<()> {
-    trace!(
-        "create_wsc_rtp_playable was called with engine_handle: {}, source_id: {}, session_id: {}",
-        engine_handle,
-        config.source_id.as_str(),
-        session_id
-    );
-    let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
-
-    let (session, shutdown_rx) = WscRtpSession::new(config, session_common, HTTP_CLIENT.clone());
-    let session_clone = session.clone();
-    tokio::spawn(async move { session_clone.execute(shutdown_rx).await });
-    insert_session(session_id, session);
+    match config {
+        VideoConfig::WscRtp(wsc_rtp_config) => {
+            trace!("  source_id: {}", wsc_rtp_config.source_id.as_str());
+            let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
+            let (session, shutdown_rx) =
+                WscRtpSession::new(wsc_rtp_config, session_common, HTTP_CLIENT.clone());
+            let session_clone = session.clone();
+            tokio::spawn(async move { session_clone.execute(shutdown_rx).await });
+            insert_session(session_id, session);
+        }
+    }
     Ok(())
 }
 
