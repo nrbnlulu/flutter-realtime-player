@@ -1,3 +1,4 @@
+pub mod playbin;
 pub mod wsc_rtp;
 
 use crate::dart_types::StreamState;

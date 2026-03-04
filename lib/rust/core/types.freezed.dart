@@ -14,23 +14,18 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$VideoConfig {
 
- WscRtpSessionConfig get field0;
-/// Create a copy of VideoConfig
-/// with the given fields replaced by the non-null parameter values.
-@JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-$VideoConfigCopyWith<VideoConfig> get copyWith => _$VideoConfigCopyWithImpl<VideoConfig>(this as VideoConfig, _$identity);
+ Object get field0;
 
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoConfig&&(identical(other.field0, field0) || other.field0 == field0));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoConfig&&const DeepCollectionEquality().equals(other.field0, field0));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,field0);
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(field0));
 
 @override
 String toString() {
@@ -41,34 +36,8 @@ String toString() {
 }
 
 /// @nodoc
-abstract mixin class $VideoConfigCopyWith<$Res>  {
-  factory $VideoConfigCopyWith(VideoConfig value, $Res Function(VideoConfig) _then) = _$VideoConfigCopyWithImpl;
-@useResult
-$Res call({
- WscRtpSessionConfig field0
-});
-
-
-
-
-}
-/// @nodoc
-class _$VideoConfigCopyWithImpl<$Res>
-    implements $VideoConfigCopyWith<$Res> {
-  _$VideoConfigCopyWithImpl(this._self, this._then);
-
-  final VideoConfig _self;
-  final $Res Function(VideoConfig) _then;
-
-/// Create a copy of VideoConfig
-/// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? field0 = null,}) {
-  return _then(_self.copyWith(
-field0: null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
-as WscRtpSessionConfig,
-  ));
-}
-
+class $VideoConfigCopyWith<$Res>  {
+$VideoConfigCopyWith(VideoConfig _, $Res Function(VideoConfig) __);
 }
 
 
@@ -86,11 +55,12 @@ extension VideoConfigPatterns on VideoConfig {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( VideoConfig_WscRtp value)?  wscRtp,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( VideoConfig_WscRtp value)?  wscRtp,TResult Function( VideoConfig_Playbin value)?  playbin,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case VideoConfig_WscRtp() when wscRtp != null:
-return wscRtp(_that);case _:
+return wscRtp(_that);case VideoConfig_Playbin() when playbin != null:
+return playbin(_that);case _:
   return orElse();
 
 }
@@ -108,11 +78,12 @@ return wscRtp(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( VideoConfig_WscRtp value)  wscRtp,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( VideoConfig_WscRtp value)  wscRtp,required TResult Function( VideoConfig_Playbin value)  playbin,}){
 final _that = this;
 switch (_that) {
 case VideoConfig_WscRtp():
-return wscRtp(_that);}
+return wscRtp(_that);case VideoConfig_Playbin():
+return playbin(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -126,11 +97,12 @@ return wscRtp(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( VideoConfig_WscRtp value)?  wscRtp,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( VideoConfig_WscRtp value)?  wscRtp,TResult? Function( VideoConfig_Playbin value)?  playbin,}){
 final _that = this;
 switch (_that) {
 case VideoConfig_WscRtp() when wscRtp != null:
-return wscRtp(_that);case _:
+return wscRtp(_that);case VideoConfig_Playbin() when playbin != null:
+return playbin(_that);case _:
   return null;
 
 }
@@ -147,10 +119,11 @@ return wscRtp(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( WscRtpSessionConfig field0)?  wscRtp,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( WscRtpSessionConfig field0)?  wscRtp,TResult Function( PlaybinConfig field0)?  playbin,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case VideoConfig_WscRtp() when wscRtp != null:
-return wscRtp(_that.field0);case _:
+return wscRtp(_that.field0);case VideoConfig_Playbin() when playbin != null:
+return playbin(_that.field0);case _:
   return orElse();
 
 }
@@ -168,10 +141,11 @@ return wscRtp(_that.field0);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( WscRtpSessionConfig field0)  wscRtp,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( WscRtpSessionConfig field0)  wscRtp,required TResult Function( PlaybinConfig field0)  playbin,}) {final _that = this;
 switch (_that) {
 case VideoConfig_WscRtp():
-return wscRtp(_that.field0);}
+return wscRtp(_that.field0);case VideoConfig_Playbin():
+return playbin(_that.field0);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -185,10 +159,11 @@ return wscRtp(_that.field0);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( WscRtpSessionConfig field0)?  wscRtp,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( WscRtpSessionConfig field0)?  wscRtp,TResult? Function( PlaybinConfig field0)?  playbin,}) {final _that = this;
 switch (_that) {
 case VideoConfig_WscRtp() when wscRtp != null:
-return wscRtp(_that.field0);case _:
+return wscRtp(_that.field0);case VideoConfig_Playbin() when playbin != null:
+return playbin(_that.field0);case _:
   return null;
 
 }
@@ -207,7 +182,7 @@ class VideoConfig_WscRtp extends VideoConfig {
 
 /// Create a copy of VideoConfig
 /// with the given fields replaced by the non-null parameter values.
-@override @JsonKey(includeFromJson: false, includeToJson: false)
+@JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
 $VideoConfig_WscRtpCopyWith<VideoConfig_WscRtp> get copyWith => _$VideoConfig_WscRtpCopyWithImpl<VideoConfig_WscRtp>(this, _$identity);
 
@@ -233,7 +208,7 @@ String toString() {
 /// @nodoc
 abstract mixin class $VideoConfig_WscRtpCopyWith<$Res> implements $VideoConfigCopyWith<$Res> {
   factory $VideoConfig_WscRtpCopyWith(VideoConfig_WscRtp value, $Res Function(VideoConfig_WscRtp) _then) = _$VideoConfig_WscRtpCopyWithImpl;
-@override @useResult
+@useResult
 $Res call({
  WscRtpSessionConfig field0
 });
@@ -252,10 +227,76 @@ class _$VideoConfig_WscRtpCopyWithImpl<$Res>
 
 /// Create a copy of VideoConfig
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
   return _then(VideoConfig_WscRtp(
 null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
 as WscRtpSessionConfig,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class VideoConfig_Playbin extends VideoConfig {
+  const VideoConfig_Playbin(this.field0): super._();
+  
+
+@override final  PlaybinConfig field0;
+
+/// Create a copy of VideoConfig
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$VideoConfig_PlaybinCopyWith<VideoConfig_Playbin> get copyWith => _$VideoConfig_PlaybinCopyWithImpl<VideoConfig_Playbin>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoConfig_Playbin&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'VideoConfig.playbin(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $VideoConfig_PlaybinCopyWith<$Res> implements $VideoConfigCopyWith<$Res> {
+  factory $VideoConfig_PlaybinCopyWith(VideoConfig_Playbin value, $Res Function(VideoConfig_Playbin) _then) = _$VideoConfig_PlaybinCopyWithImpl;
+@useResult
+$Res call({
+ PlaybinConfig field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$VideoConfig_PlaybinCopyWithImpl<$Res>
+    implements $VideoConfig_PlaybinCopyWith<$Res> {
+  _$VideoConfig_PlaybinCopyWithImpl(this._self, this._then);
+
+  final VideoConfig_Playbin _self;
+  final $Res Function(VideoConfig_Playbin) _then;
+
+/// Create a copy of VideoConfig
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(VideoConfig_Playbin(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as PlaybinConfig,
   ));
 }
 

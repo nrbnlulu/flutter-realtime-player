@@ -49,8 +49,16 @@ pub struct WscRtpSessionConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[flutter_rust_bridge::frb(sync)]
+pub struct PlaybinConfig {
+    pub uri: String,
+    pub mute: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[flutter_rust_bridge::frb(sync)]
 pub enum VideoConfig {
     WscRtp(WscRtpSessionConfig),
+    Playbin(PlaybinConfig),
 }
 
 pub type DartStateStream = StreamSink<StreamState>;

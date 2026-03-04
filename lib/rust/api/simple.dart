@@ -3,8 +3,6 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
-import 'package:flutter/foundation.dart' show debugPrint;
-
 import '../core/types.dart';
 import '../dart_types.dart';
 import '../frb_generated.dart';
@@ -36,12 +34,10 @@ Stream<StreamState> createPlayable({
 Future<void> seekToTimestamp({
   required PlatformInt64 sessionId,
   required BigInt ts,
-}) async {
-  await RustLib.instance.api.crateApiSimpleSeekToTimestamp(
-    sessionId: sessionId,
-    ts: ts,
-  );
-}
+}) => RustLib.instance.api.crateApiSimpleSeekToTimestamp(
+  sessionId: sessionId,
+  ts: ts,
+);
 
 Future<void> wscRtpGoLive({required PlatformInt64 sessionId}) =>
     RustLib.instance.api.crateApiSimpleWscRtpGoLive(sessionId: sessionId);

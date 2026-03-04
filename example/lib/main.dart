@@ -3,9 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/flutter_realtime_player.dart' as fl_gst;
 import 'package:flutter_realtime_player/rust/core/types.dart'
-    show WscRtpSessionConfig, VideoConfig, VideoConfig_WscRtp;
+    show
+        WscRtpSessionConfig,
+        VideoConfig,
+        VideoConfig_WscRtp,
+        PlaybinConfig,
+        VideoConfig_Playbin;
 import 'wsc_rtp_player.dart';
 import 'wsc_rtp_seek_demo.dart';
+import 'playbin_player.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,7 +53,10 @@ class StreamControlWidget extends StatefulWidget {
 class StreamControlWidgetState extends State<StreamControlWidget> {
   final List<_StreamConfig> _streams = [
     _StreamConfig(
-      urlController: TextEditingController(text: "rtsp://your_stream_url_here"),
+      urlController: TextEditingController(
+        text:
+            "https://www.freedesktop.org/software/gstreamer-sdk/data/media/sintel_trailer-480p.webm",
+      ),
       wscRtpBaseUrlController: TextEditingController(
         text: "https://your_backend_here",
       ),
@@ -58,7 +67,9 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
       isStreaming: false,
       autoRestart: false,
       useWscRtp: false,
+      usePlaybin: false,
       forceWebsocketTransport: false,
+      mute: false,
     ),
   ];
 
@@ -95,7 +106,9 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
           isStreaming: false,
           autoRestart: false,
           useWscRtp: false,
+          usePlaybin: false,
           forceWebsocketTransport: false,
+          mute: false,
         ),
       );
     });
@@ -201,7 +214,9 @@ class _StreamConfig {
   bool isStreaming;
   bool autoRestart;
   bool useWscRtp;
+  bool usePlaybin;
   bool forceWebsocketTransport;
+  bool mute;
 
   _StreamConfig({
     required this.urlController,
@@ -212,6 +227,8 @@ class _StreamConfig {
     required this.autoRestart,
     required this.useWscRtp,
     this.forceWebsocketTransport = false,
+    this.usePlaybin = false,
+    this.mute = false,
   });
 }
 
@@ -281,14 +298,23 @@ class _StreamGridItemState extends State<_StreamGridItem>
             // Full-screen video player
             _VideoPlayerWithControls(
               key: _playerKey,
-              config: VideoConfig.wscRtp(
-                WscRtpSessionConfig(
-                  baseUrl: stream.wscRtpBaseUrlController.text,
-                  sourceId: stream.wscRtpSourceIdController.text,
-                  forceWebsocketTransport: stream.forceWebsocketTransport,
-                  autoRestart: stream.autoRestart,
-                ),
-              ),
+              config:
+                  stream.usePlaybin
+                      ? VideoConfig.playbin(
+                        PlaybinConfig(
+                          uri: stream.urlController.text,
+                          mute: stream.mute,
+                        ),
+                      )
+                      : VideoConfig.wscRtp(
+                        WscRtpSessionConfig(
+                          baseUrl: stream.wscRtpBaseUrlController.text,
+                          sourceId: stream.wscRtpSourceIdController.text,
+                          forceWebsocketTransport:
+                              stream.forceWebsocketTransport,
+                          autoRestart: stream.autoRestart,
+                        ),
+                      ),
             ),
             // Overlay controls
             Positioned(
@@ -340,10 +366,22 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     onChanged: (value) {
                       setState(() {
                         stream.useWscRtp = value;
+                        if (value) stream.usePlaybin = false;
                       });
                     },
                   ),
                   const Text('Use WSC-RTP'),
+                  const SizedBox(width: 8),
+                  Switch(
+                    value: stream.usePlaybin,
+                    onChanged: (value) {
+                      setState(() {
+                        stream.usePlaybin = value;
+                        if (value) stream.useWscRtp = false;
+                      });
+                    },
+                  ),
+                  const Text('Use Playbin'),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -353,7 +391,7 @@ class _StreamGridItemState extends State<_StreamGridItem>
                 ],
               ),
               const SizedBox(height: 12.0),
-              if (!stream.useWscRtp)
+              if (!stream.useWscRtp && !stream.usePlaybin)
                 TextField(
                   controller: stream.urlController,
                   decoration: const InputDecoration(
@@ -361,6 +399,29 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     border: OutlineInputBorder(),
                   ),
                 ),
+              if (stream.usePlaybin) ...[
+                TextField(
+                  controller: stream.urlController,
+                  decoration: const InputDecoration(
+                    labelText: 'Media URI (file://, http://, rtsp://, etc.)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8.0),
+                Row(
+                  children: [
+                    Switch(
+                      value: stream.mute,
+                      onChanged: (value) {
+                        setState(() {
+                          stream.mute = value;
+                        });
+                      },
+                    ),
+                    const Text('Mute Audio'),
+                  ],
+                ),
+              ],
               if (stream.useWscRtp) ...[
                 TextField(
                   controller: stream.wscRtpBaseUrlController,
@@ -566,13 +627,14 @@ class _VideoPlayerWithControls extends StatefulWidget {
 class _VideoPlayerWithControlsState extends State<_VideoPlayerWithControls> {
   // Used by _StreamGridItemState to stop playback before toggling.
   Future<void> stop() async {
-    // WscRtpPlayerWidget manages its own lifecycle; nothing to do here.
+    // Player widgets manage their own lifecycle; nothing to do here.
   }
 
   @override
   Widget build(BuildContext context) {
     return switch (widget.config) {
       VideoConfig_WscRtp(:final field0) => WscRtpPlayerWidget(config: field0),
+      VideoConfig_Playbin(:final field0) => PlaybinPlayerWidget(config: field0),
     };
   }
 }

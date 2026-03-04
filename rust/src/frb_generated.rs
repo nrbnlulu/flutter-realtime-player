@@ -536,6 +536,18 @@ impl SseDecode for Option<u16> {
     }
 }
 
+impl SseDecode for crate::core::types::PlaybinConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_uri = <String>::sse_decode(deserializer);
+        let mut var_mute = <bool>::sse_decode(deserializer);
+        return crate::core::types::PlaybinConfig {
+            uri: var_uri,
+            mute: var_mute,
+        };
+    }
+}
+
 impl SseDecode for crate::dart_types::StreamEvent {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -637,6 +649,10 @@ impl SseDecode for crate::core::types::VideoConfig {
                 let mut var_field0 =
                     <crate::core::types::WscRtpSessionConfig>::sse_decode(deserializer);
                 return crate::core::types::VideoConfig::WscRtp(var_field0);
+            }
+            1 => {
+                let mut var_field0 = <crate::core::types::PlaybinConfig>::sse_decode(deserializer);
+                return crate::core::types::VideoConfig::Playbin(var_field0);
             }
             _ => {
                 unimplemented!("");
@@ -746,6 +762,27 @@ fn pde_ffi_dispatcher_sync_impl(
 // Section: rust2dart
 
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::core::types::PlaybinConfig {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.uri.into_into_dart().into_dart(),
+            self.mute.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::core::types::PlaybinConfig
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::core::types::PlaybinConfig>
+    for crate::core::types::PlaybinConfig
+{
+    fn into_into_dart(self) -> crate::core::types::PlaybinConfig {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamEvent {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -825,6 +862,9 @@ impl flutter_rust_bridge::IntoDart for crate::core::types::VideoConfig {
         match self {
             crate::core::types::VideoConfig::WscRtp(field0) => {
                 [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::core::types::VideoConfig::Playbin(field0) => {
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -969,6 +1009,14 @@ impl SseEncode for Option<u16> {
     }
 }
 
+impl SseEncode for crate::core::types::PlaybinConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.uri, serializer);
+        <bool>::sse_encode(self.mute, serializer);
+    }
+}
+
 impl SseEncode for crate::dart_types::StreamEvent {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1063,6 +1111,10 @@ impl SseEncode for crate::core::types::VideoConfig {
             crate::core::types::VideoConfig::WscRtp(field0) => {
                 <i32>::sse_encode(0, serializer);
                 <crate::core::types::WscRtpSessionConfig>::sse_encode(field0, serializer);
+            }
+            crate::core::types::VideoConfig::Playbin(field0) => {
+                <i32>::sse_encode(1, serializer);
+                <crate::core::types::PlaybinConfig>::sse_encode(field0, serializer);
             }
             _ => {
                 unimplemented!("");

@@ -8,12 +8,31 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'types.freezed.dart';
 
+class PlaybinConfig {
+  final String uri;
+  final bool mute;
+
+  const PlaybinConfig({required this.uri, required this.mute});
+
+  @override
+  int get hashCode => uri.hashCode ^ mute.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PlaybinConfig &&
+          runtimeType == other.runtimeType &&
+          uri == other.uri &&
+          mute == other.mute;
+}
+
 @freezed
 sealed class VideoConfig with _$VideoConfig {
   const VideoConfig._();
 
   const factory VideoConfig.wscRtp(WscRtpSessionConfig field0) =
       VideoConfig_WscRtp;
+  const factory VideoConfig.playbin(PlaybinConfig field0) = VideoConfig_Playbin;
 }
 
 class WscRtpSessionConfig {

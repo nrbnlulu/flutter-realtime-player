@@ -530,6 +530,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlaybinConfig dco_decode_box_autoadd_playbin_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_playbin_config(raw);
+  }
+
+  @protected
   int dco_decode_box_autoadd_u_16(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -577,6 +583,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int? dco_decode_opt_box_autoadd_u_16(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_16(raw);
+  }
+
+  @protected
+  PlaybinConfig dco_decode_playbin_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return PlaybinConfig(
+      uri: dco_decode_String(arr[0]),
+      mute: dco_decode_bool(arr[1]),
+    );
   }
 
   @protected
@@ -655,6 +673,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return VideoConfig_WscRtp(
           dco_decode_box_autoadd_wsc_rtp_session_config(raw[1]),
         );
+      case 1:
+        return VideoConfig_Playbin(
+          dco_decode_box_autoadd_playbin_config(raw[1]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -728,6 +750,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlaybinConfig sse_decode_box_autoadd_playbin_config(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_playbin_config(deserializer));
+  }
+
+  @protected
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_16(deserializer));
@@ -783,6 +813,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     } else {
       return null;
     }
+  }
+
+  @protected
+  PlaybinConfig sse_decode_playbin_config(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_uri = sse_decode_String(deserializer);
+    var var_mute = sse_decode_bool(deserializer);
+    return PlaybinConfig(uri: var_uri, mute: var_mute);
   }
 
   @protected
@@ -874,6 +912,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           deserializer,
         );
         return VideoConfig_WscRtp(var_field0);
+      case 1:
+        var var_field0 = sse_decode_box_autoadd_playbin_config(deserializer);
+        return VideoConfig_Playbin(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -980,6 +1021,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_playbin_config(
+    PlaybinConfig self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_playbin_config(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_16(self, serializer);
@@ -1042,6 +1092,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_box_autoadd_u_16(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_playbin_config(PlaybinConfig self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.uri, serializer);
+    sse_encode_bool(self.mute, serializer);
   }
 
   @protected
@@ -1121,6 +1178,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case VideoConfig_WscRtp(field0: final field0):
         sse_encode_i_32(0, serializer);
         sse_encode_box_autoadd_wsc_rtp_session_config(field0, serializer);
+      case VideoConfig_Playbin(field0: final field0):
+        sse_encode_i_32(1, serializer);
+        sse_encode_box_autoadd_playbin_config(field0, serializer);
     }
   }
 

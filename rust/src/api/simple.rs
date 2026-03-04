@@ -4,7 +4,7 @@ use log::{debug, error, trace};
 
 use crate::{
     core::{
-        input::wsc_rtp::WscRtpSession,
+        input::{playbin::PlaybinSession, wsc_rtp::WscRtpSession},
         session::{
             registry::{self, insert_session},
             VideoSessionCommon,
@@ -63,6 +63,14 @@ pub async fn create_playable(
             let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
             let (session, shutdown_rx) =
                 WscRtpSession::new(wsc_rtp_config, session_common, HTTP_CLIENT.clone());
+            let session_clone = session.clone();
+            tokio::spawn(async move { session_clone.execute(shutdown_rx).await });
+            insert_session(session_id, session);
+        }
+        VideoConfig::Playbin(playbin_config) => {
+            trace!("  uri: {}", playbin_config.uri);
+            let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
+            let (session, shutdown_rx) = PlaybinSession::new(playbin_config, session_common);
             let session_clone = session.clone();
             tokio::spawn(async move { session_clone.execute(shutdown_rx).await });
             insert_session(session_id, session);
