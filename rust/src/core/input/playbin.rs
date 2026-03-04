@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use gst::prelude::*;
 use gst_app::AppSink;
 use irondash_texture::Texture;
-use log::{debug, error};
+use log::{debug, error, info, trace, warn};
 use parking_lot::Mutex;
 
 use crate::{
@@ -63,6 +63,7 @@ impl PlaybinSession {
                 let texture =
                     Texture::new_with_provider(engine_handle, payload_holder_for_texture)?;
                 let texture_id = texture.id();
+                info!("Playbin: texture created, id={}", texture_id);
                 Ok((texture.into_sendable_texture(), texture_id))
             })?;
 
@@ -85,6 +86,7 @@ impl PlaybinSession {
         let session_weak = Arc::downgrade(self);
         let session_weak_for_callbacks = session_weak.clone();
         let size = Arc::new(parking_lot::Mutex::new((0u32, 0u32)));
+        let frame_count = Arc::new(AtomicU32::new(0));
 
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
@@ -103,6 +105,7 @@ impl PlaybinSession {
                     // Emit OriginVideoSize only when dimensions change (lock-free comparison)
                     if cached_width != width || cached_height != height {
                         *size_guard = (width, height);
+                        log::debug!("Playbin: video dimensions: {}x{}", width, height);
                         if let Some(session) = session_weak_for_callbacks.upgrade() {
                             session
                                 .session_common
@@ -147,6 +150,8 @@ impl PlaybinSession {
                     if let Some(holder) = payload_holder_weak.upgrade() {
                         holder.set_payload(Arc::new(frame) as SharedPixelData);
                         texture_session.mark_frame_available();
+                    } else {
+                        warn!("Playbin: payload_holder dropped, frame discarded");
                     }
                     Ok(gst::FlowSuccess::Ok)
                 })
@@ -161,10 +166,7 @@ impl PlaybinSession {
         playbin.set_property("video-sink", &appsink);
 
         if self.config.mute {
-            let fakesink = gst::ElementFactory::make("fakesink")
-                .build()
-                .context("Failed to create fakesink element")?;
-            playbin.set_property("audio-sink", &fakesink);
+            playbin.set_property("mute", true);
         }
 
         let pipeline = playbin
@@ -197,14 +199,30 @@ impl PlaybinSession {
                     let percent = buffering.percent();
                     let _ = gst_event_tx.try_send(GstBusEvent::Buffering(percent));
                 }
+                gst::MessageView::StateChanged(sc) => {
+                    let src_name = msg.src().map(|s| s.name().to_string()).unwrap_or_default();
+                    let _ = gst_event_tx.try_send(GstBusEvent::StateChanged {
+                        src: src_name,
+                        old: sc.old(),
+                        new: sc.current(),
+                    });
+                }
+                gst::MessageView::Warning(w) => {
+                    let _ = gst_event_tx.try_send(GstBusEvent::Warning(format!(
+                        "GStreamer warning [{}]: {}",
+                        bus_session_id,
+                        w.error()
+                    )));
+                }
                 _ => {}
             }
             gst::BusSyncReply::Drop
         });
 
-        pipeline_arc
+        let state_change = pipeline_arc
             .set_state(gst::State::Playing)
             .context("setting GStreamer pipeline to Playing")?;
+        info!("Playbin: set_state(Playing) -> {:?}", state_change);
 
         // Send Playing state with texture_id
         self.session_common.send_state_msg(StreamState::Playing {
@@ -213,11 +231,12 @@ impl PlaybinSession {
         });
 
         // Main event loop
+        let mut loop_result: anyhow::Result<()> = Ok(());
         loop {
             tokio::select! {
                 cmd = shutdown_rx.recv() => {
                     if cmd.is_some() {
-                        debug!("Playbin: shutdown command received");
+                        info!("Playbin: shutdown command received, stopping");
                         if let Some(pipeline) = self.active_pipeline.lock().take() {
                             let _ = pipeline.set_state(gst::State::Null);
                         }
@@ -227,25 +246,33 @@ impl PlaybinSession {
                 event = gst_event_rx.recv() => {
                     match event {
                         Some(GstBusEvent::Error(msg)) => {
-                            error!("{}", msg);
+                            error!("Playbin: {}", msg);
                             self.session_common.send_event_msg(StreamEvent::Error(msg.clone()));
                             if let Some(pipeline) = self.active_pipeline.lock().take() {
                                 let _ = pipeline.set_state(gst::State::Null);
                             }
-                            return Err(anyhow::anyhow!(msg));
+                            loop_result = Err(anyhow::anyhow!(msg));
+                            break;
+                        }
+                        Some(GstBusEvent::Warning(msg)) => {
+                            warn!("Playbin: {}", msg);
                         }
                         Some(GstBusEvent::Eos) => {
-                            debug!("Playbin: EOS received");
+                            info!("Playbin: EOS received");
                             if let Some(pipeline) = self.active_pipeline.lock().take() {
                                 let _ = pipeline.set_state(gst::State::Null);
                             }
                             self.session_common.send_state_msg(StreamState::Stopped);
                             break;
                         }
-                        Some(GstBusEvent::Buffering(_percent)) => {
-                            // Buffering events are ignored for now since StreamState doesn't have a Buffering variant
+                        Some(GstBusEvent::Buffering(percent)) => {
+                            debug!("Playbin: buffering {}%", percent);
+                        }
+                        Some(GstBusEvent::StateChanged { src, old, new }) => {
+                            debug!("Playbin: [{}] state {:?} -> {:?}", src, old, new);
                         }
                         None => {
+                            warn!("Playbin: bus event channel closed unexpectedly");
                             break;
                         }
                     }
@@ -256,21 +283,28 @@ impl PlaybinSession {
         // Send Stopped state
         let _ = self.session_common.send_state_msg(StreamState::Stopped);
 
-        // Texture + payload_holder must be dropped on the platform main thread
+        // Texture + payload_holder must always be dropped on the platform main thread,
+        // regardless of how the loop exited (including error paths).
         crate::utils::invoke_on_platform_main_thread(move || {
             drop(sendable_texture);
             drop(payload_holder);
         });
 
-        Ok(())
+        loop_result
     }
 }
 
 #[derive(Debug, Clone)]
 enum GstBusEvent {
     Error(String),
+    Warning(String),
     Eos,
     Buffering(i32),
+    StateChanged {
+        src: String,
+        old: gst::State,
+        new: gst::State,
+    },
 }
 
 #[async_trait::async_trait]
