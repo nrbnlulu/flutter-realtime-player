@@ -19,14 +19,30 @@ irondash_dart_ffi = "*"
 anyhow = "1.0.81"
 lazy_static = "1.5.0"
 chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12.7", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+flume = "0.12"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros"] }
+tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-native-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+url = "2.5"
 
 
 thread_local = "1.1.8"
-ffmpeg = { package="rffmpeg", git = "https://github.com/nrbnlulu/rffmpeg.git", branch="main", default-features = false, features = ["codec", "filter", "format", "software-resampling", "software-scaling"] }
+
+gst = {package = "gstreamer", version = "0.24.4"}
+gst-app = {package = "gstreamer-app", version = "0.24.4"}
+gst-video = {package = "gstreamer-video", version = "0.24.4"}
+
 
 log = "0.4"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+media-server-api-models = { version = "0.1.0", git = "https://github.com/nrbnlulu/media-server.git", rev="3a29eda075f15d240f829fe0329645545055b2c3"}
+sdp = "0.17.1"
+parking_lot = "0.12.5"
+async-trait = "0.1.89"
 
 
 [target.'cfg(target_os = "windows")'.dependencies.windows]

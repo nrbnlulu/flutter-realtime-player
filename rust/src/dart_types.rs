@@ -8,8 +8,16 @@ pub enum StreamState {
 }
 
 #[derive(Debug, Clone)]
+pub enum WscRtpMode {
+    Live,
+    Dvr { current_time_ms: i64, speed: f64 },
+}
+
+#[derive(Debug, Clone)]
 pub enum StreamEvent {
     Error(String),
     CurrentTime(i64),
     OriginVideoSize { width: u64, height: u64 },
+    WscRtpSessionMode(WscRtpMode),
+    WscRtpStreamState(String),
 }

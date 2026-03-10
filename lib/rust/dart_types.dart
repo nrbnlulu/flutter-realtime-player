@@ -19,6 +19,10 @@ sealed class StreamEvent with _$StreamEvent {
     required BigInt width,
     required BigInt height,
   }) = StreamEvent_OriginVideoSize;
+  const factory StreamEvent.wscRtpSessionMode(WscRtpMode field0) =
+      StreamEvent_WscRtpSessionMode;
+  const factory StreamEvent.wscRtpStreamState(String field0) =
+      StreamEvent_WscRtpStreamState;
 }
 
 @freezed
@@ -32,4 +36,15 @@ sealed class StreamState with _$StreamState {
     required bool seekable,
   }) = StreamState_Playing;
   const factory StreamState.stopped() = StreamState_Stopped;
+}
+
+@freezed
+sealed class WscRtpMode with _$WscRtpMode {
+  const WscRtpMode._();
+
+  const factory WscRtpMode.live() = WscRtpMode_Live;
+  const factory WscRtpMode.dvr({
+    required PlatformInt64 currentTimeMs,
+    required double speed,
+  }) = WscRtpMode_Dvr;
 }

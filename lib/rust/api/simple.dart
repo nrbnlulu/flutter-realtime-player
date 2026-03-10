@@ -21,24 +21,33 @@ Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
 Future<PlatformInt64> createNewSession() =>
     RustLib.instance.api.crateApiSimpleCreateNewSession();
 
-Stream<StreamState> createNewPlayable({
+Stream<StreamState> createPlayable({
   required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
-  required VideoInfo videoInfo,
-  Map<String, String>? ffmpegOptions,
-}) => RustLib.instance.api.crateApiSimpleCreateNewPlayable(
+  required VideoConfig config,
+}) => RustLib.instance.api.crateApiSimpleCreatePlayable(
   sessionId: sessionId,
   engineHandle: engineHandle,
-  videoInfo: videoInfo,
-  ffmpegOptions: ffmpegOptions,
+  config: config,
 );
 
 Future<void> seekToTimestamp({
   required PlatformInt64 sessionId,
-  required PlatformInt64 ts,
+  required BigInt ts,
 }) => RustLib.instance.api.crateApiSimpleSeekToTimestamp(
   sessionId: sessionId,
   ts: ts,
+);
+
+Future<void> wscRtpGoLive({required PlatformInt64 sessionId}) =>
+    RustLib.instance.api.crateApiSimpleWscRtpGoLive(sessionId: sessionId);
+
+Future<void> setSpeed({
+  required PlatformInt64 sessionId,
+  required double speed,
+}) => RustLib.instance.api.crateApiSimpleSetSpeed(
+  sessionId: sessionId,
+  speed: speed,
 );
 
 Stream<StreamEvent> registerToStreamEventsSink({
@@ -49,7 +58,7 @@ Stream<StreamEvent> registerToStreamEventsSink({
 
 /// marks the session as required by the ui
 /// if the ui won't call this every 2 seconds
-/// this session will terminate itself.
+/// this session will be terminate.
 Future<void> markSessionAlive({required PlatformInt64 sessionId}) =>
     RustLib.instance.api.crateApiSimpleMarkSessionAlive(sessionId: sessionId);
 
@@ -60,13 +69,3 @@ Future<void> destroyStreamSession({required PlatformInt64 sessionId}) => RustLib
     .instance
     .api
     .crateApiSimpleDestroyStreamSession(sessionId: sessionId);
-
-Future<void> resizeStreamSession({
-  required PlatformInt64 sessionId,
-  required int width,
-  required int height,
-}) => RustLib.instance.api.crateApiSimpleResizeStreamSession(
-  sessionId: sessionId,
-  width: width,
-  height: height,
-);

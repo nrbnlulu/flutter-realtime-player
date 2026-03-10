@@ -5,56 +5,69 @@
 
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
+part 'types.freezed.dart';
 
-class VideoDimensions {
-  final int width;
-  final int height;
+class PlaybinConfig {
+  final String uri;
+  final bool mute;
 
-  const VideoDimensions({required this.width, required this.height});
+  const PlaybinConfig({required this.uri, required this.mute});
 
   @override
-  int get hashCode => width.hashCode ^ height.hashCode;
+  int get hashCode => uri.hashCode ^ mute.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is VideoDimensions &&
+      other is PlaybinConfig &&
           runtimeType == other.runtimeType &&
-          width == other.width &&
-          height == other.height;
+          uri == other.uri &&
+          mute == other.mute;
 }
 
-class VideoInfo {
-  final String uri;
-  final VideoDimensions dimensions;
-  final int? framerate;
-  final bool mute;
+@freezed
+sealed class VideoConfig with _$VideoConfig {
+  const VideoConfig._();
+
+  const factory VideoConfig.wscRtp(WscRtpSessionConfig field0) =
+      VideoConfig_WscRtp;
+  const factory VideoConfig.playbin(PlaybinConfig field0) = VideoConfig_Playbin;
+}
+
+class WscRtpSessionConfig {
+  final String baseUrl;
+  final String sourceId;
+  final int? clientPort;
+
+  /// Skip UDP negotiation and use WebSocket for RTP delivery from the start.
+  final bool forceWebsocketTransport;
   final bool autoRestart;
 
-  const VideoInfo({
-    required this.uri,
-    required this.dimensions,
-    this.framerate,
-    required this.mute,
+  const WscRtpSessionConfig({
+    required this.baseUrl,
+    required this.sourceId,
+    this.clientPort,
+    required this.forceWebsocketTransport,
     required this.autoRestart,
   });
 
   @override
   int get hashCode =>
-      uri.hashCode ^
-      dimensions.hashCode ^
-      framerate.hashCode ^
-      mute.hashCode ^
+      baseUrl.hashCode ^
+      sourceId.hashCode ^
+      clientPort.hashCode ^
+      forceWebsocketTransport.hashCode ^
       autoRestart.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is VideoInfo &&
+      other is WscRtpSessionConfig &&
           runtimeType == other.runtimeType &&
-          uri == other.uri &&
-          dimensions == other.dimensions &&
-          framerate == other.framerate &&
-          mute == other.mute &&
+          baseUrl == other.baseUrl &&
+          sourceId == other.sourceId &&
+          clientPort == other.clientPort &&
+          forceWebsocketTransport == other.forceWebsocketTransport &&
           autoRestart == other.autoRestart;
 }

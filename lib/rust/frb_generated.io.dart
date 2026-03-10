@@ -24,9 +24,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
-  Map<String, String> dco_decode_Map_String_String_None(dynamic raw);
-
-  @protected
   RustStreamSink<StreamEvent> dco_decode_StreamSink_stream_event_Sse(
     dynamic raw,
   );
@@ -43,13 +40,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
-  int dco_decode_box_autoadd_i_32(dynamic raw);
+  PlaybinConfig dco_decode_box_autoadd_playbin_config(dynamic raw);
 
   @protected
-  VideoInfo dco_decode_box_autoadd_video_info(dynamic raw);
+  int dco_decode_box_autoadd_u_16(dynamic raw);
 
   @protected
-  int dco_decode_i_32(dynamic raw);
+  VideoConfig dco_decode_box_autoadd_video_config(dynamic raw);
+
+  @protected
+  WscRtpMode dco_decode_box_autoadd_wsc_rtp_mode(dynamic raw);
+
+  @protected
+  WscRtpSessionConfig dco_decode_box_autoadd_wsc_rtp_session_config(
+    dynamic raw,
+  );
+
+  @protected
+  double dco_decode_f_64(dynamic raw);
 
   @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
@@ -58,16 +66,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
-  List<(String, String)> dco_decode_list_record_string_string(dynamic raw);
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
 
   @protected
-  Map<String, String>? dco_decode_opt_Map_String_String_None(dynamic raw);
-
-  @protected
-  int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
-
-  @protected
-  (String, String) dco_decode_record_string_string(dynamic raw);
+  PlaybinConfig dco_decode_playbin_config(dynamic raw);
 
   @protected
   StreamEvent dco_decode_stream_event(dynamic raw);
@@ -76,7 +78,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StreamState dco_decode_stream_state(dynamic raw);
 
   @protected
-  int dco_decode_u_32(dynamic raw);
+  int dco_decode_u_16(dynamic raw);
 
   @protected
   BigInt dco_decode_u_64(dynamic raw);
@@ -88,18 +90,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
-  VideoDimensions dco_decode_video_dimensions(dynamic raw);
+  VideoConfig dco_decode_video_config(dynamic raw);
 
   @protected
-  VideoInfo dco_decode_video_info(dynamic raw);
+  WscRtpMode dco_decode_wsc_rtp_mode(dynamic raw);
+
+  @protected
+  WscRtpSessionConfig dco_decode_wsc_rtp_session_config(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
-
-  @protected
-  Map<String, String> sse_decode_Map_String_String_None(
-    SseDeserializer deserializer,
-  );
 
   @protected
   RustStreamSink<StreamEvent> sse_decode_StreamSink_stream_event_Sse(
@@ -118,13 +118,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
+  PlaybinConfig sse_decode_box_autoadd_playbin_config(
+    SseDeserializer deserializer,
+  );
 
   @protected
-  VideoInfo sse_decode_box_autoadd_video_info(SseDeserializer deserializer);
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
+  VideoConfig sse_decode_box_autoadd_video_config(SseDeserializer deserializer);
+
+  @protected
+  WscRtpMode sse_decode_box_autoadd_wsc_rtp_mode(SseDeserializer deserializer);
+
+  @protected
+  WscRtpSessionConfig sse_decode_box_autoadd_wsc_rtp_session_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
@@ -133,22 +146,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
-  List<(String, String)> sse_decode_list_record_string_string(
-    SseDeserializer deserializer,
-  );
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
-  Map<String, String>? sse_decode_opt_Map_String_String_None(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
-
-  @protected
-  (String, String) sse_decode_record_string_string(
-    SseDeserializer deserializer,
-  );
+  PlaybinConfig sse_decode_playbin_config(SseDeserializer deserializer);
 
   @protected
   StreamEvent sse_decode_stream_event(SseDeserializer deserializer);
@@ -157,7 +158,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StreamState sse_decode_stream_state(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_u_32(SseDeserializer deserializer);
+  int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer);
@@ -169,20 +170,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  VideoDimensions sse_decode_video_dimensions(SseDeserializer deserializer);
+  VideoConfig sse_decode_video_config(SseDeserializer deserializer);
 
   @protected
-  VideoInfo sse_decode_video_info(SseDeserializer deserializer);
+  WscRtpMode sse_decode_wsc_rtp_mode(SseDeserializer deserializer);
+
+  @protected
+  WscRtpSessionConfig sse_decode_wsc_rtp_session_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
   void sse_encode_AnyhowException(
     AnyhowException self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_Map_String_String_None(
-    Map<String, String> self,
     SseSerializer serializer,
   );
 
@@ -205,16 +208,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_box_autoadd_video_info(
-    VideoInfo self,
+  void sse_encode_box_autoadd_playbin_config(
+    PlaybinConfig self,
     SseSerializer serializer,
   );
 
   @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_video_config(
+    VideoConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_wsc_rtp_mode(
+    WscRtpMode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_wsc_rtp_session_config(
+    WscRtpSessionConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
@@ -226,25 +247,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_list_record_string_string(
-    List<(String, String)> self,
-    SseSerializer serializer,
-  );
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_Map_String_String_None(
-    Map<String, String>? self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_record_string_string(
-    (String, String) self,
-    SseSerializer serializer,
-  );
+  void sse_encode_playbin_config(PlaybinConfig self, SseSerializer serializer);
 
   @protected
   void sse_encode_stream_event(StreamEvent self, SseSerializer serializer);
@@ -253,7 +259,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_stream_state(StreamState self, SseSerializer serializer);
 
   @protected
-  void sse_encode_u_32(int self, SseSerializer serializer);
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer);
@@ -265,13 +271,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
-  void sse_encode_video_dimensions(
-    VideoDimensions self,
+  void sse_encode_video_config(VideoConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wsc_rtp_mode(WscRtpMode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wsc_rtp_session_config(
+    WscRtpSessionConfig self,
     SseSerializer serializer,
   );
 
   @protected
-  void sse_encode_video_info(VideoInfo self, SseSerializer serializer);
+  void sse_encode_i_32(int self, SseSerializer serializer);
 }
 
 // Section: wire_class

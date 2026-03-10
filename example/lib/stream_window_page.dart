@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_realtime_player/rust/core/types.dart' show VideoConfig;
 import 'package:flutter_realtime_player/video_player.dart';
 
 class StreamWindowPage extends StatelessWidget {
-  final String url;
-  const StreamWindowPage({super.key, required this.url});
+  final VideoConfig config;
+  const StreamWindowPage({super.key, required this.config});
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +14,7 @@ class StreamWindowPage extends StatelessWidget {
         child: SizedBox(
           width: double.infinity,
           height: 300,
-          child: VideoPlayer.fromConfig(url: url, mute: false),
+          child: VideoPlayer.fromConfig(config: config),
         ),
       ),
     );

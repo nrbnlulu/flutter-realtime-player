@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -933152703;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 907721271;
 
 // Section: executor
 
@@ -45,55 +45,6 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
-fn wire__crate__api__simple__create_new_playable_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "create_new_playable",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_session_id = <i64>::sse_decode(&mut deserializer);
-            let api_engine_handle = <i64>::sse_decode(&mut deserializer);
-            let api_video_info = <crate::core::types::VideoInfo>::sse_decode(&mut deserializer);
-            let api_ffmpeg_options =
-                <Option<std::collections::HashMap<String, String>>>::sse_decode(&mut deserializer);
-            let api_sink = <StreamSink<
-                crate::dart_types::StreamState,
-                flutter_rust_bridge::for_generated::SseCodec,
-            >>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
-                        let output_ok = crate::api::simple::create_new_playable(
-                            api_session_id,
-                            api_engine_handle,
-                            api_video_info,
-                            api_ffmpeg_options,
-                            api_sink,
-                        )?;
-                        Ok(output_ok)
-                    })(),
-                )
-            }
-        },
-    )
-}
 fn wire__crate__api__simple__create_new_session_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -122,6 +73,54 @@ fn wire__crate__api__simple__create_new_session_impl(
                     let output_ok = Result::<_, ()>::Ok(crate::api::simple::create_new_session())?;
                     Ok(output_ok)
                 })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__create_playable_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "create_playable",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <i64>::sse_decode(&mut deserializer);
+            let api_engine_handle = <i64>::sse_decode(&mut deserializer);
+            let api_config = <crate::core::types::VideoConfig>::sse_decode(&mut deserializer);
+            let api_sink = <StreamSink<
+                crate::dart_types::StreamState,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::simple::create_playable(
+                            api_session_id,
+                            api_engine_handle,
+                            api_config,
+                            api_sink,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
             }
         },
     )
@@ -342,54 +341,13 @@ fn wire__crate__api__simple__register_to_stream_events_sink_impl(
         },
     )
 }
-fn wire__crate__api__simple__resize_stream_session_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "resize_stream_session",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_session_id = <i64>::sse_decode(&mut deserializer);
-            let api_width = <u32>::sse_decode(&mut deserializer);
-            let api_height = <u32>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
-                        let output_ok = crate::api::simple::resize_stream_session(
-                            api_session_id,
-                            api_width,
-                            api_height,
-                        )?;
-                        Ok(output_ok)
-                    })(),
-                )
-            }
-        },
-    )
-}
 fn wire__crate__api__simple__seek_to_timestamp_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "seek_to_timestamp",
             port: Some(port_),
@@ -406,15 +364,90 @@ fn wire__crate__api__simple__seek_to_timestamp_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_session_id = <i64>::sse_decode(&mut deserializer);
-            let api_ts = <i64>::sse_decode(&mut deserializer);
+            let api_ts = <u64>::sse_decode(&mut deserializer);
             deserializer.end();
-            move |context| {
+            move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                    (move || {
+                    (move || async move {
                         let output_ok =
-                            crate::api::simple::seek_to_timestamp(api_session_id, api_ts)?;
+                            crate::api::simple::seek_to_timestamp(api_session_id, api_ts).await?;
                         Ok(output_ok)
-                    })(),
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__set_speed_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "set_speed",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <i64>::sse_decode(&mut deserializer);
+            let api_speed = <f64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::simple::set_speed(api_session_id, api_speed).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__wsc_rtp_go_live_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "wsc_rtp_go_live",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::simple::wsc_rtp_go_live(api_session_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
                 )
             }
         },
@@ -428,14 +461,6 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut inner = <String>::sse_decode(deserializer);
         return flutter_rust_bridge::for_generated::anyhow::anyhow!("{}", inner);
-    }
-}
-
-impl SseDecode for std::collections::HashMap<String, String> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut inner = <Vec<(String, String)>>::sse_decode(deserializer);
-        return inner.into_iter().collect();
     }
 }
 
@@ -474,10 +499,10 @@ impl SseDecode for bool {
     }
 }
 
-impl SseDecode for i32 {
+impl SseDecode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+        deserializer.cursor.read_f64::<NativeEndian>().unwrap()
     }
 }
 
@@ -500,48 +525,26 @@ impl SseDecode for Vec<u8> {
     }
 }
 
-impl SseDecode for Vec<(String, String)> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut len_ = <i32>::sse_decode(deserializer);
-        let mut ans_ = vec![];
-        for idx_ in 0..len_ {
-            ans_.push(<(String, String)>::sse_decode(deserializer));
-        }
-        return ans_;
-    }
-}
-
-impl SseDecode for Option<std::collections::HashMap<String, String>> {
+impl SseDecode for Option<u16> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
-            return Some(<std::collections::HashMap<String, String>>::sse_decode(
-                deserializer,
-            ));
+            return Some(<u16>::sse_decode(deserializer));
         } else {
             return None;
         }
     }
 }
 
-impl SseDecode for Option<i32> {
+impl SseDecode for crate::core::types::PlaybinConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<i32>::sse_decode(deserializer));
-        } else {
-            return None;
-        }
-    }
-}
-
-impl SseDecode for (String, String) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_field0 = <String>::sse_decode(deserializer);
-        let mut var_field1 = <String>::sse_decode(deserializer);
-        return (var_field0, var_field1);
+        let mut var_uri = <String>::sse_decode(deserializer);
+        let mut var_mute = <bool>::sse_decode(deserializer);
+        return crate::core::types::PlaybinConfig {
+            uri: var_uri,
+            mute: var_mute,
+        };
     }
 }
 
@@ -565,6 +568,14 @@ impl SseDecode for crate::dart_types::StreamEvent {
                     width: var_width,
                     height: var_height,
                 };
+            }
+            3 => {
+                let mut var_field0 = <crate::dart_types::WscRtpMode>::sse_decode(deserializer);
+                return crate::dart_types::StreamEvent::WscRtpSessionMode(var_field0);
+            }
+            4 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::dart_types::StreamEvent::WscRtpStreamState(var_field0);
             }
             _ => {
                 unimplemented!("");
@@ -603,10 +614,10 @@ impl SseDecode for crate::dart_types::StreamState {
     }
 }
 
-impl SseDecode for u32 {
+impl SseDecode for u16 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u32::<NativeEndian>().unwrap()
+        deserializer.cursor.read_u16::<NativeEndian>().unwrap()
     }
 }
 
@@ -629,33 +640,72 @@ impl SseDecode for () {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
 }
 
-impl SseDecode for crate::core::types::VideoDimensions {
+impl SseDecode for crate::core::types::VideoConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_width = <u32>::sse_decode(deserializer);
-        let mut var_height = <u32>::sse_decode(deserializer);
-        return crate::core::types::VideoDimensions {
-            width: var_width,
-            height: var_height,
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 =
+                    <crate::core::types::WscRtpSessionConfig>::sse_decode(deserializer);
+                return crate::core::types::VideoConfig::WscRtp(var_field0);
+            }
+            1 => {
+                let mut var_field0 = <crate::core::types::PlaybinConfig>::sse_decode(deserializer);
+                return crate::core::types::VideoConfig::Playbin(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::dart_types::WscRtpMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                return crate::dart_types::WscRtpMode::Live;
+            }
+            1 => {
+                let mut var_currentTimeMs = <i64>::sse_decode(deserializer);
+                let mut var_speed = <f64>::sse_decode(deserializer);
+                return crate::dart_types::WscRtpMode::Dvr {
+                    current_time_ms: var_currentTimeMs,
+                    speed: var_speed,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::core::types::WscRtpSessionConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_baseUrl = <String>::sse_decode(deserializer);
+        let mut var_sourceId = <String>::sse_decode(deserializer);
+        let mut var_clientPort = <Option<u16>>::sse_decode(deserializer);
+        let mut var_forceWebsocketTransport = <bool>::sse_decode(deserializer);
+        let mut var_autoRestart = <bool>::sse_decode(deserializer);
+        return crate::core::types::WscRtpSessionConfig {
+            base_url: var_baseUrl,
+            source_id: var_sourceId,
+            client_port: var_clientPort,
+            force_websocket_transport: var_forceWebsocketTransport,
+            auto_restart: var_autoRestart,
         };
     }
 }
 
-impl SseDecode for crate::core::types::VideoInfo {
+impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_uri = <String>::sse_decode(deserializer);
-        let mut var_dimensions = <crate::core::types::VideoDimensions>::sse_decode(deserializer);
-        let mut var_framerate = <Option<i32>>::sse_decode(deserializer);
-        let mut var_mute = <bool>::sse_decode(deserializer);
-        let mut var_autoRestart = <bool>::sse_decode(deserializer);
-        return crate::core::types::VideoInfo {
-            uri: var_uri,
-            dimensions: var_dimensions,
-            framerate: var_framerate,
-            mute: var_mute,
-            auto_restart: var_autoRestart,
-        };
+        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
     }
 }
 
@@ -668,8 +718,8 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__simple__create_new_playable_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__simple__create_new_session_impl(port, ptr, rust_vec_len, data_len),
+        1 => wire__crate__api__simple__create_new_session_impl(port, ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__simple__create_playable_impl(port, ptr, rust_vec_len, data_len),
         3 => {
             wire__crate__api__simple__destroy_engine_streams_impl(port, ptr, rust_vec_len, data_len)
         }
@@ -690,10 +740,9 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        9 => {
-            wire__crate__api__simple__resize_stream_session_impl(port, ptr, rust_vec_len, data_len)
-        }
-        10 => wire__crate__api__simple__seek_to_timestamp_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__simple__seek_to_timestamp_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__simple__set_speed_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__simple__wsc_rtp_go_live_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -713,6 +762,27 @@ fn pde_ffi_dispatcher_sync_impl(
 // Section: rust2dart
 
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::core::types::PlaybinConfig {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.uri.into_into_dart().into_dart(),
+            self.mute.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::core::types::PlaybinConfig
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::core::types::PlaybinConfig>
+    for crate::core::types::PlaybinConfig
+{
+    fn into_into_dart(self) -> crate::core::types::PlaybinConfig {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamEvent {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -728,6 +798,12 @@ impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamEvent {
                 height.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            crate::dart_types::StreamEvent::WscRtpSessionMode(field0) => {
+                [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
+                [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -781,44 +857,81 @@ impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::StreamState>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::core::types::VideoDimensions {
+impl flutter_rust_bridge::IntoDart for crate::core::types::VideoConfig {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.width.into_into_dart().into_dart(),
-            self.height.into_into_dart().into_dart(),
-        ]
-        .into_dart()
+        match self {
+            crate::core::types::VideoConfig::WscRtp(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::core::types::VideoConfig::Playbin(field0) => {
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::core::types::VideoDimensions
+    for crate::core::types::VideoConfig
 {
 }
-impl flutter_rust_bridge::IntoIntoDart<crate::core::types::VideoDimensions>
-    for crate::core::types::VideoDimensions
+impl flutter_rust_bridge::IntoIntoDart<crate::core::types::VideoConfig>
+    for crate::core::types::VideoConfig
 {
-    fn into_into_dart(self) -> crate::core::types::VideoDimensions {
+    fn into_into_dart(self) -> crate::core::types::VideoConfig {
         self
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::core::types::VideoInfo {
+impl flutter_rust_bridge::IntoDart for crate::dart_types::WscRtpMode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::dart_types::WscRtpMode::Live => [0.into_dart()].into_dart(),
+            crate::dart_types::WscRtpMode::Dvr {
+                current_time_ms,
+                speed,
+            } => [
+                1.into_dart(),
+                current_time_ms.into_into_dart().into_dart(),
+                speed.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::dart_types::WscRtpMode {}
+impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::WscRtpMode>
+    for crate::dart_types::WscRtpMode
+{
+    fn into_into_dart(self) -> crate::dart_types::WscRtpMode {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::core::types::WscRtpSessionConfig {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
-            self.uri.into_into_dart().into_dart(),
-            self.dimensions.into_into_dart().into_dart(),
-            self.framerate.into_into_dart().into_dart(),
-            self.mute.into_into_dart().into_dart(),
+            self.base_url.into_into_dart().into_dart(),
+            self.source_id.into_into_dart().into_dart(),
+            self.client_port.into_into_dart().into_dart(),
+            self.force_websocket_transport.into_into_dart().into_dart(),
             self.auto_restart.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
 }
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::core::types::VideoInfo {}
-impl flutter_rust_bridge::IntoIntoDart<crate::core::types::VideoInfo>
-    for crate::core::types::VideoInfo
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::core::types::WscRtpSessionConfig
 {
-    fn into_into_dart(self) -> crate::core::types::VideoInfo {
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::core::types::WscRtpSessionConfig>
+    for crate::core::types::WscRtpSessionConfig
+{
+    fn into_into_dart(self) -> crate::core::types::WscRtpSessionConfig {
         self
     }
 }
@@ -827,13 +940,6 @@ impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(format!("{:?}", self), serializer);
-    }
-}
-
-impl SseEncode for std::collections::HashMap<String, String> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <Vec<(String, String)>>::sse_encode(self.into_iter().collect(), serializer);
     }
 }
 
@@ -869,10 +975,10 @@ impl SseEncode for bool {
     }
 }
 
-impl SseEncode for i32 {
+impl SseEncode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+        serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
     }
 }
 
@@ -893,41 +999,21 @@ impl SseEncode for Vec<u8> {
     }
 }
 
-impl SseEncode for Vec<(String, String)> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(self.len() as _, serializer);
-        for item in self {
-            <(String, String)>::sse_encode(item, serializer);
-        }
-    }
-}
-
-impl SseEncode for Option<std::collections::HashMap<String, String>> {
+impl SseEncode for Option<u16> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
-            <std::collections::HashMap<String, String>>::sse_encode(value, serializer);
+            <u16>::sse_encode(value, serializer);
         }
     }
 }
 
-impl SseEncode for Option<i32> {
+impl SseEncode for crate::core::types::PlaybinConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <i32>::sse_encode(value, serializer);
-        }
-    }
-}
-
-impl SseEncode for (String, String) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.0, serializer);
-        <String>::sse_encode(self.1, serializer);
+        <String>::sse_encode(self.uri, serializer);
+        <bool>::sse_encode(self.mute, serializer);
     }
 }
 
@@ -947,6 +1033,14 @@ impl SseEncode for crate::dart_types::StreamEvent {
                 <i32>::sse_encode(2, serializer);
                 <u64>::sse_encode(width, serializer);
                 <u64>::sse_encode(height, serializer);
+            }
+            crate::dart_types::StreamEvent::WscRtpSessionMode(field0) => {
+                <i32>::sse_encode(3, serializer);
+                <crate::dart_types::WscRtpMode>::sse_encode(field0, serializer);
+            }
+            crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
+                <i32>::sse_encode(4, serializer);
+                <String>::sse_encode(field0, serializer);
             }
             _ => {
                 unimplemented!("");
@@ -984,10 +1078,10 @@ impl SseEncode for crate::dart_types::StreamState {
     }
 }
 
-impl SseEncode for u32 {
+impl SseEncode for u16 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_u32::<NativeEndian>(self).unwrap();
+        serializer.cursor.write_u16::<NativeEndian>(self).unwrap();
     }
 }
 
@@ -1010,22 +1104,62 @@ impl SseEncode for () {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
 }
 
-impl SseEncode for crate::core::types::VideoDimensions {
+impl SseEncode for crate::core::types::VideoConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <u32>::sse_encode(self.width, serializer);
-        <u32>::sse_encode(self.height, serializer);
+        match self {
+            crate::core::types::VideoConfig::WscRtp(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <crate::core::types::WscRtpSessionConfig>::sse_encode(field0, serializer);
+            }
+            crate::core::types::VideoConfig::Playbin(field0) => {
+                <i32>::sse_encode(1, serializer);
+                <crate::core::types::PlaybinConfig>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 
-impl SseEncode for crate::core::types::VideoInfo {
+impl SseEncode for crate::dart_types::WscRtpMode {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.uri, serializer);
-        <crate::core::types::VideoDimensions>::sse_encode(self.dimensions, serializer);
-        <Option<i32>>::sse_encode(self.framerate, serializer);
-        <bool>::sse_encode(self.mute, serializer);
+        match self {
+            crate::dart_types::WscRtpMode::Live => {
+                <i32>::sse_encode(0, serializer);
+            }
+            crate::dart_types::WscRtpMode::Dvr {
+                current_time_ms,
+                speed,
+            } => {
+                <i32>::sse_encode(1, serializer);
+                <i64>::sse_encode(current_time_ms, serializer);
+                <f64>::sse_encode(speed, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::core::types::WscRtpSessionConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.base_url, serializer);
+        <String>::sse_encode(self.source_id, serializer);
+        <Option<u16>>::sse_encode(self.client_port, serializer);
+        <bool>::sse_encode(self.force_websocket_transport, serializer);
         <bool>::sse_encode(self.auto_restart, serializer);
+    }
+}
+
+impl SseEncode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
     }
 }
 
