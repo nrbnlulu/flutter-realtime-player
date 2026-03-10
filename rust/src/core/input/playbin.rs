@@ -101,7 +101,7 @@ impl PlaybinSession {
                     let height = video_info.height();
 
                     let mut size_guard = size.lock();
-                    let (cached_width, cached_height) = size.lock().clone();
+                    let (cached_width, cached_height) = *size_guard;
                     // Emit OriginVideoSize only when dimensions change (lock-free comparison)
                     if cached_width != width || cached_height != height {
                         *size_guard = (width, height);
