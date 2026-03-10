@@ -772,7 +772,7 @@ async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> a
             ));
         }
         max_retries -= 1;
-        if let Err(e) = one_try(udp_sock, &holepunch_msg, &expected_dummy_msg, session_id).await {
+        if let Err(e) = one_try(udp_sock, &expected_dummy_msg, &holepunch_msg, session_id).await {
             log::warn!(
                 "failed to handshake udp transport for session {} due to {:?}",
                 session_id,
