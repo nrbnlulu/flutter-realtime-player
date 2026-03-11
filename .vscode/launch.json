@@ -10,6 +10,10 @@
             "request": "launch",
             "type": "dart",
             "program": "example/lib/main.dart",
+            "env": {
+                "LD_PRELOAD": "/lib/x86_64-linux-gnu/librsvg-2.so.2",
+                "RUST_LOG": "debug",
+            }
         },
     ]
 }
