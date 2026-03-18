@@ -1,0 +1,7 @@
+# Replace these values if you intend to build cross-compile for another target than your host
+[env]
+# pkg config needs to know the sysroot directory of the target eg. "/home/mortie/Android/Sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+PKG_CONFIG_SYSROOT_DIR = { value = "TARGET_OS_PKG_CONFIG_SYSROOT_DIR" }
+# we need to know the directory path of prebuilt GStreamer binaries eg. "/home/mortie/Programming/Work/gstreamer-1.0-android-universal-1.28.1"
+# download from here: https://gstreamer.freedesktop.org/download/#android
+GSTREAMER_ROOT_ANDROID = { value = "ANDROID_GSTREAMER_BINARY_LIBS_DIR" }
