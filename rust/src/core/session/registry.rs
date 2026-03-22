@@ -20,6 +20,8 @@ pub fn init() -> anyhow::Result<()> {
 lazy_static::lazy_static! {
     static ref SESSION_CACHE: RwLock<HashMap<i64, Arc<dyn VideoSession>>> =
         RwLock::new(HashMap::new());
+    static ref PENDING_EVENT_SINKS: std::sync::Mutex<HashMap<i64, types::DartEventsStream>> =
+        std::sync::Mutex::new(HashMap::new());
 }
 
 pub fn get_all_sessions() -> Vec<i64> {
@@ -33,7 +35,14 @@ pub fn get_session(session_id: i64) -> Option<Arc<dyn VideoSession>> {
 }
 
 pub fn insert_session(session_id: i64, session: Arc<dyn VideoSession>) {
-    SESSION_CACHE.write().unwrap().insert(session_id, session);
+    SESSION_CACHE.write().unwrap().insert(session_id, session.clone());
+    if let Some(sink) = PENDING_EVENT_SINKS.lock().unwrap().remove(&session_id) {
+        log::debug!(
+            "Applying deferred stream-events sink for session {}",
+            session_id
+        );
+        session.set_events_sink(sink);
+    }
 }
 
 fn remove_session(session_id: i64) -> Option<Arc<dyn VideoSession>> {
@@ -106,6 +115,7 @@ pub fn destroy_engine_streams(engine_handle: i64) {
 
 pub fn destroy_stream_session(session_id: i64) {
     log::debug!("Destroying stream session : {}", session_id);
+    let _ = PENDING_EVENT_SINKS.lock().unwrap().remove(&session_id);
     let active_sessions = get_all_sessions();
     debug!("Active sessions at destroy: {:?}", active_sessions);
     let session = remove_session(session_id);
@@ -177,5 +187,14 @@ pub async fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()
 pub fn register_events_sink(session_id: i64, sink: types::DartEventsStream) {
     if let Some(session) = get_session(session_id) {
         session.set_events_sink(sink);
+    } else {
+        log::debug!(
+            "Deferring stream-events sink for session {} ",
+            session_id
+        );
+        PENDING_EVENT_SINKS
+            .lock()
+            .unwrap()
+            .insert(session_id, sink);
     }
 }

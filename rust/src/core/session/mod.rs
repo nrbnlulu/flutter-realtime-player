@@ -31,8 +31,6 @@ pub struct VideoSessionCommon {
     pub engine_handle: i64,
     pub last_alive_mark: Mutex<SystemTime>,
     pub events_sink: Mutex<Option<DartEventsStream>>,
-    /// Cached OriginVideoSize so new subscribers get it on registration.
-    last_origin_video_size: Mutex<Option<StreamEvent>>,
     pub state_sink: DartStateStream,
 }
 
@@ -44,7 +42,6 @@ impl VideoSessionCommon {
             last_alive_mark: Mutex::new(SystemTime::now()),
             state_sink,
             events_sink: Mutex::new(None),
-            last_origin_video_size: Mutex::new(None),
         }
     }
 
@@ -57,17 +54,10 @@ impl VideoSessionCommon {
     }
 
     pub fn set_events_sink(&self, sink: DartEventsStream) {
-        let cached = self.last_origin_video_size.lock().clone();
         *self.events_sink.lock() = Some(sink);
-        if let Some(cached) = cached {
-            self.send_event_msg(cached);
-        }
     }
 
     pub fn send_event_msg(&self, msg: StreamEvent) {
-        if let StreamEvent::OriginVideoSize { .. } = &msg {
-            *self.last_origin_video_size.lock() = Some(msg.clone());
-        }
         if let Some(sink) = self.events_sink.lock().as_ref() {
             if let Err(e) = sink.add(msg) {
                 log::error!("Failed to send event message: {}", e);
