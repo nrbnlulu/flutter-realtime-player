@@ -3,9 +3,9 @@
 #include <optional>
 
 // plugins
-// #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
-// #include <screen_retriever_windows/screen_retriever_windows_plugin_c_api.h>
-// #include <window_manager/window_manager_plugin.h>
+#include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
+#include <screen_retriever_windows/screen_retriever_windows_plugin_c_api.h>
+#include <window_manager/window_manager_plugin.h>
 // end plugins
 
 #include "flutter/generated_plugin_registrant.h"
@@ -34,22 +34,22 @@ bool FlutterWindow::OnCreate()
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
-  // DesktopMultiWindowSetWindowCreatedCallback([](void *controller)
-  //                                            {
-  //   // get view controller and engine of new window
-  //   auto *flutter_view_controller =
-  //       reinterpret_cast<flutter::FlutterViewController *>(controller);
-  //   auto *registry = flutter_view_controller->engine();
+  DesktopMultiWindowSetWindowCreatedCallback([](void *controller)
+                                             {
+    // get view controller and engine of new window
+    auto *flutter_view_controller =
+        reinterpret_cast<flutter::FlutterViewController *>(controller);
+    auto *registry = flutter_view_controller->engine();
 
-  //   ScreenRetrieverWindowsPluginCApiRegisterWithRegistrar(
-  //       registry->GetRegistrarForPlugin("ScreenRetrieverWindowsPluginCApi"));
-  //   WindowManagerPluginRegisterWithRegistrar(
-  //       registry->GetRegistrarForPlugin("WindowManagerPlugin"));
-  //   IrondashEngineContextPluginCApiRegisterWithRegistrar(
-  //       registry->GetRegistrarForPlugin("IrondashEngineContextPluginCApi"));
+    ScreenRetrieverWindowsPluginCApiRegisterWithRegistrar(
+        registry->GetRegistrarForPlugin("ScreenRetrieverWindowsPluginCApi"));
+    WindowManagerPluginRegisterWithRegistrar(
+        registry->GetRegistrarForPlugin("WindowManagerPlugin"));
+    IrondashEngineContextPluginCApiRegisterWithRegistrar(
+        registry->GetRegistrarForPlugin("IrondashEngineContextPluginCApi"));
 
 
-  //     });
+      });
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
