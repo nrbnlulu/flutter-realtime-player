@@ -531,6 +531,316 @@ as String,
 }
 
 /// @nodoc
+mixin _$StreamMessage {
+
+ Object get field0;
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamMessage&&const DeepCollectionEquality().equals(other.field0, field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(field0));
+
+@override
+String toString() {
+  return 'StreamMessage(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+class $StreamMessageCopyWith<$Res>  {
+$StreamMessageCopyWith(StreamMessage _, $Res Function(StreamMessage) __);
+}
+
+
+/// Adds pattern-matching-related methods to [StreamMessage].
+extension StreamMessagePatterns on StreamMessage {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( StreamMessage_State value)?  state,TResult Function( StreamMessage_Event value)?  event,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case StreamMessage_State() when state != null:
+return state(_that);case StreamMessage_Event() when event != null:
+return event(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( StreamMessage_State value)  state,required TResult Function( StreamMessage_Event value)  event,}){
+final _that = this;
+switch (_that) {
+case StreamMessage_State():
+return state(_that);case StreamMessage_Event():
+return event(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( StreamMessage_State value)?  state,TResult? Function( StreamMessage_Event value)?  event,}){
+final _that = this;
+switch (_that) {
+case StreamMessage_State() when state != null:
+return state(_that);case StreamMessage_Event() when event != null:
+return event(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( StreamState field0)?  state,TResult Function( StreamEvent field0)?  event,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case StreamMessage_State() when state != null:
+return state(_that.field0);case StreamMessage_Event() when event != null:
+return event(_that.field0);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( StreamState field0)  state,required TResult Function( StreamEvent field0)  event,}) {final _that = this;
+switch (_that) {
+case StreamMessage_State():
+return state(_that.field0);case StreamMessage_Event():
+return event(_that.field0);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( StreamState field0)?  state,TResult? Function( StreamEvent field0)?  event,}) {final _that = this;
+switch (_that) {
+case StreamMessage_State() when state != null:
+return state(_that.field0);case StreamMessage_Event() when event != null:
+return event(_that.field0);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class StreamMessage_State extends StreamMessage {
+  const StreamMessage_State(this.field0): super._();
+  
+
+@override final  StreamState field0;
+
+/// Create a copy of StreamMessage
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$StreamMessage_StateCopyWith<StreamMessage_State> get copyWith => _$StreamMessage_StateCopyWithImpl<StreamMessage_State>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamMessage_State&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'StreamMessage.state(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $StreamMessage_StateCopyWith<$Res> implements $StreamMessageCopyWith<$Res> {
+  factory $StreamMessage_StateCopyWith(StreamMessage_State value, $Res Function(StreamMessage_State) _then) = _$StreamMessage_StateCopyWithImpl;
+@useResult
+$Res call({
+ StreamState field0
+});
+
+
+$StreamStateCopyWith<$Res> get field0;
+
+}
+/// @nodoc
+class _$StreamMessage_StateCopyWithImpl<$Res>
+    implements $StreamMessage_StateCopyWith<$Res> {
+  _$StreamMessage_StateCopyWithImpl(this._self, this._then);
+
+  final StreamMessage_State _self;
+  final $Res Function(StreamMessage_State) _then;
+
+/// Create a copy of StreamMessage
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(StreamMessage_State(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as StreamState,
+  ));
+}
+
+/// Create a copy of StreamMessage
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$StreamStateCopyWith<$Res> get field0 {
+  
+  return $StreamStateCopyWith<$Res>(_self.field0, (value) {
+    return _then(_self.copyWith(field0: value));
+  });
+}
+}
+
+/// @nodoc
+
+
+class StreamMessage_Event extends StreamMessage {
+  const StreamMessage_Event(this.field0): super._();
+  
+
+@override final  StreamEvent field0;
+
+/// Create a copy of StreamMessage
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$StreamMessage_EventCopyWith<StreamMessage_Event> get copyWith => _$StreamMessage_EventCopyWithImpl<StreamMessage_Event>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamMessage_Event&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'StreamMessage.event(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $StreamMessage_EventCopyWith<$Res> implements $StreamMessageCopyWith<$Res> {
+  factory $StreamMessage_EventCopyWith(StreamMessage_Event value, $Res Function(StreamMessage_Event) _then) = _$StreamMessage_EventCopyWithImpl;
+@useResult
+$Res call({
+ StreamEvent field0
+});
+
+
+$StreamEventCopyWith<$Res> get field0;
+
+}
+/// @nodoc
+class _$StreamMessage_EventCopyWithImpl<$Res>
+    implements $StreamMessage_EventCopyWith<$Res> {
+  _$StreamMessage_EventCopyWithImpl(this._self, this._then);
+
+  final StreamMessage_Event _self;
+  final $Res Function(StreamMessage_Event) _then;
+
+/// Create a copy of StreamMessage
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(StreamMessage_Event(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as StreamEvent,
+  ));
+}
+
+/// Create a copy of StreamMessage
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$StreamEventCopyWith<$Res> get field0 {
+  
+  return $StreamEventCopyWith<$Res>(_self.field0, (value) {
+    return _then(_self.copyWith(field0: value));
+  });
+}
+}
+
+/// @nodoc
 mixin _$StreamState {
 
 

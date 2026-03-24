@@ -21,3 +21,9 @@ pub enum StreamEvent {
     WscRtpSessionMode(WscRtpMode),
     WscRtpStreamState(String),
 }
+
+#[derive(Debug, Clone)]
+pub enum StreamMessage {
+    State(StreamState),
+    Event(StreamEvent),
+}

@@ -12,7 +12,7 @@ use crate::{
         types::VideoConfig,
         HTTP_CLIENT, IS_INITIALIZED,
     },
-    dart_types::{StreamEvent, StreamState},
+    dart_types::{StreamEvent, StreamMessage, StreamState},
     frb_generated::StreamSink,
     utils::LogErr,
 };
@@ -50,7 +50,7 @@ pub async fn create_playable(
     session_id: i64,
     engine_handle: i64,
     config: VideoConfig,
-    sink: StreamSink<StreamState>,
+    combined_sink: StreamSink<StreamMessage>,
 ) -> anyhow::Result<()> {
     trace!(
         "create_playable was called with engine_handle: {}, session_id: {}",
@@ -60,7 +60,7 @@ pub async fn create_playable(
     match config {
         VideoConfig::WscRtp(wsc_rtp_config) => {
             trace!("  source_id: {}", wsc_rtp_config.source_id.as_str());
-            let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
+            let session_common = VideoSessionCommon::new(session_id, engine_handle, combined_sink);
             let (session, shutdown_rx) =
                 WscRtpSession::new(wsc_rtp_config, session_common, HTTP_CLIENT.clone());
             let session_clone = session.clone();
@@ -69,7 +69,7 @@ pub async fn create_playable(
         }
         VideoConfig::Playbin(playbin_config) => {
             trace!("  uri: {}", playbin_config.uri);
-            let session_common = VideoSessionCommon::new(session_id, engine_handle, sink);
+            let session_common = VideoSessionCommon::new(session_id, engine_handle, combined_sink);
             let (session, shutdown_rx) = PlaybinSession::new(playbin_config, session_common);
             let session_clone = session.clone();
             tokio::spawn(async move { session_clone.execute(shutdown_rx).await });
@@ -112,10 +112,6 @@ pub async fn set_speed(session_id: i64, speed: f64) -> anyhow::Result<()> {
         error!("set_speed failed: {}", e);
     }
     result
-}
-
-pub fn register_to_stream_events_sink(session_id: i64, sink: StreamSink<StreamEvent>) {
-    registry::register_events_sink(session_id, sink);
 }
 
 /// marks the session as required by the ui

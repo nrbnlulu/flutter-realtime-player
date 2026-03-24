@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 907721271;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 454442348;
 
 // Section: executor
 
@@ -102,8 +102,8 @@ fn wire__crate__api__simple__create_playable_impl(
             let api_session_id = <i64>::sse_decode(&mut deserializer);
             let api_engine_handle = <i64>::sse_decode(&mut deserializer);
             let api_config = <crate::core::types::VideoConfig>::sse_decode(&mut deserializer);
-            let api_sink = <StreamSink<
-                crate::dart_types::StreamState,
+            let api_combined_sink = <StreamSink<
+                crate::dart_types::StreamMessage,
                 flutter_rust_bridge::for_generated::SseCodec,
             >>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -114,7 +114,7 @@ fn wire__crate__api__simple__create_playable_impl(
                             api_session_id,
                             api_engine_handle,
                             api_config,
-                            api_sink,
+                            api_combined_sink,
                         )
                         .await?;
                         Ok(output_ok)
@@ -299,48 +299,6 @@ fn wire__crate__api__simple__mark_session_alive_impl(
         },
     )
 }
-fn wire__crate__api__simple__register_to_stream_events_sink_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "register_to_stream_events_sink",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_session_id = <i64>::sse_decode(&mut deserializer);
-            let api_sink = <StreamSink<
-                crate::dart_types::StreamEvent,
-                flutter_rust_bridge::for_generated::SseCodec,
-            >>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, ()>((move || {
-                    let output_ok = Result::<_, ()>::Ok({
-                        crate::api::simple::register_to_stream_events_sink(
-                            api_session_id,
-                            api_sink,
-                        );
-                    })?;
-                    Ok(output_ok)
-                })())
-            }
-        },
-    )
-}
 fn wire__crate__api__simple__seek_to_timestamp_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -465,17 +423,7 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
 }
 
 impl SseDecode
-    for StreamSink<crate::dart_types::StreamEvent, flutter_rust_bridge::for_generated::SseCodec>
-{
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut inner = <String>::sse_decode(deserializer);
-        return StreamSink::deserialize(inner);
-    }
-}
-
-impl SseDecode
-    for StreamSink<crate::dart_types::StreamState, flutter_rust_bridge::for_generated::SseCodec>
+    for StreamSink<crate::dart_types::StreamMessage, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -576,6 +524,26 @@ impl SseDecode for crate::dart_types::StreamEvent {
             4 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
                 return crate::dart_types::StreamEvent::WscRtpStreamState(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::dart_types::StreamMessage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 = <crate::dart_types::StreamState>::sse_decode(deserializer);
+                return crate::dart_types::StreamMessage::State(var_field0);
+            }
+            1 => {
+                let mut var_field0 = <crate::dart_types::StreamEvent>::sse_decode(deserializer);
+                return crate::dart_types::StreamMessage::Event(var_field0);
             }
             _ => {
                 unimplemented!("");
@@ -734,15 +702,9 @@ fn pde_ffi_dispatcher_primary_impl(
         ),
         6 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
         7 => wire__crate__api__simple__mark_session_alive_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__simple__register_to_stream_events_sink_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        9 => wire__crate__api__simple__seek_to_timestamp_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__simple__set_speed_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__simple__wsc_rtp_go_live_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__simple__seek_to_timestamp_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__simple__set_speed_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__simple__wsc_rtp_go_live_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -818,6 +780,33 @@ impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::StreamEvent>
     for crate::dart_types::StreamEvent
 {
     fn into_into_dart(self) -> crate::dart_types::StreamEvent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamMessage {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::dart_types::StreamMessage::State(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::dart_types::StreamMessage::Event(field0) => {
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::dart_types::StreamMessage
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::StreamMessage>
+    for crate::dart_types::StreamMessage
+{
+    fn into_into_dart(self) -> crate::dart_types::StreamMessage {
         self
     }
 }
@@ -944,16 +933,7 @@ impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
 }
 
 impl SseEncode
-    for StreamSink<crate::dart_types::StreamEvent, flutter_rust_bridge::for_generated::SseCodec>
-{
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        unimplemented!("")
-    }
-}
-
-impl SseEncode
-    for StreamSink<crate::dart_types::StreamState, flutter_rust_bridge::for_generated::SseCodec>
+    for StreamSink<crate::dart_types::StreamMessage, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1041,6 +1021,25 @@ impl SseEncode for crate::dart_types::StreamEvent {
             crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
                 <i32>::sse_encode(4, serializer);
                 <String>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::dart_types::StreamMessage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::dart_types::StreamMessage::State(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <crate::dart_types::StreamState>::sse_encode(field0, serializer);
+            }
+            crate::dart_types::StreamMessage::Event(field0) => {
+                <i32>::sse_encode(1, serializer);
+                <crate::dart_types::StreamEvent>::sse_encode(field0, serializer);
             }
             _ => {
                 unimplemented!("");

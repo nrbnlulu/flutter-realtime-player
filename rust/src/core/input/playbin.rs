@@ -332,10 +332,6 @@ impl VideoSession for PlaybinSession {
         let _ = self.shutdown_sender.blocking_send(());
     }
 
-    fn set_events_sink(&self, sink: crate::core::types::DartEventsStream) {
-        self.session_common.set_events_sink(sink);
-    }
-
     async fn seek(&self, ts_ms: u64) -> anyhow::Result<()> {
         let pipeline = self
             .active_pipeline

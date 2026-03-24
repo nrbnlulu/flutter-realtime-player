@@ -21,7 +21,7 @@ Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
 Future<PlatformInt64> createNewSession() =>
     RustLib.instance.api.crateApiSimpleCreateNewSession();
 
-Stream<StreamState> createPlayable({
+Stream<StreamMessage> createPlayable({
   required PlatformInt64 sessionId,
   required PlatformInt64 engineHandle,
   required VideoConfig config,
@@ -48,12 +48,6 @@ Future<void> setSpeed({
 }) => RustLib.instance.api.crateApiSimpleSetSpeed(
   sessionId: sessionId,
   speed: speed,
-);
-
-Stream<StreamEvent> registerToStreamEventsSink({
-  required PlatformInt64 sessionId,
-}) => RustLib.instance.api.crateApiSimpleRegisterToStreamEventsSink(
-  sessionId: sessionId,
 );
 
 /// marks the session as required by the ui

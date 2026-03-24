@@ -173,9 +173,3 @@ pub async fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()
         anyhow::bail!("Session {} not found", session_id);
     }
 }
-
-pub fn register_events_sink(session_id: i64, sink: types::DartEventsStream) {
-    if let Some(session) = get_session(session_id) {
-        session.set_events_sink(sink);
-    }
-}
