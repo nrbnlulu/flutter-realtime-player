@@ -6,10 +6,7 @@ use std::{
 
 use log::{debug, error, info};
 
-use crate::core::{
-    session::VideoSession,
-    types::{self},
-};
+use crate::core::session::VideoSession;
 
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize GStreamer: {:?}", e))?;

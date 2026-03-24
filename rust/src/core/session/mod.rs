@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 
 use crate::{
-    core::types::{DartCombinedStream, DartEventsStream, DartStateStream},
+    core::types::DartCombinedStream,
     dart_types::{StreamEvent, StreamMessage, StreamState},
 };
 

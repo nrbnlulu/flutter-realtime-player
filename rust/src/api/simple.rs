@@ -12,7 +12,7 @@ use crate::{
         types::VideoConfig,
         HTTP_CLIENT, IS_INITIALIZED,
     },
-    dart_types::{StreamEvent, StreamMessage, StreamState},
+    dart_types::StreamMessage,
     frb_generated::StreamSink,
     utils::LogErr,
 };
