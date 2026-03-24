@@ -151,7 +151,7 @@ class VideoController {
 class VideoPlayer extends StatefulWidget {
   final VideoController controller;
   final Widget? child;
-
+  final Widget Function(BuildContext context)? loadingBuilder;
   /// whether to dispose the stream when the widget disposes?
   final bool autoDispose;
 
@@ -159,6 +159,7 @@ class VideoPlayer extends StatefulWidget {
     super.key,
     required this.controller,
     this.child,
+    this.loadingBuilder,
     this.autoDispose = true,
   });
 
@@ -167,11 +168,13 @@ class VideoPlayer extends StatefulWidget {
     required VideoController controller,
     bool autoDispose = true,
     Widget? child,
+    Widget Function(BuildContext context)? loadingBuilder,
   }) {
     return VideoPlayer._(
       key: key,
       controller: controller,
       autoDispose: autoDispose,
+      loadingBuilder: loadingBuilder,
       child: child,
     );
   }
@@ -181,6 +184,7 @@ class VideoPlayer extends StatefulWidget {
     required VideoConfig config,
     bool autoDispose = true,
     Widget? child,
+    Widget Function(BuildContext context)? loadingBuilder,
   }) {
     return FutureBuilder(
       future: VideoController.create(config: config),
@@ -196,6 +200,7 @@ class VideoPlayer extends StatefulWidget {
           key: key,
           controller: controller!,
           autoDispose: autoDispose,
+          loadingBuilder: loadingBuilder,
         );
       },
     );
@@ -219,13 +224,13 @@ class _VideoPlayerState extends State<VideoPlayer> {
     });
   }
 
-  Widget _loadingWidget(String message) {
+  Widget _defaultLoading(String message) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const CircularProgressIndicator(),
         const SizedBox(width: 10),
-        Text(message, style: const TextStyle(fontSize: 16)),
+        Text(message, style: const TextStyle(fontSize: 14)),
       ],
     );
   }
@@ -233,10 +238,13 @@ class _VideoPlayerState extends State<VideoPlayer> {
   @override
   Widget build(BuildContext context) {
     if (currentState == null) {
-      return _loadingWidget('initializing...');
+      return widget.loadingBuilder?.call(context) ??
+          _defaultLoading('Initializing...');
     }
     return switch (currentState!) {
-      StreamState_Loading() => _loadingWidget('initializing stream...'),
+      StreamState_Loading() =>
+        widget.loadingBuilder?.call(context) ??
+            _defaultLoading('Initializing stream...'),
       StreamState_Error(field0: final message) => Center(
         child: Text(
           'Error: $message',
