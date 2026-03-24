@@ -7,7 +7,7 @@ import 'package:native_toolchain_rust/native_toolchain_rust.dart';
 const _prebuiltStreamerRootEnvVar = 'GSTREAMER_ROOT_ANDROID';
 
 void main(List<String> args) async {  
-  final logger = Logger('html_to_markdown_rust');
+  final logger = Logger('flutter_realtime_player_build');
   logger.onRecord.listen((record) {
     // ignore: avoid_print
     print('${record.level.name}: ${record.time}: ${record.message}');
