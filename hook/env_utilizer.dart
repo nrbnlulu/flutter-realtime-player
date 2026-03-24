@@ -10,7 +10,9 @@ class Env {
   Env._() {
     // read cwd .env
     _env = Platform.environment.map((key, value) => MapEntry(key, value));
-    final file = File('.env');
+    // find $HOME/frtp_build.env file
+    final home = Platform.environment['HOME'];
+    final file = File('$home/frtp_build.env');
     // coverage:ignore-start
     if (file.existsSync()) {
       final lines = file.readAsLinesSync();

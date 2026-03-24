@@ -4,9 +4,15 @@ import 'package:native_toolchain_rust/native_toolchain_rust.dart';
 import 'env_utilizer.dart';
 
 const _prebuiltStreamerRootEnvVar = 'GSTREAMER_ROOT_ANDROID';
+const _pkgConfigSysrootx8664EnvVar =
+    'PKG_CONFIG_SYSROOT_DIR_x86_64_linux_android';
+const _pkgConfigSysrootAarch64EnvVar =
+    'PKG_CONFIG_SYSROOT_DIR_aarch64_linux_android';
 const _pkgConfigSysrootEnvVar = 'PKG_CONFIG_SYSROOT_DIR';
 
 void main(List<String> args) async {  
+  // we need to read an standard env file in a known-well path `$HOME/frtp_build.env` to get the env vars for building, 
+  //since the hook is filtering environment variables and there is a known issue about this: https://github.com/dart-lang/native/issues/2623
   final envFile = Env.instance;
 
   await build(args, (input, output) async {
@@ -17,7 +23,13 @@ void main(List<String> args) async {
         _prebuiltStreamerRootEnvVar: envFile.getString(
           _prebuiltStreamerRootEnvVar,
         ),
-        _pkgConfigSysrootEnvVar: envFile.getString(_prebuiltStreamerRootEnvVar),
+        _pkgConfigSysrootx8664EnvVar: envFile.getString(
+          _pkgConfigSysrootx8664EnvVar,
+        ),
+        _pkgConfigSysrootAarch64EnvVar: envFile.getString(
+          _pkgConfigSysrootAarch64EnvVar,
+        ),
+        _pkgConfigSysrootEnvVar: envFile.getString(_pkgConfigSysrootEnvVar),
       },
     ).run(
       input: input,
