@@ -6,6 +6,10 @@ fn main() {
         let gstreamer_root = std::env::var("GSTREAMER_ROOT_ANDROID")
             .expect("GSTREAMER_ROOT_ANDROID not set");
 
+        if gstreamer_root.is_empty() {
+            panic!("GSTREAMER_ROOT_ANDROID environment variable is empty");
+        }
+
         println!("cargo:rustc-link-search=native={}/{}/lib", gstreamer_root, target_arch);
         println!("cargo:rustc-link-search=native={}/{}/lib/gstreamer-1.0", gstreamer_root, target_arch);
 
