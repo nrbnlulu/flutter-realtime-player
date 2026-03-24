@@ -22,5 +22,5 @@ If you want to cross compile the library and run example on Android, follow inst
 
 - Download [GStreamer for Android](https://gstreamer.freedesktop.org/download/#android) and extract it in a directory on your system
 - Download Android SDK
-- Set `PKG_CONFIG_SYSROOT_DIR` and `GSTREAMER_ROOT_ANDROID` environment variables in the `.env` file in project root directory
+- Set `PKG_CONFIG_SYSROOT_DIR` (eg. `/home/user/Android/Sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/sysroot`) and `GSTREAMER_ROOT_ANDROID` (eg. `/home/user/gstreamer-1.0-android-universal-1.28.1`) environment variables in the `.env` file in project root directory
 - You can use [`cargo-ndk`](https://github.com/bbqsrc/cargo-ndk) (eg. `cargo ndk -t x86_64 -P 35` for running on emulator with Android 35 API) to make sure the rust side is building successfully
