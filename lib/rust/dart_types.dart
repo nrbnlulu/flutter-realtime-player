@@ -26,6 +26,14 @@ sealed class StreamEvent with _$StreamEvent {
 }
 
 @freezed
+sealed class StreamMessage with _$StreamMessage {
+  const StreamMessage._();
+
+  const factory StreamMessage.state(StreamState field0) = StreamMessage_State;
+  const factory StreamMessage.event(StreamEvent field0) = StreamMessage_Event;
+}
+
+@freezed
 sealed class StreamState with _$StreamState {
   const StreamState._();
 

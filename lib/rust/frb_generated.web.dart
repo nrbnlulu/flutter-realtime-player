@@ -26,12 +26,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
-  RustStreamSink<StreamEvent> dco_decode_StreamSink_stream_event_Sse(
-    dynamic raw,
-  );
-
-  @protected
-  RustStreamSink<StreamState> dco_decode_StreamSink_stream_state_Sse(
+  RustStreamSink<StreamMessage> dco_decode_StreamSink_stream_message_Sse(
     dynamic raw,
   );
 
@@ -43,6 +38,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlaybinConfig dco_decode_box_autoadd_playbin_config(dynamic raw);
+
+  @protected
+  StreamEvent dco_decode_box_autoadd_stream_event(dynamic raw);
+
+  @protected
+  StreamState dco_decode_box_autoadd_stream_state(dynamic raw);
 
   @protected
   int dco_decode_box_autoadd_u_16(dynamic raw);
@@ -77,6 +78,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   StreamEvent dco_decode_stream_event(dynamic raw);
 
   @protected
+  StreamMessage dco_decode_stream_message(dynamic raw);
+
+  @protected
   StreamState dco_decode_stream_state(dynamic raw);
 
   @protected
@@ -104,12 +108,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
-  RustStreamSink<StreamEvent> sse_decode_StreamSink_stream_event_Sse(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  RustStreamSink<StreamState> sse_decode_StreamSink_stream_state_Sse(
+  RustStreamSink<StreamMessage> sse_decode_StreamSink_stream_message_Sse(
     SseDeserializer deserializer,
   );
 
@@ -123,6 +122,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlaybinConfig sse_decode_box_autoadd_playbin_config(
     SseDeserializer deserializer,
   );
+
+  @protected
+  StreamEvent sse_decode_box_autoadd_stream_event(SseDeserializer deserializer);
+
+  @protected
+  StreamState sse_decode_box_autoadd_stream_state(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
@@ -155,6 +160,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   StreamEvent sse_decode_stream_event(SseDeserializer deserializer);
+
+  @protected
+  StreamMessage sse_decode_stream_message(SseDeserializer deserializer);
 
   @protected
   StreamState sse_decode_stream_state(SseDeserializer deserializer);
@@ -192,14 +200,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_StreamSink_stream_event_Sse(
-    RustStreamSink<StreamEvent> self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_StreamSink_stream_state_Sse(
-    RustStreamSink<StreamState> self,
+  void sse_encode_StreamSink_stream_message_Sse(
+    RustStreamSink<StreamMessage> self,
     SseSerializer serializer,
   );
 
@@ -212,6 +214,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_playbin_config(
     PlaybinConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_stream_event(
+    StreamEvent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_stream_state(
+    StreamState self,
     SseSerializer serializer,
   );
 
@@ -256,6 +270,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_stream_event(StreamEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_stream_message(StreamMessage self, SseSerializer serializer);
 
   @protected
   void sse_encode_stream_state(StreamState self, SseSerializer serializer);

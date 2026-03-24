@@ -6,10 +6,7 @@ use std::{
 
 use log::{debug, error, info};
 
-use crate::core::{
-    session::VideoSession,
-    types::{self},
-};
+use crate::core::session::VideoSession;
 
 pub fn init() -> anyhow::Result<()> {
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize GStreamer: {:?}", e))?;
@@ -171,11 +168,5 @@ pub async fn set_speed_session(session_id: i64, speed: f64) -> anyhow::Result<()
     } else {
         error!("Session {} not found for set_speed operation", session_id);
         anyhow::bail!("Session {} not found", session_id);
-    }
-}
-
-pub fn register_events_sink(session_id: i64, sink: types::DartEventsStream) {
-    if let Some(session) = get_session(session_id) {
-        session.set_events_sink(sink);
     }
 }

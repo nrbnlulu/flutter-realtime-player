@@ -1,5 +1,5 @@
 use std::sync::{
-    atomic::{AtomicU32, Ordering},
+    atomic::AtomicU32,
     Arc,
 };
 
@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use gst::prelude::*;
 use gst_app::AppSink;
 use irondash_texture::Texture;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, warn};
 use parking_lot::Mutex;
 
 use crate::{
@@ -86,7 +86,7 @@ impl PlaybinSession {
         let session_weak = Arc::downgrade(self);
         let session_weak_for_callbacks = session_weak.clone();
         let size = Arc::new(parking_lot::Mutex::new((0u32, 0u32)));
-        let frame_count = Arc::new(AtomicU32::new(0));
+        let _frame_count = Arc::new(AtomicU32::new(0));
 
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
@@ -330,10 +330,6 @@ impl VideoSession for PlaybinSession {
             let _ = pipeline.set_state(gst::State::Null);
         }
         let _ = self.shutdown_sender.blocking_send(());
-    }
-
-    fn set_events_sink(&self, sink: crate::core::types::DartEventsStream) {
-        self.session_common.set_events_sink(sink);
     }
 
     async fn seek(&self, ts_ms: u64) -> anyhow::Result<()> {

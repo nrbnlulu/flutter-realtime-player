@@ -722,10 +722,6 @@ impl crate::core::session::VideoSession for WscRtpSession {
             log::error!("Failed to send shutdown signal: {:?}", e);
         }
     }
-
-    fn set_events_sink(&self, sink: crate::core::types::DartEventsStream) {
-        self.session_common.set_events_sink(sink);
-    }
 }
 
 async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> anyhow::Result<()> {

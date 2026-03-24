@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/core/types.dart'
     show PlaybinConfig, VideoConfig;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
@@ -75,11 +74,8 @@ class _PlaybinPlayerWidgetState extends State<PlaybinPlayerWidget> {
   }
 
   void _startEventListener() {
-    final sessionId = _controller!.sessionId;
     _eventsSub?.cancel();
-    _eventsSub = rlib.registerToStreamEventsSink(sessionId: sessionId).listen((
-      event,
-    ) {
+    _eventsSub = _controller!.eventsStream.listen((event) {
       if (!mounted) return;
 
       if (event is StreamEvent_OriginVideoSize && event.height > BigInt.zero) {
