@@ -1,31 +1,25 @@
-import 'dart:io';
-
 import 'package:hooks/hooks.dart';
-import 'package:logging/logging.dart';
 import 'package:native_toolchain_rust/native_toolchain_rust.dart';
+
+import 'env_utilizer.dart';
 
 const _prebuiltStreamerRootEnvVar = 'GSTREAMER_ROOT_ANDROID';
 
 void main(List<String> args) async {  
-  final logger = Logger('flutter_realtime_player_build');
-  logger.onRecord.listen((record) {
-    // ignore: avoid_print
-    print('${record.level.name}: ${record.time}: ${record.message}');
-  });
-
-  final envVars = Platform.environment;
+  final envVars = Env.instance;
 
   await build(args, (input, output) async {
     await RustBuilder(
-      assetName: 'rust/frb_generated.dart',
+      assetName: 'flutter_realtime_player',
       cratePath: 'rust',
       extraCargoEnvironmentVariables: {
-        _prebuiltStreamerRootEnvVar: envVars[_prebuiltStreamerRootEnvVar] ?? '',
+        _prebuiltStreamerRootEnvVar: envVars.getString(
+          _prebuiltStreamerRootEnvVar,
+        ),
       },
     ).run(
       input: input,
       output: output,
-      logger: logger,
     );
   });
 }
