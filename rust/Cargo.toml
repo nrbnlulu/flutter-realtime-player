@@ -78,7 +78,6 @@ gdkx11 = "0.17.0"
 gtk-sys = "0.17.0"
 
 
-
 [build-dependencies]
 cfg_aliases = "0.2.1"
 
