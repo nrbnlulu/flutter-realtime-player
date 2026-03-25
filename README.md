@@ -6,7 +6,7 @@ GStreamer based player, optimized for realtime streams
 - Install [rust](https://rustup.rs/)
 - Make sure GStramer is available in the system to link against it
 
-## Android
+### Android
 
 If you want to cross compile the library and run example on Android, follow instructions below:
 
@@ -26,3 +26,4 @@ If you want to cross compile the library and run example on Android, follow inst
 - Set `ANDROID_NDK_HOME` (eg. `/home/user/Android/Sdk/ndk/29.0.14206865`)
 - Set `GSTREAMER_ROOT_ANDROID` (eg. `/home/user/gstreamer-1.0-android-universal-1.28.1`)
 - You can use [`cargo-ndk`](https://github.com/bbqsrc/cargo-ndk) (eg. `cargo ndk -t x86_64 -P 35`) to make sure the rust side is building successfully
+
