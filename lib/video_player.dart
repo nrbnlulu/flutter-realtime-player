@@ -10,24 +10,39 @@ import 'package:oxidized/oxidized.dart' as oxidized;
 import "package:rxdart/rxdart.dart" as rx;
 import 'rust/core/types.dart';
 
+/// Combined message type that contains either a state or event message
+sealed class CombinedMessage {}
+
+class StateMessage implements CombinedMessage {
+  final StreamState state;
+  StateMessage(this.state);
+}
+
+class EventMessage implements CombinedMessage {
+  final StreamEvent event;
+  EventMessage(this.event);
+}
+
 class VideoController {
   final int sessionId;
   final VideoConfig config;
   final rx.BehaviorSubject<StreamState> stateBroadcast;
-  final StreamSubscription<StreamState> _originalSub;
+  final StreamSubscription _combinedSub;
+  final Stream<StreamEvent> eventsStream;
   bool _running = false;
 
   VideoController(
-    StreamSubscription<StreamState> originalSub, {
+    StreamSubscription combinedSub, {
     required this.sessionId,
     required this.stateBroadcast,
+    required this.eventsStream,
     required this.config,
-  }) : _originalSub = originalSub;
+  }) : _combinedSub = combinedSub;
 
   Future<void> dispose() async {
     _running = false;
     await rlib.destroyStreamSession(sessionId: sessionId);
-    _originalSub.cancel();
+    _combinedSub.cancel();
   }
 
   static Future<(VideoController?, String?)> create({
@@ -37,21 +52,50 @@ class VideoController {
     final sessionId = await rlib.createNewSession();
 
     try {
-      final stream = rlib.createPlayable(
+      // Create separate subjects for state and events
+      final stateSubject = rx.BehaviorSubject<StreamState>.seeded(
+        StreamState.loading(),
+      );
+      final eventsSubject = rx.BehaviorSubject<StreamEvent>();
+      final eventsStream = eventsSubject.stream;
+
+      final combinedStream = rlib.createPlayable(
         sessionId: sessionId,
         engineHandle: handle,
         config: config,
       );
-      final bs = rx.BehaviorSubject<StreamState>.seeded(StreamState.loading());
-      final origSub = stream.listen(
-        bs.add,
-        onError: bs.addError,
-        onDone: () => bs.close(),
+
+      // Listen to the combined stream and split into state and events
+      final combinedSub = combinedStream.listen(
+        (message) {
+          switch (message) {
+            case StreamMessage_State(field0: final state):
+              if (!stateSubject.isClosed) {
+                stateSubject.add(state);
+              }
+              break;
+            case StreamMessage_Event(field0: final event):
+              if (!eventsSubject.isClosed) {
+                eventsSubject.add(event);
+              }
+              break;
+          }
+        },
+        onError: (error) {
+          if (!stateSubject.isClosed) {
+            stateSubject.addError(error);
+          }
+          if (!eventsSubject.isClosed) {
+            eventsSubject.addError(error);
+          }
+        },
       );
+
       final ret = VideoController(
-        origSub,
+        combinedSub,
         sessionId: sessionId,
-        stateBroadcast: bs,
+        stateBroadcast: stateSubject,
+        eventsStream: eventsStream,
         config: config,
       );
       ret._running = true;

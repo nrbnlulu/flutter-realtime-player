@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 907721271;
+  int get rustContentHash => 454442348;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,7 +81,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 abstract class RustLibApi extends BaseApi {
   Future<PlatformInt64> crateApiSimpleCreateNewSession();
 
-  Stream<StreamState> crateApiSimpleCreatePlayable({
+  Stream<StreamMessage> crateApiSimpleCreatePlayable({
     required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
     required VideoConfig config,
@@ -102,10 +102,6 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiSimpleInitApp();
 
   Future<void> crateApiSimpleMarkSessionAlive({
-    required PlatformInt64 sessionId,
-  });
-
-  Stream<StreamEvent> crateApiSimpleRegisterToStreamEventsSink({
     required PlatformInt64 sessionId,
   });
 
@@ -158,12 +154,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "create_new_session", argNames: []);
 
   @override
-  Stream<StreamState> crateApiSimpleCreatePlayable({
+  Stream<StreamMessage> crateApiSimpleCreatePlayable({
     required PlatformInt64 sessionId,
     required PlatformInt64 engineHandle,
     required VideoConfig config,
   }) {
-    final sink = RustStreamSink<StreamState>();
+    final combinedSink = RustStreamSink<StreamMessage>();
     unawaited(
       handler.executeNormal(
         NormalTask(
@@ -172,7 +168,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             sse_encode_i_64(sessionId, serializer);
             sse_encode_i_64(engineHandle, serializer);
             sse_encode_box_autoadd_video_config(config, serializer);
-            sse_encode_StreamSink_stream_state_Sse(sink, serializer);
+            sse_encode_StreamSink_stream_message_Sse(combinedSink, serializer);
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
@@ -185,18 +181,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             decodeErrorData: sse_decode_AnyhowException,
           ),
           constMeta: kCrateApiSimpleCreatePlayableConstMeta,
-          argValues: [sessionId, engineHandle, config, sink],
+          argValues: [sessionId, engineHandle, config, combinedSink],
           apiImpl: this,
         ),
       ),
     );
-    return sink.stream;
+    return combinedSink.stream;
   }
 
   TaskConstMeta get kCrateApiSimpleCreatePlayableConstMeta =>
       const TaskConstMeta(
         debugName: "create_playable",
-        argNames: ["sessionId", "engineHandle", "config", "sink"],
+        argNames: ["sessionId", "engineHandle", "config", "combinedSink"],
       );
 
   @override
@@ -359,44 +355,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Stream<StreamEvent> crateApiSimpleRegisterToStreamEventsSink({
-    required PlatformInt64 sessionId,
-  }) {
-    final sink = RustStreamSink<StreamEvent>();
-    unawaited(
-      handler.executeNormal(
-        NormalTask(
-          callFfi: (port_) {
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            sse_encode_i_64(sessionId, serializer);
-            sse_encode_StreamSink_stream_event_Sse(sink, serializer);
-            pdeCallFfi(
-              generalizedFrbRustBinding,
-              serializer,
-              funcId: 8,
-              port: port_,
-            );
-          },
-          codec: SseCodec(
-            decodeSuccessData: sse_decode_unit,
-            decodeErrorData: null,
-          ),
-          constMeta: kCrateApiSimpleRegisterToStreamEventsSinkConstMeta,
-          argValues: [sessionId, sink],
-          apiImpl: this,
-        ),
-      ),
-    );
-    return sink.stream;
-  }
-
-  TaskConstMeta get kCrateApiSimpleRegisterToStreamEventsSinkConstMeta =>
-      const TaskConstMeta(
-        debugName: "register_to_stream_events_sink",
-        argNames: ["sessionId", "sink"],
-      );
-
-  @override
   Future<void> crateApiSimpleSeekToTimestamp({
     required PlatformInt64 sessionId,
     required BigInt ts,
@@ -410,7 +368,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 8,
             port: port_,
           );
         },
@@ -445,7 +403,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 9,
             port: port_,
           );
         },
@@ -475,7 +433,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 10,
             port: port_,
           );
         },
@@ -502,15 +460,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  RustStreamSink<StreamEvent> dco_decode_StreamSink_stream_event_Sse(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    throw UnimplementedError();
-  }
-
-  @protected
-  RustStreamSink<StreamState> dco_decode_StreamSink_stream_state_Sse(
+  RustStreamSink<StreamMessage> dco_decode_StreamSink_stream_message_Sse(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -533,6 +483,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlaybinConfig dco_decode_box_autoadd_playbin_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_playbin_config(raw);
+  }
+
+  @protected
+  StreamEvent dco_decode_box_autoadd_stream_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_stream_event(raw);
+  }
+
+  @protected
+  StreamState dco_decode_box_autoadd_stream_state(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_stream_state(raw);
   }
 
   @protected
@@ -616,6 +578,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         );
       case 4:
         return StreamEvent_WscRtpStreamState(dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  StreamMessage dco_decode_stream_message(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return StreamMessage_State(dco_decode_box_autoadd_stream_state(raw[1]));
+      case 1:
+        return StreamMessage_Event(dco_decode_box_autoadd_stream_event(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -721,15 +696,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  RustStreamSink<StreamEvent> sse_decode_StreamSink_stream_event_Sse(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    throw UnimplementedError('Unreachable ()');
-  }
-
-  @protected
-  RustStreamSink<StreamState> sse_decode_StreamSink_stream_state_Sse(
+  RustStreamSink<StreamMessage> sse_decode_StreamSink_stream_message_Sse(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -755,6 +722,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_playbin_config(deserializer));
+  }
+
+  @protected
+  StreamEvent sse_decode_box_autoadd_stream_event(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_stream_event(deserializer));
+  }
+
+  @protected
+  StreamState sse_decode_box_autoadd_stream_state(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_stream_state(deserializer));
   }
 
   @protected
@@ -848,6 +831,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 4:
         var var_field0 = sse_decode_String(deserializer);
         return StreamEvent_WscRtpStreamState(var_field0);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  StreamMessage sse_decode_stream_message(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_field0 = sse_decode_box_autoadd_stream_state(deserializer);
+        return StreamMessage_State(var_field0);
+      case 1:
+        var var_field0 = sse_decode_box_autoadd_stream_event(deserializer);
+        return StreamMessage_Event(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -975,32 +975,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_StreamSink_stream_event_Sse(
-    RustStreamSink<StreamEvent> self,
+  void sse_encode_StreamSink_stream_message_Sse(
+    RustStreamSink<StreamMessage> self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(
       self.setupAndSerialize(
         codec: SseCodec(
-          decodeSuccessData: sse_decode_stream_event,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-      ),
-      serializer,
-    );
-  }
-
-  @protected
-  void sse_encode_StreamSink_stream_state_Sse(
-    RustStreamSink<StreamState> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(
-      self.setupAndSerialize(
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_stream_state,
+          decodeSuccessData: sse_decode_stream_message,
           decodeErrorData: sse_decode_AnyhowException,
         ),
       ),
@@ -1027,6 +1010,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_playbin_config(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_stream_event(
+    StreamEvent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_stream_event(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_stream_state(
+    StreamState self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_stream_state(self, serializer);
   }
 
   @protected
@@ -1124,6 +1125,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case StreamEvent_WscRtpStreamState(field0: final field0):
         sse_encode_i_32(4, serializer);
         sse_encode_String(field0, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_stream_message(StreamMessage self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case StreamMessage_State(field0: final field0):
+        sse_encode_i_32(0, serializer);
+        sse_encode_box_autoadd_stream_state(field0, serializer);
+      case StreamMessage_Event(field0: final field0):
+        sse_encode_i_32(1, serializer);
+        sse_encode_box_autoadd_stream_event(field0, serializer);
     }
   }
 

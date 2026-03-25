@@ -61,5 +61,8 @@ pub enum VideoConfig {
     Playbin(PlaybinConfig),
 }
 
+use crate::dart_types::StreamMessage;
+
 pub type DartStateStream = StreamSink<StreamState>;
 pub type DartEventsStream = StreamSink<StreamEvent>;
+pub type DartCombinedStream = StreamSink<StreamMessage>;
