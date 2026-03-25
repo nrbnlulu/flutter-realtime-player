@@ -13,7 +13,7 @@ class Env {
     // find $HOME/frtp_build.env file
     final home =
         Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
-    final file = File('$home/frtp_build.env');
+    final file = File('$home/cross_build.env');
     // coverage:ignore-start
     if (file.existsSync()) {
       final lines = file.readAsLinesSync();

@@ -11,7 +11,7 @@ const _pkgConfigSysrootAarch64EnvVar =
 const _androidNDKHomeEnvVar = 'ANDROID_NDK_HOME';
 
 void main(List<String> args) async {  
-  // we need to read an standard env file in a known-well path `$HOME/frtp_build.env` to get the env vars for building, 
+  // we need to read an standard env file in a known-well path `$HOME/cross_build.env` to get the env vars for building, 
   //since the hook is filtering environment variables and there is a known issue about this: https://github.com/dart-lang/native/issues/2623
   final envFile = Env.instance;
 
