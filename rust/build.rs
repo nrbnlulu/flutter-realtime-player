@@ -56,12 +56,7 @@ fn main() {
         // gstreamer-video
         println!("cargo:rustc-link-lib=static=gstvideo-1.0");
 
-        println!("cargo:rustc-link-lib=static=gmodule-2.0"); // For g_module_open
-        
-        // --- Common Plugin Support (Add as needed based on your pipeline) ---
-
-        println!("cargo:rustc-link-lib=static=clang_rt.builtins-aarch64-android"); // For compiler builtins on Android arm64
-        
+        println!("cargo:rustc-link-lib=static=gmodule-2.0"); // For g_module_open        
 
         println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition"); // for JNI_OnLoad conflicts
     }
