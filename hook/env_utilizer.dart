@@ -11,7 +11,8 @@ class Env {
     // read cwd .env
     _env = Platform.environment.map((key, value) => MapEntry(key, value));
     // find $HOME/frtp_build.env file
-    final home = Platform.environment['HOME'];
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     final file = File('$home/frtp_build.env');
     // coverage:ignore-start
     if (file.existsSync()) {

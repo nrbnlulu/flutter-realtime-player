@@ -5,6 +5,9 @@ fn main() {
     if target_os == "android" {
         let mut gstreamer_arch_dir = target_arch.clone();
 
+        println!("cargo:rerun-if-env-changed=ANDROID_NDK_HOME");
+        println!("cargo:rerun-if-env-changed=GSTREAMER_ROOT_ANDROID");
+        
         let ndk_home = std::env::var("ANDROID_NDK_HOME")
             .expect("ANDROID_NDK_HOME not set");
         if ndk_home.is_empty() {
@@ -12,7 +15,7 @@ fn main() {
         }
 
         if target_arch == "aarch64" {
-            // the GStreamer prebuilt binaries target arch naming is different
+            // we need libclang_rt.builtins-aarch64-android.a for compiler builtins on Android arm64
             gstreamer_arch_dir = "arm64".to_string();
         
             // we need libclang_rt.builtins-aarch64-nadoird.a for compiler builtins on Android arm64

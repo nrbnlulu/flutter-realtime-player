@@ -4,7 +4,7 @@ GStreamer based player, optimized for realtime streams
 ## Installation
 
 - Install [rust](https://rustup.rs/)
-- Make sure GStramer is available in the system to link against it
+- Make sure GStreamer is available in the system to link against it
 
 ### Android
 
