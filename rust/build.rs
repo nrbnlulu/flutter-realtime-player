@@ -3,6 +3,30 @@ fn main() {
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
 
     if target_os == "android" {
+        let mut gstreamer_arch_dir = target_arch.clone();
+
+        let ndk_home = std::env::var("ANDROID_NDK_HOME")
+            .expect("ANDROID_NDK_HOME not set");
+        if ndk_home.is_empty() {
+            panic!("ANDROID_NDK_HOME environment variable is empty");
+        }
+
+        if target_arch == "aarch64" {
+            // the GStreamer prebuilt binaries target arch naming is different
+            gstreamer_arch_dir = "arm64".to_string();
+        
+            // we need libclang_rt.builtins-aarch64-nadoird.a for compiler builtins on Android arm64
+            let clang_version = "21"; // Standard for r29
+            
+            let runtime_path = format!(
+                "{}/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/{}/lib/linux",
+                ndk_home, clang_version
+            );
+
+            println!("cargo:rustc-link-search=native={}", runtime_path);
+            println!("cargo:rustc-link-lib=static=clang_rt.builtins-{}-android", target_arch);
+        }
+
         let gstreamer_root = std::env::var("GSTREAMER_ROOT_ANDROID")
             .expect("GSTREAMER_ROOT_ANDROID not set");
 
@@ -10,8 +34,8 @@ fn main() {
             panic!("GSTREAMER_ROOT_ANDROID environment variable is empty");
         }
 
-        println!("cargo:rustc-link-search=native={}/{}/lib", gstreamer_root, target_arch);
-        println!("cargo:rustc-link-search=native={}/{}/lib/gstreamer-1.0", gstreamer_root, target_arch);
+        println!("cargo:rustc-link-search=native={}/{}/lib", gstreamer_root, gstreamer_arch_dir);
+        println!("cargo:rustc-link-search=native={}/{}/lib/gstreamer-1.0", gstreamer_root, gstreamer_arch_dir);
 
         // --- Core Transitive Dependencies (The "Infrastructure") ---
         println!("cargo:rustc-link-lib=static=ffi");        // For ffi_type_void
@@ -35,6 +59,8 @@ fn main() {
         println!("cargo:rustc-link-lib=static=gmodule-2.0"); // For g_module_open
         
         // --- Common Plugin Support (Add as needed based on your pipeline) ---
+
+        println!("cargo:rustc-link-lib=static=clang_rt.builtins-aarch64-android"); // For compiler builtins on Android arm64
         
 
         println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition"); // for JNI_OnLoad conflicts
