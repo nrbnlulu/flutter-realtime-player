@@ -16,8 +16,13 @@ void main(List<String> args) async {
   final envFile = Env.instance;
 
   final ndkHome = envFile.getString(_androidNDKHomeEnvVar);
-  final ndkPrebuiltRoot = '$ndkHome/toolchains/llvm/prebuilt/linux-x86_64';
-  final pkgConfigSysrootDir = '$ndkPrebuiltRoot/sysroot';
+  String? ndkPrebuiltRoot;
+  String? pkgConfigSysrootDir;
+  // avoid populating empty NDK home env var
+  if (ndkHome.isNotEmpty) {
+    ndkPrebuiltRoot = '$ndkHome/toolchains/llvm/prebuilt/linux-x86_64';
+    pkgConfigSysrootDir = '$ndkPrebuiltRoot/sysroot';
+  }
 
   await build(args, (input, output) async {
     await RustBuilder(
@@ -27,9 +32,9 @@ void main(List<String> args) async {
         _prebuiltStreamerRootEnvVar: envFile.getString(
           _prebuiltStreamerRootEnvVar,
         ),
-        _pkgConfigSysrootx8664EnvVar: pkgConfigSysrootDir,
-        _pkgConfigSysrootAarch64EnvVar: pkgConfigSysrootDir,
-        _androidNDKHomeEnvVar: ndkHome,
+        _pkgConfigSysrootx8664EnvVar: pkgConfigSysrootDir ?? '',
+        _pkgConfigSysrootAarch64EnvVar: pkgConfigSysrootDir ?? '',
+        _androidNDKHomeEnvVar: ndkPrebuiltRoot ?? '',
       },
     ).run(
       input: input,
