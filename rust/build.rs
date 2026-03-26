@@ -18,7 +18,7 @@ fn main() {
             // we need libclang_rt.builtins-aarch64-android.a for compiler builtins on Android arm64
             gstreamer_arch_dir = "arm64".to_string();
         
-            // we need libclang_rt.builtins-aarch64-nadoird.a for compiler builtins on Android arm64
+            // we need libclang_rt.builtins-aarch64-andoird.a for compiler builtins on Android arm64
             let clang_version = "21"; // Standard for r29
             
             let runtime_path = format!(
@@ -60,11 +60,6 @@ fn main() {
         println!("cargo:rustc-link-lib=static=gstvideo-1.0");
 
         println!("cargo:rustc-link-lib=static=gmodule-2.0"); // For g_module_open
-        
-        // --- Common Plugin Support (Add as needed based on your pipeline) ---
-
-        println!("cargo:rustc-link-lib=static=clang_rt.builtins-aarch64-android"); // For compiler builtins on Android arm64
-        
 
         println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition"); // for JNI_OnLoad conflicts
     }

@@ -10,7 +10,7 @@ class Env {
   Env._() {
     // read cwd .env
     _env = Platform.environment.map((key, value) => MapEntry(key, value));
-    // find $HOME/frtp_build.env file
+    // find $HOME/cross_build.env file
     final home =
         Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     final file = File('$home/cross_build.env');
