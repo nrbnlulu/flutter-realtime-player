@@ -16,8 +16,7 @@ If you want to cross compile the library and run example on Android, follow inst
     rustup target add \
                 aarch64-linux-android \
                 armv7-linux-androideabi \
-                x86_64-linux-android \
-                i686-linux-android
+                x86_64-linux-android
     ```
 
 - Download [GStreamer for Android](https://gstreamer.freedesktop.org/download/#android) and extract it in a directory on your system
