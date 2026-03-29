@@ -148,9 +148,42 @@ class VideoController {
   }
 }
 
+typedef LoadingBuilder = Widget Function(BuildContext context, String message);
+typedef ContentBuilder =
+    Widget Function(BuildContext context, StreamState state);
+
+// ignore: prefer_function_declarations_over_variables
+Widget _defaultLoading(BuildContext ctx, String message) {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      const CircularProgressIndicator(),
+      const SizedBox(width: 10),
+      Text(message, style: const TextStyle(fontSize: 14)),
+    ],
+  );
+}
+
+Widget _defaultContent(BuildContext context, StreamState state) {
+  return switch (state) {
+    StreamState_Loading() => _defaultLoading(context, 'Initializing stream...'),
+    StreamState_Error(field0: final message) => Center(
+      child: Text(
+        'Error: $message',
+        style: const TextStyle(color: Colors.red, fontSize: 16),
+      ),
+    ),
+    StreamState_Playing(:final textureId) => Texture(textureId: textureId),
+    StreamState_Stopped() => const Center(
+      child: Text('Video stopped', style: TextStyle(fontSize: 16)),
+    ),
+  };
+}
+
 class VideoPlayer extends StatefulWidget {
   final VideoController controller;
-  final Widget? child;
+  final LoadingBuilder loadingBuilder;
+  final ContentBuilder contentBuilder;
 
   /// whether to dispose the stream when the widget disposes?
   final bool autoDispose;
@@ -158,7 +191,8 @@ class VideoPlayer extends StatefulWidget {
   const VideoPlayer._({
     super.key,
     required this.controller,
-    this.child,
+    this.loadingBuilder = _defaultLoading,
+    this.contentBuilder = _defaultContent,
     this.autoDispose = true,
   });
 
@@ -166,13 +200,15 @@ class VideoPlayer extends StatefulWidget {
     Key? key,
     required VideoController controller,
     bool autoDispose = true,
-    Widget? child,
+    LoadingBuilder? loadingBuilder,
+    ContentBuilder? contentBuilder,
   }) {
     return VideoPlayer._(
       key: key,
       controller: controller,
       autoDispose: autoDispose,
-      child: child,
+      loadingBuilder: loadingBuilder ?? _defaultLoading,
+      contentBuilder: contentBuilder ?? _defaultContent,
     );
   }
 
@@ -180,7 +216,8 @@ class VideoPlayer extends StatefulWidget {
     Key? key,
     required VideoConfig config,
     bool autoDispose = true,
-    Widget? child,
+    LoadingBuilder? loadingBuilder,
+    ContentBuilder? contentBuilder,
   }) {
     return FutureBuilder(
       future: VideoController.create(config: config),
@@ -196,6 +233,8 @@ class VideoPlayer extends StatefulWidget {
           key: key,
           controller: controller!,
           autoDispose: autoDispose,
+          loadingBuilder: loadingBuilder ?? _defaultLoading,
+          contentBuilder: contentBuilder ?? _defaultContent,
         );
       },
     );
@@ -219,35 +258,12 @@ class _VideoPlayerState extends State<VideoPlayer> {
     });
   }
 
-  Widget _loadingWidget(String message) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const CircularProgressIndicator(),
-        const SizedBox(width: 10),
-        Text(message, style: const TextStyle(fontSize: 16)),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (currentState == null) {
-      return _loadingWidget('initializing...');
+      return widget.loadingBuilder.call(context, 'Initializing...');
     }
-    return switch (currentState!) {
-      StreamState_Loading() => _loadingWidget('initializing stream...'),
-      StreamState_Error(field0: final message) => Center(
-        child: Text(
-          'Error: $message',
-          style: const TextStyle(color: Colors.red, fontSize: 16),
-        ),
-      ),
-      StreamState_Playing(:final textureId) => Texture(textureId: textureId),
-      StreamState_Stopped() => const Center(
-        child: Text('Video stopped', style: TextStyle(fontSize: 16)),
-      ),
-    };
+    return widget.contentBuilder.call(context, currentState!);
   }
 
   @override
