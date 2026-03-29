@@ -182,7 +182,6 @@ Widget _defaultContent(BuildContext context, StreamState state) {
 
 class VideoPlayer extends StatefulWidget {
   final VideoController controller;
-  final Widget? child;
   final LoadingBuilder loadingBuilder;
   final ContentBuilder contentBuilder;
 
@@ -192,7 +191,6 @@ class VideoPlayer extends StatefulWidget {
   const VideoPlayer._({
     super.key,
     required this.controller,
-    this.child,
     this.loadingBuilder = _defaultLoading,
     this.contentBuilder = _defaultContent,
     this.autoDispose = true,
@@ -202,7 +200,6 @@ class VideoPlayer extends StatefulWidget {
     Key? key,
     required VideoController controller,
     bool autoDispose = true,
-    Widget? child,
     LoadingBuilder? loadingBuilder,
     ContentBuilder? contentBuilder,
   }) {
@@ -212,7 +209,6 @@ class VideoPlayer extends StatefulWidget {
       autoDispose: autoDispose,
       loadingBuilder: loadingBuilder ?? _defaultLoading,
       contentBuilder: contentBuilder ?? _defaultContent,
-      child: child,
     );
   }
 
@@ -220,7 +216,6 @@ class VideoPlayer extends StatefulWidget {
     Key? key,
     required VideoConfig config,
     bool autoDispose = true,
-    Widget? child,
     LoadingBuilder? loadingBuilder,
     ContentBuilder? contentBuilder,
   }) {
