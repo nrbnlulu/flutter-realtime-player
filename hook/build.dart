@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:hooks/hooks.dart';
 import 'package:native_toolchain_rust/native_toolchain_rust.dart';
 
@@ -10,8 +12,8 @@ const _pkgConfigSysrootAarch64EnvVar =
     'PKG_CONFIG_SYSROOT_DIR_aarch64_linux_android';
 const _androidNDKHomeEnvVar = 'ANDROID_NDK_HOME';
 
-void main(List<String> args) async {  
-  // we need to read an standard env file in a known-well path `$HOME/cross_build.env` to get the env vars for building, 
+void main(List<String> args) async {
+  // we need to read an standard env file in a known-well path `$HOME/cross_build.env` to get the env vars for building,
   //since the hook is filtering environment variables and there is a known issue about this: https://github.com/dart-lang/native/issues/2623
   final envFile = Env.instance;
 
@@ -24,6 +26,9 @@ void main(List<String> args) async {
     pkgConfigSysrootDir = '$ndkPrebuiltRoot/sysroot';
   }
 
+  // Get current platform environment
+  final currentEnv = Platform.environment;
+
   await build(args, (input, output) async {
     await RustBuilder(
       assetName: 'flutter_realtime_player',
@@ -35,10 +40,12 @@ void main(List<String> args) async {
         _pkgConfigSysrootx8664EnvVar: pkgConfigSysrootDir ?? '',
         _pkgConfigSysrootAarch64EnvVar: pkgConfigSysrootDir ?? '',
         _androidNDKHomeEnvVar: ndkPrebuiltRoot ?? '',
+        // Pass Windows GStreamer environment variables if present
+        'GSTREAMER_1_0_ROOT_MSVC_X86_64': envFile.getString(
+          'GSTREAMER_1_0_ROOT_MSVC_X86_64',
+        ),
+        'PKG_CONFIG_PATH': envFile.getString('PKG_CONFIG_PATH') ?? '',
       },
-    ).run(
-      input: input,
-      output: output,
-    );
+    ).run(input: input, output: output);
   });
 }
