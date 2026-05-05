@@ -367,7 +367,7 @@ impl WscRtpSession {
 
         let session_weak = Arc::downgrade(session);
         let session_weak_for_callbacks = session_weak.clone();
-        let mut origin_size_sent = false;
+        let mut last_size: Option<(u32, u32)> = None;
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
@@ -380,9 +380,15 @@ impl WscRtpSession {
                     let width = video_info.width();
                     let height = video_info.height();
 
-                    // Emit OriginVideoSize on first decoded frame
-                    if !origin_size_sent {
-                        origin_size_sent = true;
+                    // Emit OriginVideoSize on size change
+                    if last_size != Some((width, height)) {
+                        log::debug!(
+                            "WSC-RTP: decoded frame size changed from {:?} to {}x{}",
+                            last_size,
+                            width,
+                            height
+                        );
+                        last_size = Some((width, height));
                         if let Some(session) = session_weak_for_callbacks.upgrade() {
                             session
                                 .session_common
@@ -432,12 +438,28 @@ impl WscRtpSession {
                 .build(),
         );
 
+        // Shared flag: set after a codec-params (SDP) update so the very next
+        // RTP buffer is marked DISCONT.  avdec_h265 calls avcodec_flush_buffers()
+        // when it receives a DISCONT+IDR pair, forcing a clean decoder reinit even
+        // when the resolution hasn't changed (e.g. same-resolution source switch).
+        let next_is_discont = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
         // UDP packet receiver task
-        async fn udp_packet_receiver(appsrc: AppSrc, udp_sock: UdpSocket) {
+        async fn udp_packet_receiver(
+            appsrc: AppSrc,
+            udp_sock: UdpSocket,
+            next_is_discont: Arc<std::sync::atomic::AtomicBool>,
+        ) {
             // 1500 is standard MTU size for Ethernet frames
             let mut buf = [0u8; 1500];
             while let Ok((len, _)) = udp_sock.recv_from(&mut buf).await {
-                let gst_buffer = gst::Buffer::from_slice(buf[..len].to_vec());
+                let mut gst_buffer = gst::Buffer::from_mut_slice(buf[..len].to_vec());
+                if next_is_discont.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                    if let Some(buf_ref) = gst_buffer.get_mut() {
+                        buf_ref.set_flags(gst::BufferFlags::DISCONT);
+                        log::info!("WSC-RTP: marking UDP buffer DISCONT for decoder reinit");
+                    }
+                }
                 if let Err(err) = appsrc.push_buffer(gst_buffer) {
                     log::warn!("WSC-RTP: appsrc push_buffer failed: {}", err);
                     break;
@@ -447,7 +469,11 @@ impl WscRtpSession {
 
         let mut udp_packet_rcv_task = None;
         if let Some(udp_sock) = udp_sock {
-            udp_packet_rcv_task = Some(tokio::spawn(udp_packet_receiver(appsrc.clone(), udp_sock)));
+            udp_packet_rcv_task = Some(tokio::spawn(udp_packet_receiver(
+                appsrc.clone(),
+                udp_sock,
+                Arc::clone(&next_is_discont),
+            )));
         }
 
         // Set up GStreamer bus error monitoring
@@ -462,6 +488,9 @@ impl WscRtpSession {
                         bus_session_id,
                         err.error()
                     ));
+                }
+                gst::MessageView::Warning(warn) => {
+                    log::warn!("GStreamer warning [{}]: {}", bus_session_id, warn.error());
                 }
                 gst::MessageView::Eos(_) => {
                     let _ = gst_err_tx.try_send(format!("GStreamer EOS [{}]", bus_session_id));
@@ -529,7 +558,13 @@ impl WscRtpSession {
                             let _ = ws_sink.send(Message::Pong(data)).await;
                         }
                         Some(Ok(Message::Binary(data))) => {
-                            let buffer = gst::Buffer::from_mut_slice(data.to_vec());
+                            let mut buffer = gst::Buffer::from_mut_slice(data.to_vec());
+                            if next_is_discont.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                                if let Some(buf_ref) = buffer.get_mut() {
+                                    buf_ref.set_flags(gst::BufferFlags::DISCONT);
+                                    log::info!("WSC-RTP: marking WS buffer DISCONT for decoder reinit");
+                                }
+                            }
                             if let Err(err) = appsrc.push_buffer(buffer) {
                                 log::warn!("WSC-RTP: failed to handle binary message: {}", err);
                             }
@@ -537,6 +572,33 @@ impl WscRtpSession {
                         Some(Ok(Message::Text(text))) => {
                             match serde_json::from_str::<WscRtpServerMessage>(&text) {
                                 Ok(msg) => {
+                                    if let WscRtpServerMessage::Sdp { ref sdp } = msg {
+                                        if let Some((encoding, pt, clock_rate, sprop)) = parse_rtp_caps_from_sdp(sdp) {
+                                            let sprop_cap = match (encoding.as_str(), &sprop) {
+                                                ("H264", Some(s)) => format!(",sprop-parameter-sets=\"{}\"", s),
+                                                ("H265" | "HEVC", Some(s)) => format!(",{}", s),
+                                                _ => String::new(),
+                                            };
+                                            let caps_str = format!("application/x-rtp,media=video,payload={},clock-rate={},encoding-name={}{}", pt, clock_rate, encoding, sprop_cap);
+                                            if let Ok(caps) = std::str::FromStr::from_str(&caps_str) {
+                                                log::info!("WSC-RTP: Updating appsrc caps to {}", caps_str);
+
+                                                if let Some(pad) = appsrc.static_pad("src") {
+                                                    pad.push_event(gst::event::FlushStart::new());
+                                                    pad.push_event(gst::event::FlushStop::builder(false).build());
+                                                }
+
+                                                appsrc.set_caps(Some(&caps));
+                                                // Signal that the next RTP buffer should carry the DISCONT flag.
+                                                // avdec_h265 calls avcodec_flush_buffers() on DISCONT+IDR,
+                                                // forcing a clean decoder reinit even when resolution is unchanged.
+                                                next_is_discont.store(true, std::sync::atomic::Ordering::Release);
+                                            } else {
+                                                log::warn!("WSC-RTP: Failed to parse caps string: {}", caps_str);
+                                            }
+                                        }
+                                    }
+
                                     if let Some(session) = session_weak.upgrade() {
                                         session.handle_server_message(msg);
                                     }
@@ -587,7 +649,9 @@ impl WscRtpSession {
                     holepunch_port
                 );
             }
-            WscRtpServerMessage::Sdp { .. } => {}
+            WscRtpServerMessage::Sdp { sdp } => {
+                log::info!("WSC-RTP: Received SDP update, len={}", sdp.len());
+            }
             WscRtpServerMessage::SessionMode(mode) => {
                 let wsc_mode = match mode {
                     SessionMode::Live => WscRtpMode::Live,
@@ -797,19 +861,49 @@ fn parse_rtp_caps_from_sdp(sdp_text: &str) -> Option<(String, u8, u32, Option<St
 
     let sprop = media.attribute("fmtp").and_then(|v| v).and_then(|fmtp| {
         let params = fmtp.splitn(2, ' ').nth(1)?;
-        params.split(';').find_map(|param| {
-            param
-                .trim()
-                .strip_prefix("sprop-parameter-sets=")
-                .filter(|v| !v.is_empty())
-                .map(String::from)
-        })
+        if encoding == "H264" {
+            params.split(';').find_map(|param| {
+                param
+                    .trim()
+                    .strip_prefix("sprop-parameter-sets=")
+                    .filter(|v| !v.is_empty())
+                    .map(String::from)
+            })
+        } else if encoding == "H265" || encoding == "HEVC" {
+            let mut parts = Vec::new();
+            for param in params.split(';') {
+                let param = param.trim();
+                if param.starts_with("sprop-vps=")
+                    || param.starts_with("sprop-sps=")
+                    || param.starts_with("sprop-pps=")
+                {
+                    let mut kv = param.splitn(2, '=');
+                    if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
+                        parts.push(format!("{}=\"{}\"", k, v));
+                    }
+                }
+            }
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join(","))
+            }
+        } else {
+            None
+        }
     });
 
     Some((encoding, pt, clock_rate, sprop))
 }
 
 fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<String>) -> String {
+    log::info!(
+        "WSC-RTP: build_pipeline_str encoding={} pt={} clock_rate={} sprop_present={}",
+        encoding,
+        pt,
+        clock_rate,
+        sprop.is_some()
+    );
     let depay_decode = match encoding {
         "H264" => "rtph264depay ! h264parse ! avdec_h264",
         "H265" | "HEVC" => "rtph265depay ! h265parse ! avdec_h265",
@@ -820,7 +914,7 @@ fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
 
     let sprop_cap = match (encoding, sprop) {
         ("H264", Some(s)) => format!(",sprop-parameter-sets=\\\"{}\\\"", s),
-        ("H265" | "HEVC", Some(s)) => format!(",sprop-parameter-sets=\\\"{}\\\"", s),
+        ("H265" | "HEVC", Some(s)) => format!(",{}", s.replace("\"", "\\\"")),
         _ => String::new(),
     };
 
