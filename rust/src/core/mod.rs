@@ -23,11 +23,13 @@ pub(crate) fn init_logger() {
     // since we need to know the package name in android in order to get the writable
     // logging path which would be let log_dir = "/data/data/com.example.flutter_realtime_player_example/files/logs";
     // so we just don't enable logging on Android for now, we can get that path from Dart side later.
-    #[cfg(not(target_os = "android"))] {
+    #[cfg(not(target_os = "android"))]
+    {
         let log_dir = "./logs";
         // Try to create the log directory if it doesn't exist
         let _ = std::fs::create_dir_all(log_dir);
-        let file_appender = tracing_appender::rolling::daily(log_dir, "flutter_realtime_player.log");
+        let file_appender =
+            tracing_appender::rolling::daily(log_dir, "flutter_realtime_player.log");
         let (non_blocking_file_writer, guard) = tracing_appender::non_blocking(file_appender);
 
         let file_layer = tracing_subscriber::fmt::layer()
