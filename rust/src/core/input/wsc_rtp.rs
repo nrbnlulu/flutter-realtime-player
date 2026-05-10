@@ -574,19 +574,14 @@ impl WscRtpSession {
                                 Ok(msg) => {
                                     if let WscRtpServerMessage::Sdp { ref sdp } = msg {
                                         if let Some((encoding, pt, clock_rate, sprop)) = parse_rtp_caps_from_sdp(sdp) {
-                                            let sprop_cap = match (encoding.as_str(), &sprop) {
-                                                ("H264", Some(s)) => format!(",sprop-parameter-sets=\"{}\"", s),
-                                                ("H265" | "HEVC", Some(s)) => format!(",{}", s),
-                                                _ => String::new(),
-                                            };
-                                            let caps_str = format!("application/x-rtp,media=video,payload={},clock-rate={},encoding-name={}{}", pt, clock_rate, encoding, sprop_cap);
+                                            let caps_str = build_rtp_caps_str(&encoding, pt, clock_rate, &sprop);
                                             if let Ok(caps) = std::str::FromStr::from_str(&caps_str) {
                                                 log::info!("WSC-RTP: Updating appsrc caps to {}", caps_str);
 
-                                                if let Some(pad) = appsrc.static_pad("src") {
-                                                    pad.push_event(gst::event::FlushStart::new());
-                                                    pad.push_event(gst::event::FlushStop::builder(false).build());
-                                                }
+                                                // Send flush to the element (not just the pad) so appsrc's
+                                                // internal queue is cleared before applying the new caps.
+                                                let _ = appsrc.send_event(gst::event::FlushStart::new());
+                                                let _ = appsrc.send_event(gst::event::FlushStop::builder(false).build());
 
                                                 appsrc.set_caps(Some(&caps));
                                                 // Signal that the next RTP buffer should carry the DISCONT flag.
@@ -896,6 +891,18 @@ fn parse_rtp_caps_from_sdp(sdp_text: &str) -> Option<(String, u8, u32, Option<St
     Some((encoding, pt, clock_rate, sprop))
 }
 
+fn build_rtp_caps_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<String>) -> String {
+    let sprop_cap = match (encoding, sprop) {
+        ("H264", Some(s)) => format!(",sprop-parameter-sets=\"{}\"", s),
+        ("H265" | "HEVC", Some(s)) => format!(",{}", s),
+        _ => String::new(),
+    };
+    format!(
+        "application/x-rtp,media=video,payload={},clock-rate={},encoding-name={}{}",
+        pt, clock_rate, encoding, sprop_cap
+    )
+}
+
 fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<String>) -> String {
     log::info!(
         "WSC-RTP: build_pipeline_str encoding={} pt={} clock_rate={} sprop_present={}",
@@ -912,14 +919,11 @@ fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
         _ => "rtpjpegdepay ! jpegdec",
     };
 
-    let sprop_cap = match (encoding, sprop) {
-        ("H264", Some(s)) => format!(",sprop-parameter-sets=\\\"{}\\\"", s),
-        ("H265" | "HEVC", Some(s)) => format!(",{}", s.replace("\"", "\\\"")),
-        _ => String::new(),
-    };
+    let caps_str = build_rtp_caps_str(encoding, pt, clock_rate, sprop);
+    let escaped_caps = caps_str.replace('"', "\\\"");
 
     format!(
-        "appsrc name=src caps=\"application/x-rtp,media=video,payload={pt},clock-rate={clock_rate},encoding-name={encoding}{sprop_cap}\" format=time is-live=true \
+        "appsrc name=src caps=\"{escaped_caps}\" format=time is-live=true \
          ! rtpjitterbuffer \
          ! {depay_decode} \
          ! videoconvert \
