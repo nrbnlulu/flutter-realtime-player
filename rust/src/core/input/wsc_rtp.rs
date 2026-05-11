@@ -39,6 +39,7 @@ use media_server_api_models::{
 
 const UDP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 const PING_INTERVAL: Duration = Duration::from_secs(2);
+const PONG_TIMEOUT: Duration = Duration::from_secs(10);
 const SDP_TIMEOUT: Duration = Duration::from_secs(15);
 const INITIAL_BACKOFF: Duration = Duration::from_millis(500);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
@@ -514,6 +515,7 @@ impl WscRtpSession {
 
         let mut ping_interval = tokio::time::interval(PING_INTERVAL);
         ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut last_pong = tokio::time::Instant::now();
 
         // Inner select loop
         loop {
@@ -532,8 +534,23 @@ impl WscRtpSession {
                 }
 
                 _ = ping_interval.tick() => {
+                    if last_pong.elapsed() > PONG_TIMEOUT {
+                        warn!("WSC-RTP: pong timeout after {}s, assuming internet connection lost", PONG_TIMEOUT.as_secs());
+                        if let Some(udp_rcv_task) = udp_packet_rcv_task {
+                            udp_rcv_task.abort();
+                        }
+                        pipeline.set_state(gst::State::Null)?;
+                        return Err(anyhow::anyhow!("WSC-RTP: pong timeout - no internet connection"));
+                    }
                     if let Ok(payload) = serde_json::to_string(&WscRtpClientMessage::Ping) {
-                        let _ = ws_sink.send(Message::Text(payload.into())).await;
+                        if let Err(e) = ws_sink.send(Message::Text(payload.into())).await {
+                            warn!("WSC-RTP: ping send failed, assuming internet connection lost: {}", e);
+                            if let Some(udp_rcv_task) = udp_packet_rcv_task {
+                                udp_rcv_task.abort();
+                            }
+                            pipeline.set_state(gst::State::Null)?;
+                            return Err(anyhow::anyhow!("WSC-RTP: ping send failed: {}", e));
+                        }
                     }
                 }
                 msg = ws_stream.next() => {
@@ -572,6 +589,9 @@ impl WscRtpSession {
                         Some(Ok(Message::Text(text))) => {
                             match serde_json::from_str::<WscRtpServerMessage>(&text) {
                                 Ok(msg) => {
+                                    if matches!(msg, WscRtpServerMessage::Pong) {
+                                        last_pong = tokio::time::Instant::now();
+                                    }
                                     if let WscRtpServerMessage::Sdp { ref sdp } = msg {
                                         if let Some((encoding, pt, clock_rate, sprop)) = parse_rtp_caps_from_sdp(sdp) {
                                             let caps_str = build_rtp_caps_str(&encoding, pt, clock_rate, &sprop);
