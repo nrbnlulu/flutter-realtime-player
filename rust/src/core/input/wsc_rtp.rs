@@ -682,10 +682,11 @@ impl WscRtpSession {
         })?;
 
         let mut url = self.media_server_http_url.clone();
-        url.set_path(&format!(
-            "/client-session-control/{}/{}",
-            session_id, endpoint
-        ));
+        set_media_server_endpoint_path(
+            &mut url,
+            &["client-session-control", &session_id, endpoint],
+        )?;
+        url.set_query(None);
 
         let response = self
             .http_client
@@ -948,13 +949,37 @@ fn build_wsc_rtp_handshake_request(
     .to_string();
     url.set_scheme(&scheme)
         .map_err(|_| anyhow::anyhow!("invalid base_url scheme"))?;
-    url.set_path(&format!("/streams/{}/wsc-rtp", source_id));
+    set_media_server_endpoint_path(&mut url, &["streams", source_id, "wsc-rtp"])?;
     if force_websocket_transport {
         url.set_query(Some("force_websocket_transport=true"));
     } else {
         url.set_query(None);
     }
     Ok(url)
+}
+
+fn set_media_server_endpoint_path(url: &mut Url, endpoint_segments: &[&str]) -> Result<()> {
+    let base_segments: Vec<String> = url
+        .path_segments()
+        .map(|segments| {
+            segments
+                .filter(|segment| !segment.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut path_segments = url
+        .path_segments_mut()
+        .map_err(|_| anyhow::anyhow!("base_url cannot be a base for path segments"))?;
+    path_segments.clear();
+    for segment in base_segments {
+        path_segments.push(&segment);
+    }
+    for segment in endpoint_segments {
+        path_segments.push(segment);
+    }
+    Ok(())
 }
 
 fn resolve_server_udp_addr(url: &Url, port: u16) -> Result<SocketAddr> {
@@ -972,4 +997,71 @@ fn resolve_server_udp_addr(url: &Url, port: u16) -> Result<SocketAddr> {
         .or_else(|| addrs.first().cloned())
         .ok_or_else(|| anyhow::anyhow!("no addresses resolved for {}", host))?;
     Ok(addr)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builds_wsc_rtp_url_from_root_base_url() {
+        let base_url = Url::parse("https://localhost:443").unwrap();
+
+        let url = build_wsc_rtp_handshake_request(&base_url, "source-1", true).unwrap();
+
+        assert_eq!(
+            url.as_str(),
+            "wss://localhost/streams/source-1/wsc-rtp?force_websocket_transport=true"
+        );
+    }
+
+    #[test]
+    fn builds_wsc_rtp_url_with_proxy_prefix() {
+        let base_url = Url::parse("https://localhost:443/ms1").unwrap();
+
+        let url = build_wsc_rtp_handshake_request(&base_url, "2442237282583284537", true).unwrap();
+
+        assert_eq!(
+            url.as_str(),
+            "wss://localhost/ms1/streams/2442237282583284537/wsc-rtp?force_websocket_transport=true"
+        );
+    }
+
+    #[test]
+    fn builds_wsc_rtp_url_with_proxy_prefix_and_trailing_slash() {
+        let base_url = Url::parse("http://example.test/ms1/").unwrap();
+
+        let url = build_wsc_rtp_handshake_request(&base_url, "source-1", false).unwrap();
+
+        assert_eq!(
+            url.as_str(),
+            "ws://example.test/ms1/streams/source-1/wsc-rtp"
+        );
+    }
+
+    #[test]
+    fn builds_wsc_rtp_url_without_carrying_base_query() {
+        let base_url = Url::parse("https://example.test/ms1?token=base").unwrap();
+
+        let url = build_wsc_rtp_handshake_request(&base_url, "source-1", false).unwrap();
+
+        assert_eq!(
+            url.as_str(),
+            "wss://example.test/ms1/streams/source-1/wsc-rtp"
+        );
+    }
+
+    #[test]
+    fn appends_control_url_to_proxy_prefix() {
+        let mut url = Url::parse("https://example.test/ms1?token=base").unwrap();
+
+        set_media_server_endpoint_path(&mut url, &["client-session-control", "session-1", "seek"])
+            .unwrap();
+        url.set_query(None);
+
+        assert_eq!(
+            url.as_str(),
+            "https://example.test/ms1/client-session-control/session-1/seek"
+        );
+    }
 }
