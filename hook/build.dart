@@ -74,16 +74,18 @@ const _coreLibs = [
 /// GStreamer plugin .so files.  GStreamer dlopen()s these at runtime from the
 /// directory pointed to by GST_PLUGIN_PATH_1_0 (set in registry.rs).
 const _pluginLibs = [
-  'libgstcoreelements.so',
-  'libgstplayback.so',
-  'libgstrtpmanager.so',
-  'libgstrtp.so',
-  'libgstvideoconvert.so',
-  'libgstvideoparsersbad.so',
-  'libgstlibav.so',
-  'libgstvpx.so',
-  'libgstjpeg.so',
-  'libgstudp.so',
+  'libgstapp.so',               // appsrc, appsink
+  'libgstcoreelements.so',      // queue, filesrc, fakesink, …
+  'libgstplayback.so',          // playbin3, decodebin3
+  'libgstrtpmanager.so',        // rtpjitterbuffer, rtpsession
+  'libgstrtp.so',               // rtph264depay, rtph265depay, rtpvp8depay, …
+  'libgstvideoconvertscale.so', // videoconvert (renamed in GStreamer 1.22+)
+  'libgstvideoconvert.so',      // videoconvert (older GStreamer ≤ 1.20, kept for compat)
+  'libgstvideoparsersbad.so',   // h264parse, h265parse
+  'libgstlibav.so',             // avdec_h264, avdec_h265
+  'libgstvpx.so',               // vp8dec, vp9dec
+  'libgstjpeg.so',              // jpegdec
+  'libgstudp.so',               // udpsrc
   'libgsttypefindfunctions.so',
   'libgstaudioparsers.so',
   'libgstaudioconvert.so',
