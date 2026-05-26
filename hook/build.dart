@@ -81,6 +81,7 @@ const _pluginLibs = [
   'libgstrtp.so',               // rtph264depay, rtph265depay, rtpvp8depay, …
   'libgstvideoconvertscale.so', // videoconvert (renamed in GStreamer 1.22+)
   'libgstvideoconvert.so',      // videoconvert (older GStreamer ≤ 1.20, kept for compat)
+  'libgstvideoscale.so',        // videoscale (older GStreamer ≤ 1.20, kept for compat)
   'libgstvideoparsersbad.so',   // h264parse, h265parse
   'libgstlibav.so',             // avdec_h264, avdec_h265
   'libgstvpx.so',               // vp8dec, vp9dec
@@ -90,12 +91,22 @@ const _pluginLibs = [
   'libgstaudioparsers.so',
   'libgstaudioconvert.so',
   'libgstaudioresample.so',
-  'libgstautodetect.so',
+  'libgstaudiofx.so',           // volume, pan, … (required by playbin)
+  'libgstautodetect.so',        // autoaudiosink, autovideosink
+  'libgstpulseaudio.so',        // pulsesink (required for audio output on PulseAudio/PipeWire)
+  'libgstalsa.so',              // alsasink (fallback audio output)
   'libgstisomp4.so',
   'libgstmatroska.so',
 ];
 
 /// libav lib name prefixes to bundle from ldd output of libgstlibav.so.
+// NOTE: only the FFmpeg libs themselves are bundled here. Their own transitive
+// deps (libx264, libvpx, libdav1d, libopus, libass, libdrm, libva, etc.) are
+// intentionally left to the system. Bundling them correctly requires skipping
+// hardware-specific libs (libOpenCL, libva-*, libvdpau) and display-stack libs
+// (libX11, libxcb, libdrm, libvulkan) which must match the running system.
+// Target machines are expected to have the relevant codec and display libraries
+// installed (e.g. via gst-plugins-ugly, ffmpeg, mesa packages on the distro).
 const _libavPrefixes = ['libav', 'libswscale', 'libswresample', 'libpostproc'];
 
 Future<void> _bundleLinuxGStreamer(
@@ -114,14 +125,16 @@ Future<void> _bundleLinuxGStreamer(
   }
 
   // Bundle FFmpeg libs that libgstlibav.so links against (avcodec, avformat…)
-  await _bundleLibavTransitiveDeps('$pluginDir/libgstlibav.so', input, output);
+  await _bundleLibavTransitiveDeps('$pluginDir/libgstlibav.so', libDir, input, output);
 }
 
 /// Runs `pkg-config --variable=<variable> gstreamer-1.0` and returns the value.
 Future<String> _pkgConfigVar(String variable) async {
+  final pkgConfigPath = Env.instance.getString('PKG_CONFIG_PATH');
   final result = await Process.run(
     'pkg-config',
     ['--variable=$variable', 'gstreamer-1.0'],
+    environment: pkgConfigPath.isNotEmpty ? {'PKG_CONFIG_PATH': pkgConfigPath} : null,
   );
   if (result.exitCode != 0) {
     throw Exception(
@@ -160,12 +173,17 @@ Future<void> _stageAndRegister(
 /// bundles the ones whose names start with a known libav prefix.
 Future<void> _bundleLibavTransitiveDeps(
   String libgstlibavPath,
+  String libDir,
   BuildInput input,
   BuildOutputBuilder output,
 ) async {
   if (!File(libgstlibavPath).existsSync()) return;
 
-  final ldd = await Process.run('ldd', [libgstlibavPath]);
+  final ldd = await Process.run(
+    'ldd',
+    [libgstlibavPath],
+    environment: {'LD_LIBRARY_PATH': libDir},
+  );
   if (ldd.exitCode != 0) {
     stderr.writeln('ldd $libgstlibavPath failed; skipping libav bundling');
     return;
