@@ -64,12 +64,7 @@ impl PlaybinSession {
                 Ok((texture.into_sendable_texture(), texture_id))
             })?;
 
-        // Run the inner pipeline setup + event loop in a separate async fn.
-        // This ensures that regardless of how the inner function exits (including
-        // early returns via `?`), we always drop sendable_texture and payload_holder
-        // on the platform main thread rather than on the tokio worker thread.
-        // Dropping sendable_texture off the main thread causes `unregisterTexture`
-        // to be called from a background thread, which crashes on Android.
+        // This will ensure that we only destroy the texture on platform main thread
         let inner_result = self
             .run_pipeline(
                 shutdown_rx,
