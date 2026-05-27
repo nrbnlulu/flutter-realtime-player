@@ -84,6 +84,7 @@ fn main() {
         // --- GStreamer plugins (must be statically linked on Android) ---
 
         // Core: without these, NO elements work at all
+        println!("cargo:rustc-link-lib=static=gstapp");
         println!("cargo:rustc-link-lib=static=gstcoreelements");
         println!("cargo:rustc-link-lib=static=gsttypefindfunctions");
         println!("cargo:rustc-link-lib=static=gstplayback");
@@ -132,6 +133,7 @@ fn main() {
         println!("cargo:rustc-link-lib=static=gstudp");
         println!("cargo:rustc-link-lib=static=gsttcp");
         println!("cargo:rustc-link-lib=static=gstsdpelem");
+        println!("cargo:rustc-link-lib=static=gstvideoparsersbad");
 
         // Photography plugin — pulled in by androidmedia at link time
         println!("cargo:rustc-link-lib=static=gstphotography-1.0");

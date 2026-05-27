@@ -7,6 +7,7 @@ pub mod utils;
 #[cfg(target_os = "android")]
 pub(crate) mod android_gst_plugins {
     extern "C" {
+        pub fn gst_plugin_app_register();
         pub fn gst_plugin_coreelements_register();
         pub fn gst_plugin_typefindfunctions_register();
         pub fn gst_plugin_playback_register();
@@ -26,9 +27,11 @@ pub(crate) mod android_gst_plugins {
         pub fn gst_plugin_udp_register();
         pub fn gst_plugin_tcp_register();
         pub fn gst_plugin_sdpelem_register();
+        pub fn gst_plugin_videoparsersbad_register();
     }
 
     pub unsafe fn register_all() {
+        gst_plugin_app_register();
         gst_plugin_coreelements_register();
         gst_plugin_typefindfunctions_register();
         gst_plugin_playback_register();
@@ -48,5 +51,6 @@ pub(crate) mod android_gst_plugins {
         gst_plugin_udp_register();
         gst_plugin_tcp_register();
         gst_plugin_sdpelem_register();
+        gst_plugin_videoparsersbad_register();
     }
 }
