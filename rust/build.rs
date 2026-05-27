@@ -146,5 +146,10 @@ fn main() {
         println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition"); // for JNI_OnLoad conflicts
     }
 
+    if target_os == "linux" {
+        // Allow libflutter_realtime_player.so to find bundled GStreamer libs in its own directory.
+        println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    }
+
     println!("cargo:rerun-if-changed=build.rs");
 }

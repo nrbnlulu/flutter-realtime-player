@@ -16,8 +16,9 @@ dependencies:
     freezed_annotation: ">=3.0.0"
     rxdart: ">=0.28.0"
     oxidized: ^6.2.0
-    native_toolchain_rust: ^1.0.3
-    hooks: ^1.0.2
+    native_toolchain_rust: ^1.0.4
+    code_assets: ^1.0.0
+    hooks: ^1.0.3
 
 dev_dependencies:
     ffi: ^2.1.3
