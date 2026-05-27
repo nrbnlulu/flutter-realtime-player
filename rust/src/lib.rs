@@ -11,10 +11,7 @@ pub(crate) mod android_gst_plugins {
         pub fn gst_plugin_typefindfunctions_register();
         pub fn gst_plugin_playback_register();
         pub fn gst_plugin_soup_register();
-        pub fn gst_plugin_matroska_register();
-        pub fn gst_plugin_isomp4_register();
         pub fn gst_plugin_libav_register();
-        pub fn gst_plugin_vpx_register();
         pub fn gst_plugin_androidmedia_register();
         pub fn gst_plugin_videoconvertscale_register();
         pub fn gst_plugin_audioconvert_register();
@@ -22,8 +19,6 @@ pub(crate) mod android_gst_plugins {
         pub fn gst_plugin_volume_register();
         pub fn gst_plugin_audiomixer_register();
         pub fn gst_plugin_autodetect_register();
-        pub fn gst_plugin_audioparsers_register();
-        pub fn gst_plugin_videoparsersbad_register();
         pub fn gst_plugin_opensles_register();
         pub fn gst_plugin_rtsp_register();
         pub fn gst_plugin_rtp_register();
@@ -38,10 +33,7 @@ pub(crate) mod android_gst_plugins {
         gst_plugin_typefindfunctions_register();
         gst_plugin_playback_register();
         gst_plugin_soup_register();
-        gst_plugin_matroska_register();
-        gst_plugin_isomp4_register();
         gst_plugin_libav_register();
-        gst_plugin_vpx_register();
         gst_plugin_androidmedia_register();
         gst_plugin_videoconvertscale_register();
         gst_plugin_audioconvert_register();
@@ -49,8 +41,6 @@ pub(crate) mod android_gst_plugins {
         gst_plugin_volume_register();
         gst_plugin_audiomixer_register();
         gst_plugin_autodetect_register();
-        gst_plugin_audioparsers_register();
-        gst_plugin_videoparsersbad_register();
         gst_plugin_opensles_register();
         gst_plugin_rtsp_register();
         gst_plugin_rtp_register();

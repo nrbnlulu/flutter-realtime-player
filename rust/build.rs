@@ -66,30 +66,30 @@ fn main() {
 
         // gstreamer-video
         println!("cargo:rustc-link-lib=static=gstvideo-1.0");
-        println!("cargo:rustc-link-lib=static=gstgl-1.0");             // GL symbols pulled in by androidmedia/videoconvert
-        println!("cargo:rustc-link-lib=static=gstcodecparsers-1.0"); // H.264/H.265/etc. bitstream parsers
-        println!("cargo:rustc-link-lib=static=gstcodecs-1.0");       // codec helpers (used by androidmedia, videoparsersbad)
-        println!("cargo:rustc-link-lib=static=gstpbutils-1.0");      // playback utils (used by playbin3)
-        println!("cargo:rustc-link-lib=static=gsttag-1.0");          // tag reading (used by demuxers)
-        println!("cargo:rustc-link-lib=static=gstriff-1.0");          // RIFF parsing (pulled in by libav/demuxers)
-        println!("cargo:rustc-link-lib=static=gstrtp-1.0");          // RTP base (used by rtp plugins)
-        println!("cargo:rustc-link-lib=static=gstrtsp-1.0");         // RTSP base
-        println!("cargo:rustc-link-lib=static=gstsdp-1.0");          // SDP parsing
-        println!("cargo:rustc-link-lib=static=gstallocators-1.0");     // dmabuf/EGL allocators (pulled in by androidmedia/gl)
-        println!("cargo:rustc-link-lib=static=gstnet-1.0");            // network clock (pulled in by rtsp/pipeline)
-        println!("cargo:rustc-link-lib=static=gstisoff-1.0");        // ISO fragment parsing (DASH/HLS)
+        println!("cargo:rustc-link-lib=static=gstgl-1.0");
+        println!("cargo:rustc-link-lib=static=gstcodecparsers-1.0");
+        println!("cargo:rustc-link-lib=static=gstcodecs-1.0");
+        println!("cargo:rustc-link-lib=static=gstpbutils-1.0");
+        println!("cargo:rustc-link-lib=static=gsttag-1.0");
+        println!("cargo:rustc-link-lib=static=gstriff-1.0");
+        println!("cargo:rustc-link-lib=static=gstrtp-1.0");
+        println!("cargo:rustc-link-lib=static=gstrtsp-1.0");
+        println!("cargo:rustc-link-lib=static=gstsdp-1.0");
+        println!("cargo:rustc-link-lib=static=gstallocators-1.0");
+        println!("cargo:rustc-link-lib=static=gstnet-1.0");
+        println!("cargo:rustc-link-lib=static=gstisoff-1.0");
 
-        println!("cargo:rustc-link-lib=static=gmodule-2.0"); // For g_module_open
+        println!("cargo:rustc-link-lib=static=gmodule-2.0");
 
         // --- GStreamer plugins (must be statically linked on Android) ---
 
         // Core: without these, NO elements work at all
-        println!("cargo:rustc-link-lib=static=gstcoreelements");   // filesrc, fakesink, queue, etc.
-        println!("cargo:rustc-link-lib=static=gsttypefindfunctions"); // format auto-detection
-        println!("cargo:rustc-link-lib=static=gstplayback");        // playbin3 itself
+        println!("cargo:rustc-link-lib=static=gstcoreelements");
+        println!("cargo:rustc-link-lib=static=gsttypefindfunctions");
+        println!("cargo:rustc-link-lib=static=gstplayback");
 
         // Networking / HTTP(S) source
-        println!("cargo:rustc-link-lib=static=gstsoup");            // souphttpsrc for http(s)://
+        println!("cargo:rustc-link-lib=static=gstsoup");
         println!("cargo:rustc-link-lib=static=soup-3.0");
         println!("cargo:rustc-link-lib=static=gio-2.0");
         println!("cargo:rustc-link-lib=static=ssl");
@@ -98,10 +98,6 @@ fn main() {
         println!("cargo:rustc-link-lib=static=psl");
         println!("cargo:rustc-link-lib=static=z");
         println!("cargo:rustc-link-lib=static=bz2");
-
-        // Demuxers
-        println!("cargo:rustc-link-lib=static=gstmatroska");        // WebM / MKV
-        println!("cargo:rustc-link-lib=static=gstisomp4");          // MP4 / MOV
 
         // Software decoders (ffmpeg-based, covers VP8/VP9/H264/H265/AAC/etc.)
         println!("cargo:rustc-link-lib=static=gstlibav");
@@ -112,10 +108,6 @@ fn main() {
         println!("cargo:rustc-link-lib=static=swresample");
         println!("cargo:rustc-link-lib=static=swscale");
         println!("cargo:rustc-link-lib=static=x264");
-
-        // Native VP8/VP9 decoder (lighter than libav for WebM)
-        println!("cargo:rustc-link-lib=static=gstvpx");
-        println!("cargo:rustc-link-lib=static=vpx");
 
         // Android hardware decoder (MediaCodec)
         println!("cargo:rustc-link-lib=static=gstandroidmedia");
@@ -132,10 +124,6 @@ fn main() {
 
         // Autodetect sinks (playbin3 uses these for audio/video sink selection)
         println!("cargo:rustc-link-lib=static=gstautodetect");
-
-        // Audio/video parsers
-        println!("cargo:rustc-link-lib=static=gstaudioparsers");
-        println!("cargo:rustc-link-lib=static=gstvideoparsersbad");
 
         // RTSP/RTP/UDP/TCP/SDP (required for rtsp:// and rtp:// URIs)
         println!("cargo:rustc-link-lib=static=gstrtsp");
