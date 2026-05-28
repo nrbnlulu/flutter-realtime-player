@@ -42,7 +42,10 @@ void main(List<String> args) async {
         'GSTREAMER_1_0_ROOT_MSVC_X86_64': envFile.getString(
           'GSTREAMER_1_0_ROOT_MSVC_X86_64',
         ),
-        'PKG_CONFIG_PATH': envFile.getString('PKG_CONFIG_PATH') ?? '',
+        'PKG_CONFIG_PATH': envFile.getString(
+          'PKG_CONFIG_PATH',
+          defaultValue: '',
+        ),
       },
     ).run(input: input, output: output);
 
