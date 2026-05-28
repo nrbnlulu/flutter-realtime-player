@@ -37,7 +37,7 @@ void main(List<String> args) async {
         ),
         _pkgConfigSysrootx8664EnvVar: pkgConfigSysrootDir ?? '',
         _pkgConfigSysrootAarch64EnvVar: pkgConfigSysrootDir ?? '',
-        _androidNDKHomeEnvVar: ndkPrebuiltRoot ?? '',
+        _androidNDKHomeEnvVar: ndkHome,
         // Pass Windows GStreamer environment variables if present
         'GSTREAMER_1_0_ROOT_MSVC_X86_64': envFile.getString(
           'GSTREAMER_1_0_ROOT_MSVC_X86_64',
