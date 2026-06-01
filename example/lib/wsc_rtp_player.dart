@@ -125,8 +125,8 @@ class _WscRtpPlayerWidgetState extends State<WscRtpPlayerWidget> {
             _isLive = false;
             _speed = mode.speed;
             // Use seek target if server returns 0 (workaround for server bug)
-            if (mode.currentTimeMs > 0) {
-              _currentTimeMs = mode.currentTimeMs;
+            if (mode.currentTimeMs.toInt() > 0) {
+              _currentTimeMs = mode.currentTimeMs.toInt();
               _lastSeekTargetMs =
                   null; // Server gave us a valid time, clear stored target
             } else if (_lastSeekTargetMs != null) {

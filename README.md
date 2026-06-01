@@ -6,6 +6,11 @@ GStreamer based player, optimized for realtime streams
 - Install [rust](https://rustup.rs/)
 - Make sure GStreamer is available in the system to link against it
 
+## Web
+
+Web builds are supported with a dummy implementation. The package does not
+build or load Rust on web, and video streams are not rendered.
+
 ## Android
 
 Android cross-compilation is currently supported from Linux hosts only.
