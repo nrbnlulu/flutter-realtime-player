@@ -913,12 +913,12 @@ fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
         sprop.is_some()
     );
     let depay_decode = match encoding {
-        "H264" => "rtph264depay ! h264parse ! avdec_h264",
-        "H265" | "HEVC" => "rtph265depay ! h265parse ! avdec_h265",
-        "VP8" => "rtpvp8depay ! vp8dec",
-        "VP9" => "rtpvp9depay ! vp9dec",
-        _ => "rtpjpegdepay ! jpegdec",
-    };
+    "H264" => "rtph264depay ! h264parse ! decodebin",
+    "H265" | "HEVC" => "rtph265depay ! h265parse ! decodebin",
+    "VP8" => "rtpvp8depay ! decodebin",
+    "VP9" => "rtpvp9depay ! decodebin",
+    _ => "rtpjpegdepay ! jpegdec",
+};
 
     let caps_str = build_rtp_caps_str(encoding, pt, clock_rate, sprop);
     let escaped_caps = caps_str.replace('"', "\\\"");
