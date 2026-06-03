@@ -8,27 +8,31 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:oxidized/oxidized.dart' as oxidized;
 import 'package:rxdart/rxdart.dart' as rx;
 
-/// Combined message type that contains either a state or event message.
-sealed class CombinedMessage {}
+import 'video_controller_base.dart';
 
-class StateMessage implements CombinedMessage {
-  final StreamState state;
-  StateMessage(this.state);
-}
-
-class EventMessage implements CombinedMessage {
-  final StreamEvent event;
-  EventMessage(this.event);
-}
+export 'video_controller_base.dart'
+    show
+        CombinedMessage,
+        StateMessage,
+        EventMessage,
+        LoadingBuilder,
+        ContentBuilder,
+        defaultLoadingBuilder,
+        VideoControllerBase;
 
 /// An inert controller used to keep applications buildable on web.
-class VideoController {
+class VideoController extends VideoControllerBase {
   static int _nextSessionId = 0;
 
+  @override
   final int sessionId;
+  @override
   final VideoConfig config;
+  @override
   final rx.BehaviorSubject<StreamState> stateBroadcast;
+  @override
   final Stream<StreamEvent> eventsStream;
+
   final StreamSubscription _combinedSub;
   final rx.BehaviorSubject<StreamEvent>? _eventsSubject;
 
@@ -42,6 +46,7 @@ class VideoController {
   }) : _combinedSub = combinedSub,
        _eventsSubject = eventsSubject;
 
+  @override
   Future<void> dispose() async {
     await _combinedSub.cancel();
     await stateBroadcast.close();
@@ -68,35 +73,26 @@ class VideoController {
     );
   }
 
+  @override
   Future<oxidized.Result<void, AnyhowException>> seekToTimestampMs(
     BigInt tsMs,
   ) async => oxidized.Result.ok(null);
 
+  @override
   Future<oxidized.Result<void, AnyhowException>> wscRtpGoLive() async =>
       oxidized.Result.ok(null);
 
+  @override
   Future<oxidized.Result<void, AnyhowException>> setSpeed(double speed) async =>
       oxidized.Result.ok(null);
 }
 
-typedef LoadingBuilder = Widget Function(BuildContext context, String message);
-typedef ContentBuilder =
-    Widget Function(BuildContext context, StreamState state);
-
-Widget _defaultLoading(BuildContext context, String message) {
-  return Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      const CircularProgressIndicator(),
-      const SizedBox(width: 10),
-      Text(message, style: const TextStyle(fontSize: 14)),
-    ],
-  );
-}
-
 Widget _defaultContent(BuildContext context, StreamState state) {
   return switch (state) {
-    StreamState_Loading() => _defaultLoading(context, 'Initializing stream...'),
+    StreamState_Loading() => defaultLoadingBuilder(
+      context,
+      'Initializing stream...',
+    ),
     StreamState_Error(field0: final message) => Center(
       child: Text(
         'Error: $message',
@@ -119,7 +115,7 @@ class VideoPlayer extends StatefulWidget {
   const VideoPlayer._({
     super.key,
     required this.controller,
-    this.loadingBuilder = _defaultLoading,
+    this.loadingBuilder = defaultLoadingBuilder,
     this.contentBuilder = _defaultContent,
     this.autoDispose = true,
   });
@@ -135,7 +131,7 @@ class VideoPlayer extends StatefulWidget {
       key: key,
       controller: controller,
       autoDispose: autoDispose,
-      loadingBuilder: loadingBuilder ?? _defaultLoading,
+      loadingBuilder: loadingBuilder ?? defaultLoadingBuilder,
       contentBuilder: contentBuilder ?? _defaultContent,
     );
   }
@@ -152,7 +148,7 @@ class VideoPlayer extends StatefulWidget {
       builder: (context, result) {
         if (!result.hasData) {
           return loadingBuilder?.call(context, 'Initializing...') ??
-              _defaultLoading(context, 'Initializing...');
+              defaultLoadingBuilder(context, 'Initializing...');
         }
         final (controller, error) = result.data!;
         if (error != null) {
@@ -162,7 +158,7 @@ class VideoPlayer extends StatefulWidget {
           key: key,
           controller: controller!,
           autoDispose: autoDispose,
-          loadingBuilder: loadingBuilder ?? _defaultLoading,
+          loadingBuilder: loadingBuilder ?? defaultLoadingBuilder,
           contentBuilder: contentBuilder ?? _defaultContent,
         );
       },

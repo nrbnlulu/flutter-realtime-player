@@ -3,32 +3,36 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
+import 'package:flutter_realtime_player/rust/core/types.dart';
 import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'package:oxidized/oxidized.dart' as oxidized;
 import "package:rxdart/rxdart.dart" as rx;
-import 'package:flutter_realtime_player/rust/core/types.dart';
 
-/// Combined message type that contains either a state or event message
-sealed class CombinedMessage {}
+import 'video_controller_base.dart';
 
-class StateMessage implements CombinedMessage {
-  final StreamState state;
-  StateMessage(this.state);
-}
+export 'video_controller_base.dart'
+    show
+        CombinedMessage,
+        StateMessage,
+        EventMessage,
+        LoadingBuilder,
+        ContentBuilder,
+        defaultLoadingBuilder,
+        VideoControllerBase;
 
-class EventMessage implements CombinedMessage {
-  final StreamEvent event;
-  EventMessage(this.event);
-}
-
-class VideoController {
+class VideoController extends VideoControllerBase {
+  @override
   final int sessionId;
+  @override
   final VideoConfig config;
+  @override
   final rx.BehaviorSubject<StreamState> stateBroadcast;
-  final StreamSubscription _combinedSub;
+  @override
   final Stream<StreamEvent> eventsStream;
+
+  final StreamSubscription _combinedSub;
   bool _running = false;
 
   VideoController(
@@ -39,6 +43,7 @@ class VideoController {
     required this.config,
   }) : _combinedSub = combinedSub;
 
+  @override
   Future<void> dispose() async {
     _running = false;
     await rlib.destroyStreamSession(sessionId: sessionId);
@@ -52,7 +57,6 @@ class VideoController {
     final sessionId = await rlib.createNewSession();
 
     try {
-      // Create separate subjects for state and events
       final stateSubject = rx.BehaviorSubject<StreamState>.seeded(
         StreamState.loading(),
       );
@@ -65,7 +69,6 @@ class VideoController {
         config: config,
       );
 
-      // Listen to the combined stream and split into state and events
       final combinedSub = combinedStream.listen(
         (message) {
           switch (message) {
@@ -112,6 +115,7 @@ class VideoController {
     }
   }
 
+  @override
   Future<oxidized.Result<void, AnyhowException>> seekToTimestampMs(
     BigInt tsMs,
   ) async {
@@ -125,6 +129,7 @@ class VideoController {
     }
   }
 
+  @override
   Future<oxidized.Result<void, AnyhowException>> wscRtpGoLive() async {
     try {
       await rlib.wscRtpGoLive(sessionId: sessionId);
@@ -136,6 +141,7 @@ class VideoController {
     }
   }
 
+  @override
   Future<oxidized.Result<void, AnyhowException>> setSpeed(double speed) async {
     try {
       await rlib.setSpeed(sessionId: sessionId, speed: speed);
@@ -148,25 +154,12 @@ class VideoController {
   }
 }
 
-typedef LoadingBuilder = Widget Function(BuildContext context, String message);
-typedef ContentBuilder =
-    Widget Function(BuildContext context, StreamState state);
-
-// ignore: prefer_function_declarations_over_variables
-Widget _defaultLoading(BuildContext ctx, String message) {
-  return Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      const CircularProgressIndicator(),
-      const SizedBox(width: 10),
-      Text(message, style: const TextStyle(fontSize: 14)),
-    ],
-  );
-}
-
 Widget _defaultContent(BuildContext context, StreamState state) {
   return switch (state) {
-    StreamState_Loading() => _defaultLoading(context, 'Initializing stream...'),
+    StreamState_Loading() => defaultLoadingBuilder(
+      context,
+      'Initializing stream...',
+    ),
     StreamState_Error(field0: final message) => Center(
       child: Text(
         'Error: $message',
@@ -191,7 +184,7 @@ class VideoPlayer extends StatefulWidget {
   const VideoPlayer._({
     super.key,
     required this.controller,
-    this.loadingBuilder = _defaultLoading,
+    this.loadingBuilder = defaultLoadingBuilder,
     this.contentBuilder = _defaultContent,
     this.autoDispose = true,
   });
@@ -207,7 +200,7 @@ class VideoPlayer extends StatefulWidget {
       key: key,
       controller: controller,
       autoDispose: autoDispose,
-      loadingBuilder: loadingBuilder ?? _defaultLoading,
+      loadingBuilder: loadingBuilder ?? defaultLoadingBuilder,
       contentBuilder: contentBuilder ?? _defaultContent,
     );
   }
@@ -233,7 +226,7 @@ class VideoPlayer extends StatefulWidget {
           key: key,
           controller: controller!,
           autoDispose: autoDispose,
-          loadingBuilder: loadingBuilder ?? _defaultLoading,
+          loadingBuilder: loadingBuilder ?? defaultLoadingBuilder,
           contentBuilder: contentBuilder ?? _defaultContent,
         );
       },
