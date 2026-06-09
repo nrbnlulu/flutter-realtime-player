@@ -30,6 +30,11 @@ pub fn flutter_realtime_player_init(ffi_ptr: i64) {
     irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
 
     registry::init().log_err();
+    // it is necessary for Android to register all plugins manually since we are linking statically
+    #[cfg(target_os = "android")]
+    unsafe {
+        crate::android_gst_plugins::register_all();
+    }
     thread::spawn(crate::core::session::registry::stream_alive_tester_task);
     debug!("Done initializing flutter gstreamer");
     *is_initialized = true;
@@ -64,7 +69,11 @@ pub async fn create_playable(
             let (session, shutdown_rx) =
                 WscRtpSession::new(wsc_rtp_config, session_common, HTTP_CLIENT.clone());
             let session_clone = session.clone();
-            tokio::spawn(async move { session_clone.execute(shutdown_rx).await });
+            tokio::spawn(async move {
+                if let Err(e) = session_clone.execute(shutdown_rx).await {
+                    log::error!("WscRtp session {} exited with error: {}", session_id, e);
+                }
+            });
             insert_session(session_id, session);
         }
         VideoConfig::Playbin(playbin_config) => {
@@ -72,7 +81,11 @@ pub async fn create_playable(
             let session_common = VideoSessionCommon::new(session_id, engine_handle, combined_sink);
             let (session, shutdown_rx) = PlaybinSession::new(playbin_config, session_common);
             let session_clone = session.clone();
-            tokio::spawn(async move { session_clone.execute(shutdown_rx).await });
+            tokio::spawn(async move {
+                if let Err(e) = session_clone.execute(shutdown_rx).await {
+                    log::error!("Playbin session {} exited with error: {}", session_id, e);
+                }
+            });
             insert_session(session_id, session);
         }
     }
