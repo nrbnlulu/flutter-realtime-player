@@ -89,7 +89,6 @@ impl PlaybinSession {
         texture_id: i64,
         payload_holder_weak: std::sync::Weak<payload::PayloadHolder>,
     ) -> anyhow::Result<()> {
-
         let texture_session = Arc::new(crate::core::texture::flutter::TextureSession::new(
             texture_id,
             weak_texture,

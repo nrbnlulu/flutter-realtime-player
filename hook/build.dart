@@ -49,7 +49,7 @@ void main(List<String> args) async {
       },
     ).run(input: input, output: output);
 
-    if (input.config.code.targetOS == OS.linux) {
+    if (input.config.buildCodeAssets && input.config.code.targetOS == OS.linux) {
       await _bundleLinuxGStreamer(input, output);
     }
   });

@@ -37,3 +37,4 @@ target/
 
 # FVM Version Cache
 .fvm/
+.vscode/settings.json
