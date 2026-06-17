@@ -141,7 +141,7 @@ fn main() {
         // Android audio sink
         println!("cargo:rustc-link-lib=static=gstopensles");
         println!("cargo:rustc-link-lib=OpenSLES"); // Android system OpenSL ES
-        // Android system libs required by GStreamer (always present on device)
+                                                   // Android system libs required by GStreamer (always present on device)
         println!("cargo:rustc-link-lib=atomic");
         println!("cargo:rustc-link-lib=log");
 
