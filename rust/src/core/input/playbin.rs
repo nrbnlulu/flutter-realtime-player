@@ -48,7 +48,7 @@ impl PlaybinSession {
 
     pub async fn execute(
         self: &Arc<Self>,
-        mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+        shutdown_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> anyhow::Result<()> {
         let payload_holder = Arc::new(payload::PayloadHolder::new());
         let payload_holder_weak = Arc::downgrade(&payload_holder);
@@ -64,9 +64,34 @@ impl PlaybinSession {
                 Ok((texture.into_sendable_texture(), texture_id))
             })?;
 
+        // This will ensure that we only destroy the texture on platform main thread
+        let inner_result = self
+            .run_pipeline(
+                shutdown_rx,
+                Arc::downgrade(&sendable_texture),
+                texture_id,
+                payload_holder_weak,
+            )
+            .await;
+
+        invoke_on_platform_main_thread(move || {
+            drop(sendable_texture);
+            drop(payload_holder);
+        });
+
+        inner_result
+    }
+
+    async fn run_pipeline(
+        self: &Arc<Self>,
+        mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+        weak_texture: crate::core::texture::flutter::WeakSendableTexture,
+        texture_id: i64,
+        payload_holder_weak: std::sync::Weak<payload::PayloadHolder>,
+    ) -> anyhow::Result<()> {
         let texture_session = Arc::new(crate::core::texture::flutter::TextureSession::new(
             texture_id,
-            Arc::downgrade(&sendable_texture),
+            weak_texture,
             payload_holder_weak.clone(),
         ));
         let texture_session: Arc<dyn FlutterTextureSession> = texture_session;
@@ -279,13 +304,6 @@ impl PlaybinSession {
 
         // Send Stopped state
         let _ = self.session_common.send_state_msg(StreamState::Stopped);
-
-        // Texture + payload_holder must always be dropped on the platform main thread,
-        // regardless of how the loop exited (including error paths).
-        crate::utils::invoke_on_platform_main_thread(move || {
-            drop(sendable_texture);
-            drop(payload_holder);
-        });
 
         loop_result
     }

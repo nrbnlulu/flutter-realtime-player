@@ -288,7 +288,7 @@ impl WscRtpSession {
                     }
                 }
                 Err(e) => {
-                    error!("WSC-RTP connection failed: {}", e);
+                    error!("WSC-RTP connection failed: {:#}", e);
                     self.session_common
                         .send_event_msg(StreamEvent::Error(format!("Connection failed: {}", e)));
 

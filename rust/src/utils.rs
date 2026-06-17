@@ -26,6 +26,15 @@ pub(crate) fn is_fl_main_thread() -> bool {
     RunLoop::is_main_thread().unwrap_or(false)
 }
 
+/// GStreamer plugin registration return type: 1 = success, 0 = failure.
+#[allow(unused)]
+pub(crate) type GstBool = i32;
+
+#[allow(unused)]
+pub(crate) fn is_gst_result_ok(result: GstBool) -> bool {
+    result == 1
+}
+
 pub trait LogErr<T> {
     fn log_err(self) -> Option<T>;
 }
