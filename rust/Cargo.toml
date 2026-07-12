@@ -77,6 +77,10 @@ gdkx11 = "0.17.0"
 # GTK (GIMP Toolkit) dependencies
 gtk-sys = "0.17.0"
 
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21.1"
+ndk-sys = "0.4.1"
+
 
 [build-dependencies]
 cfg_aliases = "0.2.1"

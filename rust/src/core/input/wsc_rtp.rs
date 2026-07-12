@@ -1,6 +1,8 @@
+#[cfg(not(target_os = "android"))]
+use std::sync::Weak;
 use std::{
     net::{SocketAddr, ToSocketAddrs},
-    sync::{Arc, Weak},
+    sync::Arc,
     time::Duration,
 };
 
@@ -12,6 +14,7 @@ use futures_util::{
 };
 use gst::prelude::*;
 use gst_app::AppSrc;
+#[cfg(not(target_os = "android"))]
 use irondash_texture::Texture;
 use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
@@ -19,17 +22,22 @@ use tokio::net::{TcpStream, UdpSocket};
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use url::Url;
 
+#[cfg(target_os = "android")]
+use crate::core::output::android_surface::{
+    install_video_size_watch, set_window_handle, AndroidVideoOutput,
+};
+#[cfg(not(target_os = "android"))]
 use crate::{
-    core::{
-        session::VideoSessionCommon,
-        texture::{
-            payload::{self, RawRgbaFrame, SharedPixelData},
-            FlutterTextureSession,
-        },
-        types::WscRtpSessionConfig,
+    core::texture::{
+        flutter::SharedSendableTexture,
+        payload::{self, RawRgbaFrame, SharedPixelData},
+        FlutterTextureSession,
     },
-    dart_types::{StreamEvent, StreamState, WscRtpMode},
     utils::invoke_on_platform_main_thread,
+};
+use crate::{
+    core::{session::VideoSessionCommon, types::WscRtpSessionConfig},
+    dart_types::{StreamEvent, StreamState, WscRtpMode},
 };
 
 use media_server_api_models::{
@@ -56,6 +64,197 @@ struct ConnectionResources {
     udp_sock: Option<UdpSocket>,
     pipeline: gst::Pipeline,
     wsc_session_id: String,
+}
+
+#[cfg(target_os = "android")]
+struct WscVideoOutput {
+    output: Arc<AndroidVideoOutput>,
+}
+
+#[cfg(target_os = "android")]
+impl WscVideoOutput {
+    fn new(engine_handle: i64) -> Result<Self> {
+        Ok(Self {
+            output: AndroidVideoOutput::new(engine_handle)?,
+        })
+    }
+
+    fn texture_id(&self) -> i64 {
+        self.output.texture_id()
+    }
+
+    fn configure_pipeline(
+        &self,
+        pipeline: &gst::Pipeline,
+        session: &Arc<WscRtpSession>,
+    ) -> Result<()> {
+        let sink = pipeline
+            .by_name("sink")
+            .ok_or_else(|| anyhow::anyhow!("glimagesink not found"))?;
+        set_window_handle(&sink, &self.output)?;
+
+        let session_weak = Arc::downgrade(session);
+        install_video_size_watch(
+            &sink,
+            self.output.clone(),
+            Arc::new(move |width, height| {
+                if let Some(session) = session_weak.upgrade() {
+                    session
+                        .session_common
+                        .send_event_msg(StreamEvent::OriginVideoSize {
+                            width: width as u64,
+                            height: height as u64,
+                        });
+                }
+            }),
+            "WSC-RTP",
+        )
+    }
+
+    fn destroy(self) {
+        self.output.destroy_texture();
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+struct WscVideoOutput {
+    texture_id: i64,
+    sendable_texture: SharedSendableTexture,
+    payload_holder: Arc<payload::PayloadHolder>,
+    payload_holder_weak: Weak<payload::PayloadHolder>,
+    texture_session: Arc<dyn FlutterTextureSession>,
+}
+
+#[cfg(not(target_os = "android"))]
+impl WscVideoOutput {
+    fn new(engine_handle: i64) -> Result<Self> {
+        let payload_holder = Arc::new(payload::PayloadHolder::new());
+        let payload_holder_weak = Arc::downgrade(&payload_holder);
+        let payload_holder_for_texture = Arc::clone(&payload_holder);
+        let (sendable_texture, texture_id) =
+            invoke_on_platform_main_thread(move || -> Result<_> {
+                let texture =
+                    Texture::new_with_provider(engine_handle, payload_holder_for_texture)?;
+                let texture_id = texture.id();
+                Ok((texture.into_sendable_texture(), texture_id))
+            })?;
+
+        let texture_session = Arc::new(crate::core::texture::flutter::TextureSession::new(
+            texture_id,
+            Arc::downgrade(&sendable_texture),
+            payload_holder_weak.clone(),
+        ));
+        let texture_session: Arc<dyn FlutterTextureSession> = texture_session;
+
+        Ok(Self {
+            texture_id,
+            sendable_texture,
+            payload_holder,
+            payload_holder_weak,
+            texture_session,
+        })
+    }
+
+    fn texture_id(&self) -> i64 {
+        self.texture_id
+    }
+
+    fn configure_pipeline(
+        &self,
+        pipeline: &gst::Pipeline,
+        session: &Arc<WscRtpSession>,
+    ) -> Result<()> {
+        let appsink = pipeline
+            .by_name("sink")
+            .ok_or_else(|| anyhow::anyhow!("appsink not found"))?
+            .downcast::<gst_app::AppSink>()
+            .map_err(|_| anyhow::anyhow!("sink is not AppSink"))?;
+
+        let texture_session = self.texture_session.clone();
+        let payload_holder_weak = self.payload_holder_weak.clone();
+        let session_weak = Arc::downgrade(session);
+        let mut last_size: Option<(u32, u32)> = None;
+
+        appsink.set_callbacks(
+            gst_app::AppSinkCallbacks::builder()
+                .new_sample(move |sink| {
+                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                    let caps = sample.caps().ok_or(gst::FlowError::Error)?;
+                    let video_info =
+                        gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::FlowError::Error)?;
+                    let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
+
+                    let width = video_info.width();
+                    let height = video_info.height();
+
+                    if last_size != Some((width, height)) {
+                        log::debug!(
+                            "WSC-RTP: decoded frame size changed from {:?} to {}x{}",
+                            last_size,
+                            width,
+                            height
+                        );
+                        last_size = Some((width, height));
+                        if let Some(session) = session_weak.upgrade() {
+                            session
+                                .session_common
+                                .send_event_msg(StreamEvent::OriginVideoSize {
+                                    width: width as u64,
+                                    height: height as u64,
+                                });
+                        }
+                    }
+
+                    let video_frame =
+                        gst_video::VideoFrameRef::from_buffer_ref_readable(buffer, &video_info)
+                            .map_err(|_| gst::FlowError::Error)?;
+
+                    let stride = video_info.stride()[0] as usize;
+                    let expected_stride = (width as usize) * 4;
+                    let plane_data = video_frame
+                        .plane_data(0)
+                        .map_err(|_| gst::FlowError::Error)?;
+
+                    let data = if stride == expected_stride {
+                        plane_data.to_vec()
+                    } else {
+                        let mut buf = Vec::with_capacity(expected_stride * height as usize);
+                        for y in 0..height as usize {
+                            let row_start = y * stride;
+                            buf.extend_from_slice(
+                                &plane_data[row_start..row_start + expected_stride],
+                            );
+                        }
+                        buf
+                    };
+
+                    let frame = RawRgbaFrame {
+                        width,
+                        height,
+                        data,
+                    };
+
+                    if let Some(holder) = payload_holder_weak.upgrade() {
+                        holder.set_payload(Arc::new(frame) as SharedPixelData);
+                        texture_session.mark_frame_available();
+                    }
+
+                    Ok(gst::FlowSuccess::Ok)
+                })
+                .build(),
+        );
+
+        Ok(())
+    }
+
+    fn destroy(self) {
+        let sendable_texture = self.sendable_texture;
+        let payload_holder = self.payload_holder;
+        invoke_on_platform_main_thread(move || {
+            drop(sendable_texture);
+            drop(payload_holder);
+        });
+    }
 }
 
 pub struct WscRtpSession {
@@ -206,30 +405,14 @@ impl WscRtpSession {
     /// Main task: retry loop for connections, receives RTP packets, feeds GStreamer,
     /// sends pings, handles commands.
     ///
-    /// Texture creation and `mark_frame_available` are handled externally on the
-    /// platform thread via the `event_tx` → output loop path.
+    /// Texture creation and `mark_frame_available` are handled by the selected
+    /// platform output path.
     pub async fn execute(
         self: &Arc<Self>,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> anyhow::Result<()> {
-        let payload_holder = Arc::new(crate::core::texture::payload::PayloadHolder::new());
-        let payload_holder_weak = Arc::downgrade(&payload_holder);
-        let payload_holder_for_texture = Arc::clone(&payload_holder);
-        let engine_handle = self.session_common.engine_handle;
-        let (sendable_texture, texture_id) =
-            invoke_on_platform_main_thread(move || -> Result<_> {
-                let texture =
-                    Texture::new_with_provider(engine_handle, payload_holder_for_texture)?;
-                let texture_id = texture.id();
-                Ok((texture.into_sendable_texture(), texture_id))
-            })?;
-
-        let texture_session = Arc::new(crate::core::texture::flutter::TextureSession::new(
-            texture_id,
-            Arc::downgrade(&sendable_texture),
-            payload_holder_weak.clone(),
-        ));
-        let texture_session: Arc<dyn FlutterTextureSession> = texture_session;
+        let video_output = WscVideoOutput::new(self.session_common.engine_handle)?;
+        let texture_id = video_output.texture_id();
 
         self.session_common.send_state_msg(StreamState::Loading);
 
@@ -254,8 +437,7 @@ impl WscRtpSession {
                         resources.ws_stream,
                         resources.udp_sock,
                         pipeline_arc.clone(),
-                        texture_session.clone(),
-                        payload_holder_weak.clone(),
+                        &video_output,
                         &mut shutdown_rx,
                         texture_id,
                     )
@@ -331,11 +513,7 @@ impl WscRtpSession {
             .session_common
             .send_state_msg(crate::dart_types::StreamState::Stopped);
 
-        // Texture + payload_holder must be dropped on the platform main thread
-        invoke_on_platform_main_thread(move || {
-            drop(sendable_texture);
-            drop(payload_holder);
-        });
+        video_output.destroy();
 
         output
     }
@@ -348,8 +526,7 @@ impl WscRtpSession {
         mut ws_stream: WsStream,
         udp_sock: Option<UdpSocket>,
         pipeline: Arc<gst::Pipeline>,
-        texture_session: Arc<dyn FlutterTextureSession>,
-        payload_holder_weak: Weak<payload::PayloadHolder>,
+        video_output: &WscVideoOutput,
         shutdown_rx: &mut tokio::sync::mpsc::Receiver<()>,
         texture_id: i64,
     ) -> Result<ExitReason> {
@@ -359,84 +536,8 @@ impl WscRtpSession {
             .downcast::<AppSrc>()
             .map_err(|_| anyhow::anyhow!("src is not AppSrc"))?;
 
-        let appsink = pipeline
-            .by_name("sink")
-            .ok_or_else(|| anyhow::anyhow!("appsink not found"))?
-            .downcast::<gst_app::AppSink>()
-            .map_err(|_| anyhow::anyhow!("sink is not AppSink"))?;
-
         let session_weak = Arc::downgrade(session);
-        let session_weak_for_callbacks = session_weak.clone();
-        let mut last_size: Option<(u32, u32)> = None;
-        appsink.set_callbacks(
-            gst_app::AppSinkCallbacks::builder()
-                .new_sample(move |sink| {
-                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                    let caps = sample.caps().ok_or(gst::FlowError::Error)?;
-                    let video_info =
-                        gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::FlowError::Error)?;
-                    let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
-
-                    let width = video_info.width();
-                    let height = video_info.height();
-
-                    // Emit OriginVideoSize on size change
-                    if last_size != Some((width, height)) {
-                        log::debug!(
-                            "WSC-RTP: decoded frame size changed from {:?} to {}x{}",
-                            last_size,
-                            width,
-                            height
-                        );
-                        last_size = Some((width, height));
-                        if let Some(session) = session_weak_for_callbacks.upgrade() {
-                            session
-                                .session_common
-                                .send_event_msg(StreamEvent::OriginVideoSize {
-                                    width: width as u64,
-                                    height: height as u64,
-                                });
-                        }
-                    }
-
-                    let video_frame =
-                        gst_video::VideoFrameRef::from_buffer_ref_readable(buffer, &video_info)
-                            .map_err(|_| gst::FlowError::Error)?;
-
-                    let stride = video_info.stride()[0] as usize;
-                    let expected_stride = (width as usize) * 4; // RGBA
-                    let plane_data = video_frame
-                        .plane_data(0)
-                        .map_err(|_| gst::FlowError::Error)?;
-
-                    let data = if stride == expected_stride {
-                        plane_data.to_vec()
-                    } else {
-                        // Stride mismatch — copy row by row to strip padding
-                        let mut buf = Vec::with_capacity(expected_stride * height as usize);
-                        for y in 0..height as usize {
-                            let row_start = y * stride;
-                            buf.extend_from_slice(
-                                &plane_data[row_start..row_start + expected_stride],
-                            );
-                        }
-                        buf
-                    };
-
-                    let frame = RawRgbaFrame {
-                        width,
-                        height,
-                        data,
-                    };
-
-                    if let Some(holder) = payload_holder_weak.upgrade() {
-                        holder.set_payload(Arc::new(frame) as SharedPixelData);
-                        texture_session.mark_frame_available();
-                    }
-                    Ok(gst::FlowSuccess::Ok)
-                })
-                .build(),
-        );
+        video_output.configure_pipeline(&pipeline, session)?;
 
         // Shared flag: set after a codec-params (SDP) update so the very next
         // RTP buffer is marked DISCONT.  avdec_h265 calls avcodec_flush_buffers()
@@ -912,14 +1013,7 @@ fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
         clock_rate,
         sprop.is_some()
     );
-    let depay_decode = match encoding {
-        "H264" => "rtph264depay ! h264parse ! avdec_h264",
-        "H265" | "HEVC" => "rtph265depay ! h265parse ! avdec_h265",
-        "VP8" => "rtpvp8depay ! vp8dec",
-        "VP9" => "rtpvp9depay ! vp9dec",
-        _ => "rtpjpegdepay ! jpegdec",
-    };
-
+    let depay_decode = depay_decode_chain(encoding);
     let caps_str = build_rtp_caps_str(encoding, pt, clock_rate, sprop);
     let escaped_caps = caps_str.replace('"', "\\\"");
 
@@ -927,10 +1021,41 @@ fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
         "appsrc name=src caps=\"{escaped_caps}\" format=time is-live=true \
          ! rtpjitterbuffer \
          ! {depay_decode} \
-         ! videoconvert \
-         ! video/x-raw,format=RGBA \
-         ! appsink name=sink sync=false emit-signals=true",
+         ! {}",
+        video_sink_chain()
     )
+}
+
+#[cfg(target_os = "android")]
+fn depay_decode_chain(encoding: &str) -> &'static str {
+    match encoding {
+        "H264" => "rtph264depay ! h264parse ! decodebin3",
+        "H265" | "HEVC" => "rtph265depay ! h265parse ! decodebin3",
+        "VP8" => "rtpvp8depay ! decodebin3",
+        "VP9" => "rtpvp9depay ! decodebin3",
+        _ => "rtpjpegdepay ! jpegparse ! decodebin3",
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn depay_decode_chain(encoding: &str) -> &'static str {
+    match encoding {
+        "H264" => "rtph264depay ! h264parse ! avdec_h264",
+        "H265" | "HEVC" => "rtph265depay ! h265parse ! avdec_h265",
+        "VP8" => "rtpvp8depay ! vp8dec",
+        "VP9" => "rtpvp9depay ! vp9dec",
+        _ => "rtpjpegdepay ! jpegdec",
+    }
+}
+
+#[cfg(target_os = "android")]
+fn video_sink_chain() -> &'static str {
+    "glimagesink name=sink sync=false"
+}
+
+#[cfg(not(target_os = "android"))]
+fn video_sink_chain() -> &'static str {
+    "videoconvert ! video/x-raw,format=RGBA ! appsink name=sink sync=false emit-signals=true"
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

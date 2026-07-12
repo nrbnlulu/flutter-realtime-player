@@ -30,3 +30,10 @@ dev_dependencies:
         sdk: flutter
     freezed: ">=3.0.0"
     build_runner: ^2.4.15
+
+flutter:
+    plugin:
+        platforms:
+            android:
+                package: com.nrbnlulu.flutter_realtime_player
+                pluginClass: FlutterRealtimePlayerPlugin
