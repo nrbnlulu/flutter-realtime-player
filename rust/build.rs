@@ -30,6 +30,12 @@ fn main() {
                 "cargo:rustc-link-lib=static=clang_rt.builtins-{}-android",
                 target_arch
             );
+        } else if target_arch == "arm" {
+            gstreamer_arch_dir = "armv7".to_string();
+        } else if target_arch == "x86" {
+            gstreamer_arch_dir = "x86".to_string();
+        } else if target_arch == "x86_64" {
+            gstreamer_arch_dir = "x86_64".to_string();
         }
 
         let gstreamer_root =
@@ -67,6 +73,7 @@ fn main() {
         // gstreamer-video
         println!("cargo:rustc-link-lib=static=gstvideo-1.0");
         println!("cargo:rustc-link-lib=static=gstgl-1.0");
+        println!("cargo:rustc-link-lib=static=gstcontroller-1.0");
         println!("cargo:rustc-link-lib=static=gstcodecparsers-1.0");
         println!("cargo:rustc-link-lib=static=gstcodecs-1.0");
         println!("cargo:rustc-link-lib=static=gstpbutils-1.0");
@@ -112,6 +119,14 @@ fn main() {
 
         // Android hardware decoder (MediaCodec)
         println!("cargo:rustc-link-lib=static=gstandroidmedia");
+
+        // OpenGL video sink/upload path (glimagesink/glupload/glcolorconvert)
+        println!("cargo:rustc-link-lib=static=gstopengl");
+        println!("cargo:rustc-link-lib=static=graphene-1.0");
+        println!("cargo:rustc-link-lib=static=png16");
+        println!("cargo:rustc-link-lib=static=jpeg");
+        println!("cargo:rustc-link-lib=EGL");
+        println!("cargo:rustc-link-lib=GLESv2");
 
         // Video color conversion (RGBA output from NV12/I420/etc.)
         println!("cargo:rustc-link-lib=static=gstvideoconvertscale");

@@ -30,6 +30,7 @@ pub(crate) mod android_gst_plugins {
         fn gst_plugin_tcp_register() -> GstBool;
         fn gst_plugin_sdpelem_register() -> GstBool;
         fn gst_plugin_videoparsersbad_register() -> GstBool;
+        fn gst_plugin_opengl_register() -> GstBool;
     }
 
     pub unsafe fn register_all() {
@@ -40,6 +41,7 @@ pub(crate) mod android_gst_plugins {
             ("playback", gst_plugin_playback_register),
             ("soup", gst_plugin_soup_register),
             ("libav", gst_plugin_libav_register),
+            ("opengl", gst_plugin_opengl_register),
             ("androidmedia", gst_plugin_androidmedia_register),
             ("videoconvertscale", gst_plugin_videoconvertscale_register),
             ("audioconvert", gst_plugin_audioconvert_register),
@@ -62,5 +64,32 @@ pub(crate) mod android_gst_plugins {
                 log::error!("Failed to register GStreamer plugin: {}", name);
             }
         }
+    }
+}
+
+#[cfg(target_os = "android")]
+mod android_gst_jni_glue {
+    use std::sync::OnceLock;
+
+    use jni::{objects::GlobalRef, sys};
+
+    static CLASS_LOADER: OnceLock<GlobalRef> = OnceLock::new();
+
+    #[no_mangle]
+    pub extern "C" fn gst_android_get_java_vm() -> *mut sys::JavaVM {
+        irondash_engine_context::EngineContext::get_java_vm()
+            .map(|vm| vm.get_java_vm_pointer())
+            .unwrap_or(std::ptr::null_mut())
+    }
+
+    #[no_mangle]
+    pub extern "C" fn gst_android_get_application_class_loader() -> sys::jobject {
+        CLASS_LOADER
+            .get_or_init(|| {
+                irondash_engine_context::EngineContext::get_class_loader()
+                    .expect("irondash application class loader must be available on Android")
+            })
+            .as_obj()
+            .as_raw()
     }
 }

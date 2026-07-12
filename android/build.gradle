@@ -1,0 +1,32 @@
+group = "com.nrbnlulu.flutter_realtime_player"
+version = "1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.11.1"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+android {
+    namespace "com.nrbnlulu.flutter_realtime_player"
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 23
+    }
+}
+
