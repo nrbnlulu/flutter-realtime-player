@@ -48,13 +48,16 @@ impl AndroidVideoOutput {
             return;
         }
 
+        let native_window = self.native_window.as_ptr();
+        if native_window.is_null() {
+            log::warn!(
+                "Android video output: native window is null, cannot set buffer geometry to {width}x{height}"
+            );
+            return;
+        }
+
         let result = unsafe {
-            ANativeWindow_setBuffersGeometry(
-                self.native_window.as_ptr(),
-                width as i32,
-                height as i32,
-                0,
-            )
+            ANativeWindow_setBuffersGeometry(native_window, width as i32, height as i32, 0)
         };
 
         if result != 0 {
@@ -117,11 +120,14 @@ pub fn set_window_handle(sink: &gst::Element, output: &AndroidVideoOutput) -> Re
         .dynamic_cast_ref::<gst_video::VideoOverlay>()
         .with_context(|| format!("{} does not implement GstVideoOverlay", sink.name()))?;
 
+    let window_handle = output.window_handle();
+    anyhow::ensure!(
+        window_handle != 0,
+        "Android video output native window is null"
+    );
+
     unsafe {
-        gst_video::prelude::VideoOverlayExtManual::set_window_handle(
-            overlay,
-            output.window_handle(),
-        );
+        gst_video::prelude::VideoOverlayExtManual::set_window_handle(overlay, window_handle);
     }
 
     Ok(())
