@@ -59,7 +59,12 @@ pub(crate) fn init_logger() {
         // leak the guard to keep the file writer alive
         WORKER_GUARD.lock().unwrap().replace(guard);
     }
-    // Default utilities - feel free to custom
     flutter_rust_bridge::setup_default_user_utils();
+
+    #[cfg(target_os = "android")]
+    {
+        log::set_max_level(log::LevelFilter::Info);
+    }
+
     debug!("Done initializing");
 }

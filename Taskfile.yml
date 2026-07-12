@@ -3,6 +3,9 @@ version: "3"
 vars:
     DART_BIN: "fvm exec dart"
     FLUTTER_BIN: "fvm exec flutter"
+    ANDROID_DEVICE_ID:
+        sh: |
+            {{.FLUTTER_BIN}} devices --machine | python3 -c 'import json, sys; print(next((device["id"] for device in json.load(sys.stdin) if device.get("targetPlatform", "").startswith("android")), ""))'
 
 tasks:
     codegen:
@@ -24,3 +27,12 @@ tasks:
         cmds:
             - cargo fmt
             - "{{.DART_BIN}} format ./lib ./example"
+    run-android:
+        dir: ./example
+        cmds:
+            - |
+                if [ -z "{{.ANDROID_DEVICE_ID}}" ]; then
+                  printf '%s\n' 'No Android device found.' >&2
+                  exit 1
+                fi
+                {{.FLUTTER_BIN}} run -d {{.ANDROID_DEVICE_ID}} {{.CLI_ARGS}}
