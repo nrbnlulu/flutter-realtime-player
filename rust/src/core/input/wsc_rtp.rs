@@ -37,7 +37,6 @@ use media_server_api_models::{
     WscRtpServerMessage,
 };
 
-const UDP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 const PING_INTERVAL: Duration = Duration::from_secs(2);
 const SDP_TIMEOUT: Duration = Duration::from_secs(15);
 const INITIAL_BACKOFF: Duration = Duration::from_millis(500);
@@ -234,7 +233,7 @@ impl WscRtpSession {
         self.session_common.send_state_msg(StreamState::Loading);
 
         let mut backoff = INITIAL_BACKOFF;
-        let mut output: anyhow::Result<()> = Ok(());
+        let output: anyhow::Result<()>;
 
         loop {
             match self.connect_and_setup_pipeline().await {
