@@ -6,6 +6,24 @@ GStreamer based player, optimized for realtime streams
 - Install [rust](https://rustup.rs/)
 - Make sure GStreamer is available in the system to link against it
 
+### Linux bundle compatibility
+
+Linux release bundles include GStreamer, its plugins, GLib, PCRE2, libmount,
+and libblkid from the build machine. Build release artifacts on the oldest
+Linux distribution the application supports because glibc cannot safely be
+bundled. The default compatibility ceiling is glibc 2.35 (Ubuntu 22.04).
+
+The build hook rejects libraries that require a newer glibc. To target another
+baseline, set the oldest supported version in `$HOME/cross_build.env`:
+
+```text
+FLUTTER_REALTIME_PLAYER_LINUX_GLIBC_MAX=2.35
+```
+
+Install `patchelf` on the Linux build machine. The hook adds an `$ORIGIN`
+runpath to bundled libraries so GLib loads the matching bundled PCRE2, libmount,
+and libblkid instead of ABI-incompatible copies from the target system.
+
 ## Android
 
 Android cross-compilation is currently supported from Linux hosts only.

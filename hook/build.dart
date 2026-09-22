@@ -12,6 +12,8 @@ const _pkgConfigSysrootx8664EnvVar =
 const _pkgConfigSysrootAarch64EnvVar =
     'PKG_CONFIG_SYSROOT_DIR_aarch64_linux_android';
 const _androidNDKHomeEnvVar = 'ANDROID_NDK_HOME';
+const _linuxGlibcMaxEnvVar = 'FLUTTER_REALTIME_PLAYER_LINUX_GLIBC_MAX';
+const _defaultLinuxGlibcMax = '2.35';
 
 void main(List<String> args) async {
   // we need to read an standard env file in a known-well path `$HOME/cross_build.env` to get the env vars for building,
@@ -28,6 +30,11 @@ void main(List<String> args) async {
   }
 
   await build(args, (input, output) async {
+    final envSourceFile = envFile.sourceFile;
+    if (envSourceFile != null) {
+      output.dependencies.add(envSourceFile);
+    }
+
     await RustBuilder(
       assetName: 'flutter_realtime_player',
       cratePath: 'rust',
@@ -100,6 +107,8 @@ Future<void> _bundleLinuxGStreamer(
   final gstreamerLibDir = await _pkgConfigVar('gstreamer-1.0', 'libdir');
   final glibLibDir = await _pkgConfigVar('glib-2.0', 'libdir');
   final pcre2LibDir = await _pkgConfigVar('libpcre2-8', 'libdir');
+  final mountLibDir = await _pkgConfigVar('mount', 'libdir');
+  final blkidLibDir = await _pkgConfigVar('blkid', 'libdir');
   final pluginDir = await _pkgConfigVar('gstreamer-1.0', 'pluginsdir');
 
   for (final name in _glibLibs) {
@@ -115,6 +124,20 @@ Future<void> _bundleLinuxGStreamer(
   await _stageAndRegister(
     '$pcre2LibDir/libpcre2-8.so.0',
     'libpcre2-8.so.0',
+    input,
+    output,
+    required: true,
+  );
+  await _stageAndRegister(
+    '$mountLibDir/libmount.so.1',
+    'libmount.so.1',
+    input,
+    output,
+    required: true,
+  );
+  await _stageAndRegister(
+    '$blkidLibDir/libblkid.so.1',
+    'libblkid.so.1',
     input,
     output,
     required: true,
@@ -204,6 +227,8 @@ Future<void> _stageAndRegister(
 
   final destUri = input.outputDirectory.resolve(libName);
   await src.copy(destUri.toFilePath());
+  await _setOriginRunpath(destUri.toFilePath());
+  await _validateGlibcCompatibility(destUri.toFilePath(), libName);
 
   output.assets.code.add(
     CodeAsset(
@@ -213,6 +238,72 @@ Future<void> _stageAndRegister(
       file: destUri,
     ),
   );
+}
+
+/// Makes each bundled ELF object find its bundled dependencies before falling
+/// back to the target system. An rpath on the application does not apply to
+/// dependencies loaded later by another shared object.
+Future<void> _setOriginRunpath(String path) async {
+  final result = await Process.run('patchelf', [
+    '--set-rpath',
+    r'$ORIGIN',
+    path,
+  ]);
+  if (result.exitCode != 0) {
+    throw Exception(
+      'patchelf failed for $path. Install patchelf on the Linux build '
+      'machine:\n${result.stderr}',
+    );
+  }
+}
+
+/// Rejects libraries built against a newer glibc than the supported Linux
+/// baseline. glibc is part of the target operating system and cannot be safely
+/// included in a relocatable application bundle.
+Future<void> _validateGlibcCompatibility(String path, String name) async {
+  final configuredMax = Env.instance.getString(
+    _linuxGlibcMaxEnvVar,
+    defaultValue: _defaultLinuxGlibcMax,
+  );
+  final maxVersion = _parseVersion(configuredMax, _linuxGlibcMaxEnvVar);
+  final result = await Process.run('objdump', ['-T', path]);
+  if (result.exitCode != 0) {
+    throw Exception('objdump failed for $path:\n${result.stderr}');
+  }
+
+  final requiredVersions = RegExp(r'GLIBC_(\d+)\.(\d+)')
+      .allMatches(result.stdout as String)
+      .map((match) => (int.parse(match.group(1)!), int.parse(match.group(2)!)));
+  (int, int)? highestRequired;
+  for (final version in requiredVersions) {
+    if (highestRequired == null ||
+        _compareVersions(version, highestRequired) > 0) {
+      highestRequired = version;
+    }
+  }
+  if (highestRequired != null &&
+      _compareVersions(highestRequired, maxVersion) > 0) {
+    throw Exception(
+      '$name requires GLIBC_${highestRequired.$1}.${highestRequired.$2}, newer '
+      'than the configured Linux baseline GLIBC_$configuredMax. Build the '
+      'bundle on the oldest supported Linux distribution, or set '
+      '$_linuxGlibcMaxEnvVar in ~/cross_build.env to the oldest glibc version '
+      'supported by your application.',
+    );
+  }
+}
+
+(int, int) _parseVersion(String value, String settingName) {
+  final match = RegExp(r'^(\d+)\.(\d+)$').firstMatch(value);
+  if (match == null) {
+    throw Exception('$settingName must be a major.minor version, got "$value"');
+  }
+  return (int.parse(match.group(1)!), int.parse(match.group(2)!));
+}
+
+int _compareVersions((int, int) left, (int, int) right) {
+  final majorComparison = left.$1.compareTo(right.$1);
+  return majorComparison != 0 ? majorComparison : left.$2.compareTo(right.$2);
 }
 
 /// Uses `ldd` on libgstlibav.so to discover FFmpeg .so dependencies and
