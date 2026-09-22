@@ -1,4 +1,4 @@
-import 'dart:io' show File, Process, stderr;
+import 'dart:io' show Directory, File, Process, stderr;
 
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
@@ -12,6 +12,7 @@ const _pkgConfigSysrootx8664EnvVar =
 const _pkgConfigSysrootAarch64EnvVar =
     'PKG_CONFIG_SYSROOT_DIR_aarch64_linux_android';
 const _androidNDKHomeEnvVar = 'ANDROID_NDK_HOME';
+const _linuxGlibcMaxEnvVar = 'FLUTTER_REALTIME_PLAYER_LINUX_GLIBC_MAX';
 
 void main(List<String> args) async {
   // we need to read an standard env file in a known-well path `$HOME/cross_build.env` to get the env vars for building,
@@ -28,6 +29,11 @@ void main(List<String> args) async {
   }
 
   await build(args, (input, output) async {
+    final envSourceFile = envFile.sourceFile;
+    if (envSourceFile != null) {
+      output.dependencies.add(envSourceFile);
+    }
+
     await RustBuilder(
       assetName: 'flutter_realtime_player',
       cratePath: 'rust',
@@ -49,7 +55,8 @@ void main(List<String> args) async {
       },
     ).run(input: input, output: output);
 
-    if (input.config.buildCodeAssets && input.config.code.targetOS == OS.linux) {
+    if (input.config.buildCodeAssets &&
+        input.config.code.targetOS == OS.linux) {
       await _bundleLinuxGStreamer(input, output);
     }
   });
@@ -59,10 +66,18 @@ void main(List<String> args) async {
 // Linux GStreamer bundling
 // ---------------------------------------------------------------------------
 
-/// Core GStreamer shared libs that the dynamic linker loads when
-/// libflutter_realtime_player.so is opened.  The $ORIGIN rpath set in
-/// build.rs makes the linker look in the same directory as the .so itself.
-const _coreLibs = [
+/// GLib shared libraries used by the bundled GStreamer build.
+const _glibLibs = [
+  'libglib-2.0.so.0',
+  'libgobject-2.0.so.0',
+  'libgmodule-2.0.so.0',
+  'libgio-2.0.so.0',
+];
+
+/// Core GStreamer shared libraries that the dynamic linker loads when
+/// libflutter_realtime_player.so is opened. The $ORIGIN rpath set in build.rs
+/// makes the linker look in the same directory as the library itself.
+const _gstreamerLibs = [
   'libgstreamer-1.0.so.0',
   'libgstbase-1.0.so.0',
   'libgstapp-1.0.so.0',
@@ -72,34 +87,6 @@ const _coreLibs = [
   'libgsttag-1.0.so.0',
   'libgstnet-1.0.so.0',
   'libgstgl-1.0.so.0',
-];
-
-/// GStreamer plugin .so files.  GStreamer dlopen()s these at runtime from the
-/// directory pointed to by GST_PLUGIN_PATH_1_0 (set in registry.rs).
-const _pluginLibs = [
-  'libgstapp.so',               // appsrc, appsink
-  'libgstcoreelements.so',      // queue, filesrc, fakesink, …
-  'libgstplayback.so',          // playbin3, decodebin3
-  'libgstrtpmanager.so',        // rtpjitterbuffer, rtpsession
-  'libgstrtp.so',               // rtph264depay, rtph265depay, rtpvp8depay, …
-  'libgstvideoconvertscale.so', // videoconvert (renamed in GStreamer 1.22+)
-  'libgstvideoconvert.so',      // videoconvert (older GStreamer ≤ 1.20, kept for compat)
-  'libgstvideoscale.so',        // videoscale (older GStreamer ≤ 1.20, kept for compat)
-  'libgstvideoparsersbad.so',   // h264parse, h265parse
-  'libgstlibav.so',             // avdec_h264, avdec_h265
-  'libgstvpx.so',               // vp8dec, vp9dec
-  'libgstjpeg.so',              // jpegdec
-  'libgstudp.so',               // udpsrc
-  'libgsttypefindfunctions.so',
-  'libgstaudioparsers.so',
-  'libgstaudioconvert.so',
-  'libgstaudioresample.so',
-  'libgstaudiofx.so',           // volume, pan, … (required by playbin)
-  'libgstautodetect.so',        // autoaudiosink, autovideosink
-  'libgstpulseaudio.so',        // pulsesink (required for audio output on PulseAudio/PipeWire)
-  'libgstalsa.so',              // alsasink (fallback audio output)
-  'libgstisomp4.so',
-  'libgstmatroska.so',
 ];
 
 /// libav lib name prefixes to bundle from ldd output of libgstlibav.so.
@@ -116,51 +103,131 @@ Future<void> _bundleLinuxGStreamer(
   BuildInput input,
   BuildOutputBuilder output,
 ) async {
-  final libDir = await _pkgConfigVar('libdir');
-  final pluginDir = await _pkgConfigVar('pluginsdir');
+  final gstreamerLibDir = await _pkgConfigVar('gstreamer-1.0', 'libdir');
+  final glibLibDir = await _pkgConfigVar('glib-2.0', 'libdir');
+  final pcre2LibDir = await _pkgConfigVar('libpcre2-8', 'libdir');
+  final mountLibDir = await _pkgConfigVar('mount', 'libdir');
+  final blkidLibDir = await _pkgConfigVar('blkid', 'libdir');
+  final pluginDir = await _pkgConfigVar('gstreamer-1.0', 'pluginsdir');
 
-  for (final name in _coreLibs) {
-    await _stageAndRegister('$libDir/$name', name, input, output);
+  for (final name in _glibLibs) {
+    await _stageAndRegister(
+      '$glibLibDir/$name',
+      name,
+      input,
+      output,
+      required: true,
+    );
   }
 
-  for (final name in _pluginLibs) {
-    await _stageAndRegister('$pluginDir/$name', name, input, output);
+  await _stageAndRegister(
+    '$pcre2LibDir/libpcre2-8.so.0',
+    'libpcre2-8.so.0',
+    input,
+    output,
+    required: true,
+  );
+  await _stageAndRegister(
+    '$mountLibDir/libmount.so.1',
+    'libmount.so.1',
+    input,
+    output,
+    required: true,
+  );
+  await _stageAndRegister(
+    '$blkidLibDir/libblkid.so.1',
+    'libblkid.so.1',
+    input,
+    output,
+    required: true,
+  );
+
+  for (final name in _gstreamerLibs) {
+    await _stageAndRegister(
+      '$gstreamerLibDir/$name',
+      name,
+      input,
+      output,
+      required: true,
+    );
   }
+
+  await _bundlePluginDirectory(pluginDir, input, output);
 
   // Bundle FFmpeg libs that libgstlibav.so links against (avcodec, avformat…)
-  await _bundleLibavTransitiveDeps('$pluginDir/libgstlibav.so', libDir, input, output);
+  await _bundleLibavTransitiveDeps(
+    '$pluginDir/libgstlibav.so',
+    gstreamerLibDir,
+    input,
+    output,
+  );
 }
 
-/// Runs `pkg-config --variable=<variable> gstreamer-1.0` and returns the value.
-Future<String> _pkgConfigVar(String variable) async {
+/// Runs `pkg-config --variable=<variable> <package>` and returns the value.
+Future<String> _pkgConfigVar(String package, String variable) async {
   final pkgConfigPath = Env.instance.getString('PKG_CONFIG_PATH');
   final result = await Process.run(
     'pkg-config',
-    ['--variable=$variable', 'gstreamer-1.0'],
-    environment: pkgConfigPath.isNotEmpty ? {'PKG_CONFIG_PATH': pkgConfigPath} : null,
+    ['--variable=$variable', package],
+    environment:
+        pkgConfigPath.isNotEmpty ? {'PKG_CONFIG_PATH': pkgConfigPath} : null,
   );
   if (result.exitCode != 0) {
     throw Exception(
-      'pkg-config --variable=$variable gstreamer-1.0 failed:\n${result.stderr}',
+      'pkg-config --variable=$variable $package failed:\n${result.stderr}',
     );
   }
   return (result.stdout as String).trim();
 }
 
+/// Registers every shared object from GStreamer's build-host plugin directory.
+/// Flutter places Linux code assets together under the application `lib/`
+/// directory, which is used as the isolated plugin directory at runtime.
+Future<void> _bundlePluginDirectory(
+  String pluginDir,
+  BuildInput input,
+  BuildOutputBuilder output,
+) async {
+  final plugins =
+      await Directory(pluginDir)
+          .list()
+          .where((entry) => entry is File && entry.path.endsWith('.so'))
+          .cast<File>()
+          .toList();
+  if (plugins.isEmpty) {
+    throw Exception('No GStreamer plugins found in $pluginDir');
+  }
+  plugins.sort((a, b) => a.path.compareTo(b.path));
+
+  for (final plugin in plugins) {
+    final name = plugin.uri.pathSegments.last;
+    await _stageAndRegister(plugin.path, name, input, output, required: true);
+  }
+}
+
 /// Copies [srcPath] into the hook output directory and registers it as a
 /// bundled [CodeAsset] so Flutter includes it in the app bundle.
-/// Missing files are skipped silently (optional plugins may not be installed).
+/// Missing optional files are skipped; required bundle components fail the
+/// build instead of producing an incomplete application.
 Future<void> _stageAndRegister(
   String srcPath,
   String libName,
   BuildInput input,
-  BuildOutputBuilder output,
-) async {
+  BuildOutputBuilder output, {
+  bool required = false,
+}) async {
   final src = File(srcPath);
-  if (!src.existsSync()) return;
+  if (!src.existsSync()) {
+    if (required) {
+      throw Exception('Required Linux bundle file is missing: $srcPath');
+    }
+    return;
+  }
 
   final destUri = input.outputDirectory.resolve(libName);
   await src.copy(destUri.toFilePath());
+  await _setOriginRunpath(destUri.toFilePath());
+  await _validateGlibcCompatibility(destUri.toFilePath(), libName);
 
   output.assets.code.add(
     CodeAsset(
@@ -170,6 +237,71 @@ Future<void> _stageAndRegister(
       file: destUri,
     ),
   );
+}
+
+/// Makes each bundled ELF object find its bundled dependencies before falling
+/// back to the target system. An rpath on the application does not apply to
+/// dependencies loaded later by another shared object.
+Future<void> _setOriginRunpath(String path) async {
+  final result = await Process.run('patchelf', [
+    '--set-rpath',
+    r'$ORIGIN',
+    path,
+  ]);
+  if (result.exitCode != 0) {
+    throw Exception(
+      'patchelf failed for $path. Install patchelf on the Linux build '
+      'machine:\n${result.stderr}',
+    );
+  }
+}
+
+/// Rejects libraries built against a newer glibc than the supported Linux
+/// baseline. glibc is part of the target operating system and cannot be safely
+/// included in a relocatable application bundle.
+Future<void> _validateGlibcCompatibility(String path, String name) async {
+  final configuredMax = Env.instance.getString(_linuxGlibcMaxEnvVar);
+  if (configuredMax.isEmpty) return;
+
+  final maxVersion = _parseVersion(configuredMax, _linuxGlibcMaxEnvVar);
+  final result = await Process.run('objdump', ['-T', path]);
+  if (result.exitCode != 0) {
+    throw Exception('objdump failed for $path:\n${result.stderr}');
+  }
+
+  final requiredVersions = RegExp(r'GLIBC_(\d+)\.(\d+)')
+      .allMatches(result.stdout as String)
+      .map((match) => (int.parse(match.group(1)!), int.parse(match.group(2)!)));
+  (int, int)? highestRequired;
+  for (final version in requiredVersions) {
+    if (highestRequired == null ||
+        _compareVersions(version, highestRequired) > 0) {
+      highestRequired = version;
+    }
+  }
+  if (highestRequired != null &&
+      _compareVersions(highestRequired, maxVersion) > 0) {
+    throw Exception(
+      '$name requires GLIBC_${highestRequired.$1}.${highestRequired.$2}, newer '
+      'than the configured Linux baseline GLIBC_$configuredMax. Build the '
+      'bundle on the oldest supported Linux distribution, or set '
+      '$_linuxGlibcMaxEnvVar in ~/cross_build.env to the oldest glibc version '
+      'supported by your application.',
+    );
+  }
+}
+
+(int, int) _parseVersion(String value, String settingName) {
+  final match = RegExp(r'^(\d+)\.(\d+)$').firstMatch(value);
+  if (match == null) {
+    throw Exception('$settingName must be a major.minor version, got "$value"');
+  }
+  return (int.parse(match.group(1)!), int.parse(match.group(2)!));
+}
+
+int _compareVersions((int, int) left, (int, int) right) {
+  final majorComparison = left.$1.compareTo(right.$1);
+  return majorComparison != 0 ? majorComparison : left.$2.compareTo(right.$2);
 }
 
 /// Uses `ldd` on libgstlibav.so to discover FFmpeg .so dependencies and
