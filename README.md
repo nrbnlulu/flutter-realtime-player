@@ -11,10 +11,11 @@ GStreamer based player, optimized for realtime streams
 Linux release bundles include GStreamer, its plugins, GLib, PCRE2, libmount,
 and libblkid from the build machine. Build release artifacts on the oldest
 Linux distribution the application supports because glibc cannot safely be
-bundled. The default compatibility ceiling is glibc 2.35 (Ubuntu 22.04).
+bundled.
 
-The build hook rejects libraries that require a newer glibc. To target another
-baseline, set the oldest supported version in `$HOME/cross_build.env`:
+For portable release builds, set the oldest supported glibc version in
+`$HOME/cross_build.env`. The build hook then rejects libraries requiring a
+newer version. Leave it unset for local development and `flutter run`:
 
 ```text
 FLUTTER_REALTIME_PLAYER_LINUX_GLIBC_MAX=2.35

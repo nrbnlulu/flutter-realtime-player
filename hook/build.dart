@@ -13,7 +13,6 @@ const _pkgConfigSysrootAarch64EnvVar =
     'PKG_CONFIG_SYSROOT_DIR_aarch64_linux_android';
 const _androidNDKHomeEnvVar = 'ANDROID_NDK_HOME';
 const _linuxGlibcMaxEnvVar = 'FLUTTER_REALTIME_PLAYER_LINUX_GLIBC_MAX';
-const _defaultLinuxGlibcMax = '2.35';
 
 void main(List<String> args) async {
   // we need to read an standard env file in a known-well path `$HOME/cross_build.env` to get the env vars for building,
@@ -261,10 +260,9 @@ Future<void> _setOriginRunpath(String path) async {
 /// baseline. glibc is part of the target operating system and cannot be safely
 /// included in a relocatable application bundle.
 Future<void> _validateGlibcCompatibility(String path, String name) async {
-  final configuredMax = Env.instance.getString(
-    _linuxGlibcMaxEnvVar,
-    defaultValue: _defaultLinuxGlibcMax,
-  );
+  final configuredMax = Env.instance.getString(_linuxGlibcMaxEnvVar);
+  if (configuredMax.isEmpty) return;
+
   final maxVersion = _parseVersion(configuredMax, _linuxGlibcMaxEnvVar);
   final result = await Process.run('objdump', ['-T', path]);
   if (result.exitCode != 0) {
