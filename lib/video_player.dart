@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
 import 'package:flutter_realtime_player/rust/dart_types.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
-import 'package:irondash_engine_context/irondash_engine_context.dart';
 import 'package:oxidized/oxidized.dart' as oxidized;
 import "package:rxdart/rxdart.dart" as rx;
 import 'rust/core/types.dart';
@@ -48,7 +47,6 @@ class VideoController {
   static Future<(VideoController?, String?)> create({
     required VideoConfig config,
   }) async {
-    final handle = await EngineContext.instance.getEngineHandle();
     final sessionId = await rlib.createNewSession();
 
     try {
@@ -61,7 +59,6 @@ class VideoController {
 
       final combinedStream = rlib.createPlayable(
         sessionId: sessionId,
-        engineHandle: handle,
         config: config,
       );
 

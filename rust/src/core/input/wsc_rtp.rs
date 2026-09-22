@@ -1,6 +1,6 @@
 use std::{
     net::{SocketAddr, ToSocketAddrs},
-    sync::{Arc, Weak},
+    sync::Arc,
     time::Duration,
 };
 
@@ -12,7 +12,6 @@ use futures_util::{
 };
 use gst::prelude::*;
 use gst_app::AppSrc;
-use irondash_texture::Texture;
 use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
 use tokio::net::{TcpStream, UdpSocket};
@@ -20,17 +19,12 @@ use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, Web
 use url::Url;
 
 use crate::{
-    core::{
-        session::VideoSessionCommon,
-        texture::{
-            payload::{self, RawRgbaFrame, SharedPixelData},
-            FlutterTextureSession,
-        },
-        types::WscRtpSessionConfig,
-    },
+    core::{session::VideoSessionCommon, texture::flutter::FlutterPixelBufferSink, types::WscRtpSessionConfig},
     dart_types::{StreamEvent, StreamState, WscRtpMode},
-    utils::invoke_on_platform_main_thread,
 };
+
+const DEFAULT_WIDTH: u32 = 640;
+const DEFAULT_HEIGHT: u32 = 480;
 
 use media_server_api_models::{
     SeekRequest, SessionMode, SessionModeResponse, SpeedRequest, WscRtpClientMessage,
@@ -211,24 +205,8 @@ impl WscRtpSession {
         self: &Arc<Self>,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> anyhow::Result<()> {
-        let payload_holder = Arc::new(crate::core::texture::payload::PayloadHolder::new());
-        let payload_holder_weak = Arc::downgrade(&payload_holder);
-        let payload_holder_for_texture = Arc::clone(&payload_holder);
-        let engine_handle = self.session_common.engine_handle;
-        let (sendable_texture, texture_id) =
-            invoke_on_platform_main_thread(move || -> Result<_> {
-                let texture =
-                    Texture::new_with_provider(engine_handle, payload_holder_for_texture)?;
-                let texture_id = texture.id();
-                Ok((texture.into_sendable_texture(), texture_id))
-            })?;
-
-        let texture_session = Arc::new(crate::core::texture::flutter::TextureSession::new(
-            texture_id,
-            Arc::downgrade(&sendable_texture),
-            payload_holder_weak.clone(),
-        ));
-        let texture_session: Arc<dyn FlutterTextureSession> = texture_session;
+        let pixel_sink = Arc::new(FlutterPixelBufferSink::new(DEFAULT_WIDTH, DEFAULT_HEIGHT).await?);
+        let texture_id = pixel_sink.texture_id();
 
         self.session_common.send_state_msg(StreamState::Loading);
 
@@ -253,8 +231,7 @@ impl WscRtpSession {
                         resources.ws_stream,
                         resources.udp_sock,
                         pipeline_arc.clone(),
-                        texture_session.clone(),
-                        payload_holder_weak.clone(),
+                        pixel_sink.clone(),
                         &mut shutdown_rx,
                         texture_id,
                     )
@@ -330,11 +307,7 @@ impl WscRtpSession {
             .session_common
             .send_state_msg(crate::dart_types::StreamState::Stopped);
 
-        // Texture + payload_holder must be dropped on the platform main thread
-        invoke_on_platform_main_thread(move || {
-            drop(sendable_texture);
-            drop(payload_holder);
-        });
+        drop(pixel_sink);
 
         output
     }
@@ -347,8 +320,7 @@ impl WscRtpSession {
         mut ws_stream: WsStream,
         udp_sock: Option<UdpSocket>,
         pipeline: Arc<gst::Pipeline>,
-        texture_session: Arc<dyn FlutterTextureSession>,
-        payload_holder_weak: Weak<payload::PayloadHolder>,
+        pixel_sink: Arc<FlutterPixelBufferSink>,
         shutdown_rx: &mut tokio::sync::mpsc::Receiver<()>,
         texture_id: i64,
     ) -> Result<ExitReason> {
@@ -367,10 +339,11 @@ impl WscRtpSession {
         let session_weak = Arc::downgrade(session);
         let session_weak_for_callbacks = session_weak.clone();
         let mut last_size: Option<(u32, u32)> = None;
+        let pixel_sink_for_callback = Arc::clone(&pixel_sink);
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
-                .new_sample(move |sink| {
-                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                .new_sample(move |appsink| {
+                    let sample = appsink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
                     let caps = sample.caps().ok_or(gst::FlowError::Error)?;
                     let video_info =
                         gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::FlowError::Error)?;
@@ -422,15 +395,21 @@ impl WscRtpSession {
                         buf
                     };
 
-                    let frame = RawRgbaFrame {
+                    let resize_session_weak = session_weak_for_callbacks.clone();
+                    if let Err(err) = pixel_sink_for_callback.write_frame(
                         width,
                         height,
                         data,
-                    };
-
-                    if let Some(holder) = payload_holder_weak.upgrade() {
-                        holder.set_payload(Arc::new(frame) as SharedPixelData);
-                        texture_session.mark_frame_available();
+                        move |new_texture_id| {
+                            if let Some(session) = resize_session_weak.upgrade() {
+                                session.session_common.send_state_msg(StreamState::Playing {
+                                    texture_id: new_texture_id,
+                                    seekable: true,
+                                });
+                            }
+                        },
+                    ) {
+                        warn!("WSC-RTP: failed to write frame: {}", err);
                     }
                     Ok(gst::FlowSuccess::Ok)
                 })
@@ -760,10 +739,6 @@ impl crate::core::session::VideoSession for WscRtpSession {
     fn session_id(&self) -> i64 {
         self.session_common.session_id
     }
-    fn engine_handle(&self) -> i64 {
-        self.session_common.engine_handle
-    }
-
     fn last_alive_mark(&self) -> std::time::SystemTime {
         self.session_common.get_last_alive_mark()
     }
