@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 454442348;
+  int get rustContentHash => -356135935;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -84,20 +84,13 @@ abstract class RustLibApi extends BaseApi {
 
   Stream<StreamMessage> crateApiSimpleCreatePlayable({
     required PlatformInt64 sessionId,
-    required PlatformInt64 engineHandle,
     required VideoConfig config,
   });
 
-  Future<void> crateApiSimpleDestroyEngineStreams({
-    required PlatformInt64 engineId,
-  });
+  Future<void> crateApiSimpleDestroyAllSessions();
 
   Future<void> crateApiSimpleDestroyStreamSession({
     required PlatformInt64 sessionId,
-  });
-
-  Future<void> crateApiSimpleFlutterRealtimePlayerInit({
-    required PlatformInt64 ffiPtr,
   });
 
   Future<void> crateApiSimpleInitApp();
@@ -157,7 +150,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @override
   Stream<StreamMessage> crateApiSimpleCreatePlayable({
     required PlatformInt64 sessionId,
-    required PlatformInt64 engineHandle,
     required VideoConfig config,
   }) {
     final combinedSink = RustStreamSink<StreamMessage>();
@@ -167,7 +159,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           callFfi: (port_) {
             final serializer = SseSerializer(generalizedFrbRustBinding);
             sse_encode_i_64(sessionId, serializer);
-            sse_encode_i_64(engineHandle, serializer);
             sse_encode_box_autoadd_video_config(config, serializer);
             sse_encode_StreamSink_stream_message_Sse(combinedSink, serializer);
             pdeCallFfi(
@@ -182,7 +173,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             decodeErrorData: sse_decode_AnyhowException,
           ),
           constMeta: kCrateApiSimpleCreatePlayableConstMeta,
-          argValues: [sessionId, engineHandle, config, combinedSink],
+          argValues: [sessionId, config, combinedSink],
           apiImpl: this,
         ),
       ),
@@ -193,18 +184,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleCreatePlayableConstMeta =>
       const TaskConstMeta(
         debugName: "create_playable",
-        argNames: ["sessionId", "engineHandle", "config", "combinedSink"],
+        argNames: ["sessionId", "config", "combinedSink"],
       );
 
   @override
-  Future<void> crateApiSimpleDestroyEngineStreams({
-    required PlatformInt64 engineId,
-  }) {
+  Future<void> crateApiSimpleDestroyAllSessions() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(engineId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -216,18 +204,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
         ),
-        constMeta: kCrateApiSimpleDestroyEngineStreamsConstMeta,
-        argValues: [engineId],
+        constMeta: kCrateApiSimpleDestroyAllSessionsConstMeta,
+        argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiSimpleDestroyEngineStreamsConstMeta =>
-      const TaskConstMeta(
-        debugName: "destroy_engine_streams",
-        argNames: ["engineId"],
-      );
+  TaskConstMeta get kCrateApiSimpleDestroyAllSessionsConstMeta =>
+      const TaskConstMeta(debugName: "destroy_all_sessions", argNames: []);
 
   @override
   Future<void> crateApiSimpleDestroyStreamSession({
@@ -263,39 +248,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateApiSimpleFlutterRealtimePlayerInit({
-    required PlatformInt64 ffiPtr,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_i_64(ffiPtr, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 5,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiSimpleFlutterRealtimePlayerInitConstMeta,
-        argValues: [ffiPtr],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSimpleFlutterRealtimePlayerInitConstMeta =>
-      const TaskConstMeta(
-        debugName: "flutter_realtime_player_init",
-        argNames: ["ffiPtr"],
-      );
-
-  @override
   Future<void> crateApiSimpleInitApp() {
     return handler.executeNormal(
       NormalTask(
@@ -304,7 +256,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 5,
             port: port_,
           );
         },
@@ -334,7 +286,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 6,
             port: port_,
           );
         },
@@ -369,7 +321,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 7,
             port: port_,
           );
         },
@@ -404,7 +356,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 8,
             port: port_,
           );
         },
@@ -434,7 +386,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 9,
             port: port_,
           );
         },
