@@ -88,6 +88,7 @@ dependencies = [
  "ndk-context",
  "ndk-sys",
  "num_enum",
+ "simd_cesu8",
  "thiserror 2.0.20",
 ]
 
@@ -698,7 +699,9 @@ dependencies = [
  "flutter-plugin-sdk",
  "flutter-shell-core",
  "flutter-shell-wgpu",
+ "jni",
  "log",
+ "ndk-context",
  "parking_lot",
  "raw-window-handle",
  "serde",
