@@ -1,10 +1,10 @@
 pub mod input;
-pub mod output;
 pub mod session;
 pub mod texture;
 pub mod types;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
+use flutter_plugin_sdk::{GpuTextures, MainThreadDispatcher};
 use log::debug;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -12,6 +12,31 @@ lazy_static::lazy_static! {
     pub static ref IS_INITIALIZED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
     static ref WORKER_GUARD: std::sync::Mutex<Option<tracing_appender::non_blocking::WorkerGuard>> = std::sync::Mutex::new(None);
     pub static ref HTTP_CLIENT: Arc<reqwest::Client> = Arc::new(reqwest::Client::new());
+}
+
+static GPU_TEXTURES: OnceLock<GpuTextures> = OnceLock::new();
+static MAIN_THREAD_DISPATCHER: OnceLock<MainThreadDispatcher> = OnceLock::new();
+
+/// Called once from the plugin registrar with the capabilities the shell hands us.
+pub(crate) fn install_plugin_capabilities(
+    gpu_textures: GpuTextures,
+    main_thread_dispatcher: MainThreadDispatcher,
+) {
+    let _ = GPU_TEXTURES.set(gpu_textures);
+    let _ = MAIN_THREAD_DISPATCHER.set(main_thread_dispatcher);
+}
+
+pub fn gpu_textures() -> anyhow::Result<&'static GpuTextures> {
+    GPU_TEXTURES
+        .get()
+        .ok_or_else(|| anyhow::anyhow!("GPU texture capability was not installed by the shell"))
+}
+
+#[allow(unused)]
+pub fn main_thread_dispatcher() -> anyhow::Result<&'static MainThreadDispatcher> {
+    MAIN_THREAD_DISPATCHER
+        .get()
+        .ok_or_else(|| anyhow::anyhow!("main thread dispatcher was not installed by the shell"))
 }
 
 pub(crate) fn init_logger() {
@@ -48,13 +73,14 @@ pub(crate) fn init_logger() {
         let env_filter = EnvFilter::try_from_default_env()
             .or_else(|_| EnvFilter::try_new("info")) // Default to info level if RUST_LOG is not set
             .unwrap();
-        // 5. Combine the layers and initialize the global subscriber
-        tracing_subscriber::registry()
+        // 5. Combine the layers and initialize the global subscriber.
+        // The shell may already have installed its own global subscriber by
+        // the time the plugin registers; that's fine, just skip ours.
+        let _ = tracing_subscriber::registry()
             .with(env_filter) // Apply the environment filter
             .with(console_layer) // Add the stdout layer
             .with(file_layer) // Add the file layer
-            .try_init()
-            .unwrap(); // Set as the global default subscriber
+            .try_init();
 
         // leak the guard to keep the file writer alive
         WORKER_GUARD.lock().unwrap().replace(guard);

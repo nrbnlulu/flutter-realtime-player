@@ -3,6 +3,9 @@ version: "3"
 vars:
     DART_BIN: "fvm exec dart"
     FLUTTER_BIN: "fvm exec flutter"
+    LOCAL_FLUTTER_BIN: "/home/dev/Desktop/oss/flutter/bin/flutter"
+    LOCAL_ENGINE: "host_debug"
+    LOCAL_ENGINE_SRC_PATH: "/home/dev/Desktop/oss/flutter/engine/src"
 
 tasks:
     codegen:
@@ -24,3 +27,8 @@ tasks:
         cmds:
             - cargo fmt
             - "{{.DART_BIN}} format ./lib ./example"
+    build-example-rust:
+        desc: Run the example with the local Flutter Rust shell engine.
+        dir: example
+        cmds:
+            - "{{.LOCAL_FLUTTER_BIN}} build rust --release --local-engine={{.LOCAL_ENGINE}} --local-engine-host={{.LOCAL_ENGINE}} --local-engine-src-path={{.LOCAL_ENGINE_SRC_PATH}}"

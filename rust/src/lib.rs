@@ -4,6 +4,34 @@ pub mod dart_types;
 mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be accurate, and you can change it according to your needs. */
 pub mod utils;
 
+use flutter_plugin_sdk::{FlutterRustPlugin, PluginError, PluginRegistrar, Result};
+
+struct FlutterRealtimePlayerPlugin;
+
+impl FlutterRustPlugin for FlutterRealtimePlayerPlugin {
+    fn register(&self, registrar: &mut PluginRegistrar) -> Result<()> {
+        let gpu_textures = registrar.gpu()?.clone();
+        let main_thread_dispatcher = registrar.main_thread_dispatcher().clone();
+        core::install_plugin_capabilities(gpu_textures, main_thread_dispatcher);
+
+        core::init_logger();
+        core::session::registry::init().map_err(|_| PluginError::Unsupported)?;
+
+        // it is necessary for Android to register all plugins manually since we are linking statically
+        #[cfg(target_os = "android")]
+        unsafe {
+            android_gst_plugins::register_all();
+        }
+
+        std::thread::spawn(core::session::registry::stream_alive_tester_task);
+        Ok(())
+    }
+}
+
+pub fn register(registrar: &mut PluginRegistrar) -> Result<()> {
+    FlutterRealtimePlayerPlugin.register(registrar)
+}
+
 #[cfg(target_os = "android")]
 pub(crate) mod android_gst_plugins {
     use crate::utils::{is_gst_result_ok, GstBool};
