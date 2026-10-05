@@ -922,13 +922,30 @@ fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
     let caps_str = build_rtp_caps_str(encoding, pt, clock_rate, sprop);
     let escaped_caps = caps_str.replace('"', "\\\"");
 
+    // sync=false + no PTS on appsrc buffers used to mean "display as fast as
+    // decoded": under CPU pressure, buffers pile up in rtpjitterbuffer's and
+    // appsrc's internal queues instead of being paced/dropped, producing
+    // slow-motion playback followed by a fast-forward burst once the CPU
+    // frees up. Playing against the pipeline clock keeps playback live
+    // instead of buffering an ever-growing backlog:
+    //   - do-timestamp=true marks each buffer with its arrival time so
+    //     rtpjitterbuffer can pace output by RTP timestamp against the clock.
+    //   - rtpjitterbuffer latency bounds how much it will queue. We don't use
+    //     drop-on-latency here: it drops raw RTP packets with no notion of
+    //     frame dependencies, so it can drop a P-frame other frames reference
+    //     and leave the decoder concealing with gray frames until the next
+    //     keyframe.
+    //   - appsink sync=true + max-lateness + qos=true makes the sink render
+    //     on time and emit QOS events upstream so avdec_h265/avdec_h264 (qos
+    //     enabled by default, and dependency-aware) skip decoding frames that
+    //     are safe to drop, instead of decoding an ever-growing backlog.
     format!(
-        "appsrc name=src caps=\"{escaped_caps}\" format=time is-live=true \
-         ! rtpjitterbuffer \
+        "appsrc name=src caps=\"{escaped_caps}\" format=time is-live=true do-timestamp=true \
+         ! rtpjitterbuffer latency=200 \
          ! {depay_decode} \
          ! videoconvert \
          ! video/x-raw,format=RGBA \
-         ! appsink name=sink sync=false emit-signals=true",
+         ! appsink name=sink sync=true max-lateness=100000000 qos=true emit-signals=true",
     )
 }
 
