@@ -17,10 +17,9 @@ pub fn init() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Point GStreamer's plugin scanner at the bundled `lib/` directory so the
-/// app works without a system GStreamer installation.  Only takes effect when
-/// the `lib/` dir actually exists next to the executable (i.e. in a bundled
-/// build); dev runs fall back to the normal system paths.
+/// Restrict GStreamer to the plugins shipped in the application bundle and
+/// inspect them in-process. Only takes effect when the `lib/` directory exists
+/// next to the executable; development runs use the system installation.
 #[cfg(target_os = "linux")]
 fn _setup_bundled_gstreamer() {
     if let Ok(exe_path) = std::env::current_exe() {
@@ -28,8 +27,9 @@ fn _setup_bundled_gstreamer() {
             let lib_dir = exe_dir.join("lib");
             if lib_dir.exists() {
                 let lib_str = lib_dir.to_string_lossy();
-                std::env::set_var("GST_PLUGIN_PATH_1_0", lib_str.as_ref());
-                std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", "");
+                std::env::set_var("GST_PLUGIN_PATH_1_0", "");
+                std::env::set_var("GST_PLUGIN_SYSTEM_PATH_1_0", lib_str.as_ref());
+                std::env::set_var("GST_REGISTRY_FORK", "no");
             }
         }
     }

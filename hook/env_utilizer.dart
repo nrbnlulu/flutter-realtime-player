@@ -4,6 +4,7 @@ import 'dart:io' show Platform, File;
 
 class Env {
   Map<String, String> _env = {};
+  Uri? _sourceFile;
 
   static final Env instance = Env._();
 
@@ -16,16 +17,21 @@ class Env {
     final file = File('$home/cross_build.env');
     // coverage:ignore-start
     if (file.existsSync()) {
+      _sourceFile = file.uri;
       final lines = file.readAsLinesSync();
       for (final line in lines) {
         int index = line.indexOf("=");
         if (index != -1) {
-          _env[line.substring(0, index).trim()] = line.substring(index + 1).trim();
+          _env[line.substring(0, index).trim()] =
+              line.substring(index + 1).trim();
         }
       }
     }
     // coverage:ignore-end
   }
+
+  Uri? get sourceFile => _sourceFile;
+
   void set(String key, String value) {
     _env[key] = value;
   }
