@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// flutter-rust-runner-version: 4
+// flutter-rust-runner-version: 6
 
 use std::{env, path::PathBuf, process::ExitCode};
 
@@ -11,9 +11,9 @@ use flutter_realtime_player_example::register_application;
 
 fn main() -> ExitCode {
     // Assets and ICU data are bundled next to the executable by
-    // `flutter build rust` (`<exe dir>/data/{flutter_assets,icudtl.dat}`).
+    // `rlutter build linux` (`<exe dir>/data/{flutter_assets,icudtl.dat}`).
     // An explicit first argument overrides the assets directory, which is how
-    // `flutter run` points the runner at `build/flutter_assets`.
+    // `rlutter run` points the runner at the freshly built assets.
     let bundle_dir = env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join("data")));
@@ -32,12 +32,13 @@ fn main() -> ExitCode {
     // so this matches the engine directory build.rs linked against, rather
     // than relying on cfg!(debug_assertions) which can diverge from PROFILE.
     let profile = env!("FLUTTER_RS_PROFILE");
+    let engine_variant = env!("FLUTTER_RS_ENGINE_VARIANT");
     let bundled_icu = bundle_dir.map(|dir| dir.join("icudtl.dat"));
     let icu_data_path = match bundled_icu {
         Some(path) if path.exists() => path,
         _ => manifest_dir
             .join("../.dart_tool/flutter_rs/sdk/lib")
-            .join(profile)
+            .join(engine_variant)
             .join("icudtl.dat"),
     };
     let aot_library_path = if profile == "debug" {
@@ -47,6 +48,8 @@ fn main() -> ExitCode {
     };
     match run_application(
         ShellConfig {
+            // The app can rename its window later, e.g. with `MaterialApp.title`.
+            title: "flutter_realtime_player_example".to_owned(),
             assets_path: assets_path.to_string_lossy().into_owned(),
             icu_data_path: icu_data_path.to_string_lossy().into_owned(),
             aot_library_path,
