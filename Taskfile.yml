@@ -8,6 +8,14 @@ vars:
     LOCAL_ENGINE_SRC_PATH: "/home/dev/Desktop/oss/flutter/engine/src"
 
 tasks:
+    run-example-rust-android:
+        desc: Find an Android device and run the example in the local Rust shell.
+        cmds:
+            - python3 scripts/run-rust-android.py --flutter "{{.FLUTTER_BIN}}" --engine-src-path "{{.LOCAL_ENGINE_SRC_PATH}}" --host-engine "{{.LOCAL_ENGINE}}" {{.CLI_ARGS}}
+    android-vulkan-probe:
+        desc: Build and run the experimental Android Vulkan H.264/H.265 decoder probe.
+        cmds:
+            - bash scripts/android-vulkan-probe.sh {{.CLI_ARGS}}
     codegen:
         cmds:
             - rm -rf .dart_tool
@@ -32,3 +40,4 @@ tasks:
         dir: example
         cmds:
             - "{{.LOCAL_FLUTTER_BIN}} build rust --release --local-engine={{.LOCAL_ENGINE}} --local-engine-host={{.LOCAL_ENGINE}} --local-engine-src-path={{.LOCAL_ENGINE_SRC_PATH}}"
+ 

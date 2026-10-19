@@ -3,7 +3,10 @@ fn main() {
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
 
     if target_os == "android" {
-        let mut gstreamer_arch_dir = target_arch.clone();
+        let mut gstreamer_arch_dir = match target_arch.as_str() {
+            "arm" => "armv7".to_string(),
+            arch => arch.to_string(),
+        };
 
         println!("cargo:rerun-if-env-changed=ANDROID_NDK_HOME");
         println!("cargo:rerun-if-env-changed=GSTREAMER_ROOT_ANDROID");
@@ -37,6 +40,28 @@ fn main() {
 
         if gstreamer_root.is_empty() {
             panic!("GSTREAMER_ROOT_ANDROID environment variable is empty");
+        }
+
+        if std::env::var_os("CARGO_FEATURE_ANDROID_VULKAN").is_some() {
+            let prefix = std::path::Path::new(&gstreamer_root).join(&gstreamer_arch_dir);
+            let config = prefix.join("include/gstreamer-1.0/gst/vulkan/gstvkconfig.h");
+            println!("cargo:rerun-if-changed={}", config.display());
+            let header = std::fs::read_to_string(&config)
+                .expect("android-vulkan requires a GStreamer SDK with Vulkan support");
+            let video_enabled = header.lines().any(|line| {
+                let mut words = line.split_whitespace();
+                words.next() == Some("#define")
+                    && words.next() == Some("GST_VULKAN_HAVE_VIDEO_EXTENSIONS")
+                    && words.next() == Some("1")
+            });
+            println!("cargo:rustc-env=GST_ANDROID_VULKAN_VIDEO_COMPILED={video_enabled}");
+            if !video_enabled {
+                println!("cargo:warning=This GStreamer Android SDK has Vulkan Video disabled. The probe can inspect the driver, but H.264/H.265 Vulkan decoding requires rebuilding the SDK with vulkan-video=enabled.");
+            }
+
+            println!("cargo:rustc-link-lib=static=gstvulkan");
+            println!("cargo:rustc-link-lib=static=gstvulkan-1.0");
+            println!("cargo:rustc-link-lib=vulkan");
         }
 
         println!(
@@ -140,10 +165,10 @@ fn main() {
 
         // Android audio sink
         println!("cargo:rustc-link-lib=static=gstopensles");
-        println!("cargo:rustc-link-lib=OpenSLES"); // Android system OpenSL ES
-                                                   // Android system libs required by GStreamer (always present on device)
-        println!("cargo:rustc-link-lib=atomic");
-        println!("cargo:rustc-link-lib=log");
+        // Native Android dependencies of the statically linked plugins.
+        for library in ["OpenSLES", "android", "EGL", "GLESv2", "atomic", "log"] {
+            println!("cargo:rustc-link-lib={library}");
+        }
 
         println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition"); // for JNI_OnLoad conflicts
     }

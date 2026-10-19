@@ -17,11 +17,8 @@ impl FlutterRustPlugin for FlutterRealtimePlayerPlugin {
         core::init_logger();
         core::session::registry::init().map_err(|_| PluginError::Unsupported)?;
 
-        // it is necessary for Android to register all plugins manually since we are linking statically
         #[cfg(target_os = "android")]
-        unsafe {
-            android_gst_plugins::register_all();
-        }
+        android_gst_plugins::register_all();
 
         std::thread::spawn(core::session::registry::stream_alive_tester_task);
         Ok(())
@@ -33,37 +30,51 @@ pub fn register(registrar: &mut PluginRegistrar) -> Result<()> {
 }
 
 #[cfg(target_os = "android")]
-pub(crate) mod android_gst_plugins {
-    use crate::utils::{is_gst_result_ok, GstBool};
-
+#[doc(hidden)]
+pub mod android_gst_plugins {
     extern "C" {
-        fn gst_plugin_app_register() -> GstBool;
-        fn gst_plugin_coreelements_register() -> GstBool;
-        fn gst_plugin_typefindfunctions_register() -> GstBool;
-        fn gst_plugin_playback_register() -> GstBool;
-        fn gst_plugin_soup_register() -> GstBool;
-        fn gst_plugin_libav_register() -> GstBool;
-        fn gst_plugin_androidmedia_register() -> GstBool;
-        fn gst_plugin_videoconvertscale_register() -> GstBool;
-        fn gst_plugin_audioconvert_register() -> GstBool;
-        fn gst_plugin_audioresample_register() -> GstBool;
-        fn gst_plugin_volume_register() -> GstBool;
-        fn gst_plugin_audiomixer_register() -> GstBool;
-        fn gst_plugin_autodetect_register() -> GstBool;
-        fn gst_plugin_opensles_register() -> GstBool;
-        fn gst_plugin_rtsp_register() -> GstBool;
-        fn gst_plugin_rtp_register() -> GstBool;
-        fn gst_plugin_rtpmanager_register() -> GstBool;
-        fn gst_plugin_udp_register() -> GstBool;
-        fn gst_plugin_tcp_register() -> GstBool;
-        fn gst_plugin_sdpelem_register() -> GstBool;
-        fn gst_plugin_videoparsersbad_register() -> GstBool;
+        fn gst_plugin_app_register();
+        fn gst_plugin_coreelements_register();
+        fn gst_plugin_typefindfunctions_register();
+        fn gst_plugin_playback_register();
+        fn gst_plugin_soup_register();
+        fn gst_plugin_libav_register();
+        fn gst_plugin_androidmedia_register();
+        fn gst_plugin_videoconvertscale_register();
+        fn gst_plugin_audioconvert_register();
+        fn gst_plugin_audioresample_register();
+        fn gst_plugin_volume_register();
+        fn gst_plugin_audiomixer_register();
+        fn gst_plugin_autodetect_register();
+        fn gst_plugin_opensles_register();
+        fn gst_plugin_rtsp_register();
+        fn gst_plugin_rtp_register();
+        fn gst_plugin_rtpmanager_register();
+        fn gst_plugin_udp_register();
+        fn gst_plugin_tcp_register();
+        fn gst_plugin_sdpelem_register();
+        fn gst_plugin_videoparsersbad_register();
+        #[cfg(feature = "android-vulkan")]
+        fn gst_plugin_vulkan_register();
     }
 
-    pub unsafe fn register_all() {
-        let plugins: &[(&str, unsafe extern "C" fn() -> GstBool)] = &[
+    // These plugins also work in a standalone executable without a Java VM.
+    const PROBE_PLUGINS: &[(&str, unsafe extern "C" fn())] = &[
+        ("coreelements", gst_plugin_coreelements_register),
+        ("videoparsersbad", gst_plugin_videoparsersbad_register),
+        #[cfg(feature = "android-vulkan")]
+        ("vulkan", gst_plugin_vulkan_register),
+    ];
+
+    /// Register only the plugins needed for the standalone Vulkan decoder probe.
+    pub fn register_for_probe() {
+        register_plugins(PROBE_PLUGINS);
+    }
+
+    pub(crate) fn register_all() {
+        register_for_probe();
+        let plugins: &[(&str, unsafe extern "C" fn())] = &[
             ("app", gst_plugin_app_register),
-            ("coreelements", gst_plugin_coreelements_register),
             ("typefindfunctions", gst_plugin_typefindfunctions_register),
             ("playback", gst_plugin_playback_register),
             ("soup", gst_plugin_soup_register),
@@ -82,11 +93,16 @@ pub(crate) mod android_gst_plugins {
             ("udp", gst_plugin_udp_register),
             ("tcp", gst_plugin_tcp_register),
             ("sdpelem", gst_plugin_sdpelem_register),
-            ("videoparsersbad", gst_plugin_videoparsersbad_register),
         ];
 
+        register_plugins(plugins);
+    }
+
+    fn register_plugins(plugins: &[(&str, unsafe extern "C" fn())]) {
         for (name, register_fn) in plugins {
-            if !is_gst_result_ok(register_fn()) {
+            // GST_PLUGIN_STATIC_DECLARE declares a void function, not gboolean.
+            unsafe { register_fn() };
+            if gst::Registry::get().find_plugin(name).is_none() {
                 log::error!("Failed to register GStreamer plugin: {}", name);
             }
         }

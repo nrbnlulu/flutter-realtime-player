@@ -66,8 +66,17 @@ features = [
 [build-dependencies]
 cfg_aliases = "0.2.1"
 
+[dev-dependencies]
+ash = "0.38"
+
+[[example]]
+name = "android_vulkan_probe"
+required-features = ["android-vulkan"]
+
 [features]
 wayland = []
+# Experimental decoder probe; does not change the player's rendering backend.
+android-vulkan = []
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
