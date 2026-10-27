@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// flutter-rust-runner-version: 6
+// flutter-rust-runner-version: 7
 
 use std::{env, path::PathBuf};
 
@@ -24,7 +24,8 @@ fn main() {
     };
     let variant = format!("{platform}-{profile}");
     let engine_dir = manifest_dir.join("../.dart_tool/flutter_rs/sdk/lib").join(&variant);
-    let engine_library = engine_dir.join("libflutter_rust_engine.so");
+    let engine_name = if target_os == "android" { "flutter" } else { "flutter_rust_engine" };
+    let engine_library = engine_dir.join(format!("lib{engine_name}.so"));
     assert!(
         engine_library.is_file(),
         "Flutter Rust engine library is missing: {}. Run `rlutter build` to install it.",
@@ -32,7 +33,7 @@ fn main() {
     );
     println!("cargo:rerun-if-changed={}", engine_library.display());
     println!("cargo:rustc-link-search=native={}", engine_dir.display());
-    println!("cargo:rustc-link-lib=dylib=flutter_rust_engine");
+    println!("cargo:rustc-link-lib=dylib={engine_name}");
     if target_os == "android" {
         // The engine ships inside the APK's jniLibs/<abi>/ next to this
         // cdylib, so resolve it relative to wherever this library is loaded.

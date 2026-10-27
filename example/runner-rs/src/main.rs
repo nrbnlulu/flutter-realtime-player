@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// flutter-rust-runner-version: 6
+// flutter-rust-runner-version: 7
 
 use std::{env, path::PathBuf, process::ExitCode};
 
