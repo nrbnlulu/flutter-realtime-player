@@ -35,7 +35,10 @@ fn create_texture(width: u32, height: u32) -> anyhow::Result<PixelBufferTexture>
         .map_err(|err| anyhow::anyhow!("failed to create pixel buffer texture: {:?}", err))
 }
 
-async fn create_texture_on_main_thread(width: u32, height: u32) -> anyhow::Result<PixelBufferTexture> {
+async fn create_texture_on_main_thread(
+    width: u32,
+    height: u32,
+) -> anyhow::Result<PixelBufferTexture> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     crate::core::main_thread_dispatcher()?
         .dispatch(move || {
@@ -65,19 +68,23 @@ impl FlutterPixelBufferSink {
         self.state.lock().texture.texture_id()
     }
 
-    /// Writes one decoded RGBA8 frame.
+    /// Writes one decoded RGBA8 frame straight from the GStreamer buffer.
     ///
     /// If `width`/`height` no longer match the current texture, this drops
     /// the frame and (unless one is already in flight) kicks off recreating
     /// the texture on the main thread; `on_resized` is invoked with the new
     /// texture id once that finishes.
+    ///
+    /// The buffer is copied once, directly into the shell's mapped upload
+    /// buffer (`write_pixels_direct`), falling back to `write_pixels` when
+    /// the runtime lacks direct upload support.
     pub fn write_frame(
         self: &Arc<Self>,
-        width: u32,
-        height: u32,
-        data: Vec<u8>,
+        info: &gst_video::VideoInfo,
+        buffer: gst::Buffer,
         on_resized: impl FnOnce(i64) + Send + 'static,
     ) -> anyhow::Result<()> {
+        let (width, height) = (info.width(), info.height());
         let dims_match = {
             let state = self.state.lock();
             state.width == width && state.height == height
@@ -88,28 +95,66 @@ impl FlutterPixelBufferSink {
         }
 
         let state = self.state.lock();
-        match state.texture.try_next_frame() {
-            Ok(mut frame) => {
-                let src_stride = width as usize * 4;
+        let mut frame = match state.texture.try_next_frame() {
+            Ok(frame) => frame,
+            Err(PluginError::Busy) => return Ok(()),
+            Err(err) => return Err(anyhow::anyhow!("failed to reserve video frame: {:?}", err)),
+        };
+
+        let src_stride = info.stride()[0] as usize;
+        let row_len = width as usize * 4;
+        let rows = height as usize;
+
+        let direct_info = info.clone();
+        let direct_buffer = buffer.clone();
+        let direct = frame.write_pixels_direct(move |mut dst, dst_stride| {
+            let Ok(video) =
+                gst_video::VideoFrameRef::from_buffer_ref_readable(&direct_buffer, &direct_info)
+            else {
+                warn!("failed to map video buffer for direct upload");
+                return;
+            };
+            let Ok(src) = video.plane_data(0) else {
+                warn!("failed to read video plane for direct upload");
+                return;
+            };
+            for (y, src_row) in src.chunks(src_stride).take(rows).enumerate() {
+                let offset = y * dst_stride;
+                dst.slice(offset..offset + row_len)
+                    .copy_from_slice(&src_row[..row_len]);
+            }
+        });
+        match direct {
+            Ok(()) => {}
+            Err(PluginError::Unsupported) => {
+                let info = info.clone();
                 frame
                     .write_pixels(move |pixels, row_bytes| {
-                        for (src_row, dst_row) in data
+                        let Ok(video) =
+                            gst_video::VideoFrameRef::from_buffer_ref_readable(&buffer, &info)
+                        else {
+                            warn!("failed to map video buffer");
+                            return;
+                        };
+                        let Ok(src) = video.plane_data(0) else {
+                            warn!("failed to read video plane");
+                            return;
+                        };
+                        for (src_row, dst_row) in src
                             .chunks(src_stride)
                             .zip(pixels.chunks_mut(row_bytes))
-                            .take(height as usize)
+                            .take(rows)
                         {
-                            dst_row[..src_stride].copy_from_slice(src_row);
+                            dst_row[..row_len].copy_from_slice(&src_row[..row_len]);
                         }
                     })
                     .map_err(|err| anyhow::anyhow!("failed to write video frame: {:?}", err))?;
-                frame
-                    .present()
-                    .map_err(|err| anyhow::anyhow!("failed to present video frame: {:?}", err))?;
-                Ok(())
             }
-            Err(PluginError::Busy) => Ok(()),
-            Err(err) => Err(anyhow::anyhow!("failed to reserve video frame: {:?}", err)),
+            Err(err) => return Err(anyhow::anyhow!("failed to write video frame: {:?}", err)),
         }
+        frame
+            .present()
+            .map_err(|err| anyhow::anyhow!("failed to present video frame: {:?}", err))
     }
 
     fn request_resize(

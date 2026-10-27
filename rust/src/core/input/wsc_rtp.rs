@@ -19,7 +19,10 @@ use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, Web
 use url::Url;
 
 use crate::{
-    core::{session::VideoSessionCommon, texture::flutter::FlutterPixelBufferSink, types::WscRtpSessionConfig},
+    core::{
+        session::VideoSessionCommon, texture::flutter::FlutterPixelBufferSink,
+        types::WscRtpSessionConfig,
+    },
     dart_types::{StreamEvent, StreamState, WscRtpMode},
 };
 
@@ -205,7 +208,8 @@ impl WscRtpSession {
         self: &Arc<Self>,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> anyhow::Result<()> {
-        let pixel_sink = Arc::new(FlutterPixelBufferSink::new(DEFAULT_WIDTH, DEFAULT_HEIGHT).await?);
+        let pixel_sink =
+            Arc::new(FlutterPixelBufferSink::new(DEFAULT_WIDTH, DEFAULT_HEIGHT).await?);
         let texture_id = pixel_sink.texture_id();
 
         self.session_common.send_state_msg(StreamState::Loading);
@@ -347,7 +351,7 @@ impl WscRtpSession {
                     let caps = sample.caps().ok_or(gst::FlowError::Error)?;
                     let video_info =
                         gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::FlowError::Error)?;
-                    let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
+                    let buffer = sample.buffer_owned().ok_or(gst::FlowError::Error)?;
 
                     let width = video_info.width();
                     let height = video_info.height();
@@ -371,35 +375,10 @@ impl WscRtpSession {
                         }
                     }
 
-                    let video_frame =
-                        gst_video::VideoFrameRef::from_buffer_ref_readable(buffer, &video_info)
-                            .map_err(|_| gst::FlowError::Error)?;
-
-                    let stride = video_info.stride()[0] as usize;
-                    let expected_stride = (width as usize) * 4; // RGBA
-                    let plane_data = video_frame
-                        .plane_data(0)
-                        .map_err(|_| gst::FlowError::Error)?;
-
-                    let data = if stride == expected_stride {
-                        plane_data.to_vec()
-                    } else {
-                        // Stride mismatch — copy row by row to strip padding
-                        let mut buf = Vec::with_capacity(expected_stride * height as usize);
-                        for y in 0..height as usize {
-                            let row_start = y * stride;
-                            buf.extend_from_slice(
-                                &plane_data[row_start..row_start + expected_stride],
-                            );
-                        }
-                        buf
-                    };
-
                     let resize_session_weak = session_weak_for_callbacks.clone();
                     if let Err(err) = pixel_sink_for_callback.write_frame(
-                        width,
-                        height,
-                        data,
+                        &video_info,
+                        buffer,
                         move |new_texture_id| {
                             if let Some(session) = resize_session_weak.upgrade() {
                                 session.session_common.send_state_msg(StreamState::Playing {
