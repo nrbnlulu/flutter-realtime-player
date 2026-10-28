@@ -1,0 +1,68 @@
+plugins {
+    id "com.android.application"
+}
+
+// `rlutter build android` stages native libraries (jniLibs/<abi>/) and the
+// Flutter assets (assets/) here and passes the directory in. The default lets
+// a plain `./gradlew assembleDebug` pick up the last debug build.
+def rlutterStageDir = project.findProperty("rlutterStageDir") ?: "${rootDir}/../.dart_tool/flutter_rs/android/debug"
+
+android {
+    namespace "com.example.flutter_realtime_player_example.rs"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.example.flutter_realtime_player_example.rs"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "0.1"
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["${rlutterStageDir}/jniLibs"]
+            assets.srcDirs = ["${rlutterStageDir}/assets"]
+        }
+    }
+
+    packagingOptions {
+        // Keep native libraries extracted on disk so the engine can dlopen
+        // libapp.so (AOT code) by name.
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    buildTypes {
+        release {
+            // Replace with your own signing configuration to publish. The
+            // debug key keeps `rlutter run --release` working out of the box.
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
+
+dependencies {
+    implementation "androidx.games:games-activity:4.4.0"
+    // GameActivity extends AppCompatActivity but its POM does not declare
+    // this as a transitive dependency; without it, loading the class throws
+    // NoClassDefFoundError for AppCompatActivity at runtime.
+    implementation "androidx.appcompat:appcompat:1.7.0"
+}
+
+// appcompat and games-activity pull in mismatched kotlin-stdlib versions
+// (1.8.22 vs. the older split kotlin-stdlib-jdk7/jdk8 1.6.21 artifacts),
+// which duplicate classes across dex inputs. Force one consistent version.
+configurations.all {
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:1.8.22"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22"
+    }
+}

@@ -13,7 +13,6 @@ use crate::{
 #[async_trait]
 pub trait VideoSession: Send + Sync {
     fn session_id(&self) -> i64;
-    fn engine_handle(&self) -> i64;
     fn last_alive_mark(&self) -> SystemTime;
     fn make_alive(&self);
     /// this should not block at all.
@@ -27,16 +26,14 @@ pub trait VideoSession: Send + Sync {
 
 pub struct VideoSessionCommon {
     pub session_id: i64,
-    pub engine_handle: i64,
     pub last_alive_mark: Mutex<SystemTime>,
     pub combined_sink: DartCombinedStream,
 }
 
 impl VideoSessionCommon {
-    pub fn new(session_id: i64, engine_handle: i64, combined_sink: DartCombinedStream) -> Self {
+    pub fn new(session_id: i64, combined_sink: DartCombinedStream) -> Self {
         Self {
             session_id,
-            engine_handle,
             last_alive_mark: Mutex::new(SystemTime::now()),
             combined_sink,
         }

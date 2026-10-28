@@ -1,24 +1,22 @@
 use std::sync::{atomic::AtomicU32, Arc};
 
-use anyhow::{Context, Result};
+use anyhow::Context;
 use gst::prelude::*;
 use gst_app::AppSink;
-use irondash_texture::Texture;
 use log::{debug, error, info, warn};
 use parking_lot::Mutex;
 
 use crate::{
     core::{
         session::{VideoSession, VideoSessionCommon},
-        texture::{
-            payload::{self, RawRgbaFrame, SharedPixelData},
-            FlutterTextureSession,
-        },
+        texture::flutter::FlutterPixelBufferSink,
         types::PlaybinConfig,
     },
     dart_types::{StreamEvent, StreamState},
-    utils::invoke_on_platform_main_thread,
 };
+
+const DEFAULT_WIDTH: u32 = 640;
+const DEFAULT_HEIGHT: u32 = 480;
 
 pub struct PlaybinSession {
     session_common: VideoSessionCommon,
@@ -50,52 +48,20 @@ impl PlaybinSession {
         self: &Arc<Self>,
         shutdown_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> anyhow::Result<()> {
-        let payload_holder = Arc::new(payload::PayloadHolder::new());
-        let payload_holder_weak = Arc::downgrade(&payload_holder);
-        let payload_holder_for_texture = Arc::clone(&payload_holder);
-        let engine_handle = self.session_common.engine_handle;
+        let pixel_sink =
+            Arc::new(FlutterPixelBufferSink::new(DEFAULT_WIDTH, DEFAULT_HEIGHT).await?);
+        let texture_id = pixel_sink.texture_id();
+        info!("Playbin: texture created, id={}", texture_id);
 
-        let (sendable_texture, texture_id) =
-            invoke_on_platform_main_thread(move || -> Result<_> {
-                let texture =
-                    Texture::new_with_provider(engine_handle, payload_holder_for_texture)?;
-                let texture_id = texture.id();
-                info!("Playbin: texture created, id={}", texture_id);
-                Ok((texture.into_sendable_texture(), texture_id))
-            })?;
-
-        // This will ensure that we only destroy the texture on platform main thread
-        let inner_result = self
-            .run_pipeline(
-                shutdown_rx,
-                Arc::downgrade(&sendable_texture),
-                texture_id,
-                payload_holder_weak,
-            )
-            .await;
-
-        invoke_on_platform_main_thread(move || {
-            drop(sendable_texture);
-            drop(payload_holder);
-        });
-
-        inner_result
+        self.run_pipeline(shutdown_rx, pixel_sink, texture_id).await
     }
 
     async fn run_pipeline(
         self: &Arc<Self>,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
-        weak_texture: crate::core::texture::flutter::WeakSendableTexture,
+        pixel_sink: Arc<FlutterPixelBufferSink>,
         texture_id: i64,
-        payload_holder_weak: std::sync::Weak<payload::PayloadHolder>,
     ) -> anyhow::Result<()> {
-        let texture_session = Arc::new(crate::core::texture::flutter::TextureSession::new(
-            texture_id,
-            weak_texture,
-            payload_holder_weak.clone(),
-        ));
-        let texture_session: Arc<dyn FlutterTextureSession> = texture_session;
-
         self.session_common.send_state_msg(StreamState::Loading);
 
         // Build appsink for receiving video frames
@@ -109,15 +75,16 @@ impl PlaybinSession {
         let session_weak_for_callbacks = session_weak.clone();
         let size = Arc::new(parking_lot::Mutex::new((0u32, 0u32)));
         let _frame_count = Arc::new(AtomicU32::new(0));
+        let pixel_sink_for_callback = Arc::clone(&pixel_sink);
 
         appsink.set_callbacks(
             gst_app::AppSinkCallbacks::builder()
-                .new_sample(move |sink| {
-                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                .new_sample(move |appsink| {
+                    let sample = appsink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
                     let caps = sample.caps().ok_or(gst::FlowError::Error)?;
                     let video_info =
                         gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::FlowError::Error)?;
-                    let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
+                    let buffer = sample.buffer_owned().ok_or(gst::FlowError::Error)?;
 
                     let width = video_info.width();
                     let height = video_info.height();
@@ -139,41 +106,20 @@ impl PlaybinSession {
                     }
                     drop(size_guard);
 
-                    let video_frame =
-                        gst_video::VideoFrameRef::from_buffer_ref_readable(buffer, &video_info)
-                            .map_err(|_| gst::FlowError::Error)?;
-
-                    let stride = video_info.stride()[0] as usize;
-                    let expected_stride = (width as usize) * 4; // RGBA
-                    let plane_data = video_frame
-                        .plane_data(0)
-                        .map_err(|_| gst::FlowError::Error)?;
-
-                    let data = if stride == expected_stride {
-                        plane_data.to_vec()
-                    } else {
-                        // Stride mismatch — copy row by row to strip padding
-                        let mut buf = Vec::with_capacity(expected_stride * height as usize);
-                        for y in 0..height as usize {
-                            let row_start = y * stride;
-                            buf.extend_from_slice(
-                                &plane_data[row_start..row_start + expected_stride],
-                            );
-                        }
-                        buf
-                    };
-
-                    let frame = RawRgbaFrame {
-                        width,
-                        height,
-                        data,
-                    };
-
-                    if let Some(holder) = payload_holder_weak.upgrade() {
-                        holder.set_payload(Arc::new(frame) as SharedPixelData);
-                        texture_session.mark_frame_available();
-                    } else {
-                        warn!("Playbin: payload_holder dropped, frame discarded");
+                    let resize_session_weak = session_weak_for_callbacks.clone();
+                    if let Err(err) = pixel_sink_for_callback.write_frame(
+                        &video_info,
+                        buffer,
+                        move |new_texture_id| {
+                            if let Some(session) = resize_session_weak.upgrade() {
+                                session.session_common.send_state_msg(StreamState::Playing {
+                                    texture_id: new_texture_id,
+                                    seekable: true,
+                                });
+                            }
+                        },
+                    ) {
+                        warn!("Playbin: failed to write frame: {}", err);
                     }
                     Ok(gst::FlowSuccess::Ok)
                 })
@@ -326,10 +272,6 @@ enum GstBusEvent {
 impl VideoSession for PlaybinSession {
     fn session_id(&self) -> i64 {
         self.session_common.session_id
-    }
-
-    fn engine_handle(&self) -> i64 {
-        self.session_common.engine_handle
     }
 
     fn last_alive_mark(&self) -> std::time::SystemTime {

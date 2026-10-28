@@ -98,27 +98,11 @@ pub fn mark_session_alive(session_id: i64) {
     }
 }
 
-pub fn destroy_engine_streams(engine_handle: i64) {
-    log::info!("Destroying streams for engine handle: {}", engine_handle);
-    let holders = get_all_sessions()
-        .into_iter()
-        .filter_map(|session_id| get_session(session_id).map(|holder| (session_id, holder)))
-        .collect::<Vec<_>>();
-    let to_remove = holders
-        .into_iter()
-        .filter_map(|(session_id, holder)| {
-            if holder.engine_handle() == engine_handle {
-                Some(session_id)
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>();
-    for texture_id in &to_remove {
-        log::debug!("Destroying stream with texture id: {}", texture_id);
-    }
-    for texture_id in &to_remove {
-        destroy_stream_session(*texture_id);
+pub fn destroy_all_sessions() {
+    let session_ids = get_all_sessions();
+    log::info!("Destroying all sessions: {:?}", session_ids);
+    for session_id in session_ids {
+        destroy_stream_session(session_id);
     }
 }
 

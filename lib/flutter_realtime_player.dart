@@ -2,19 +2,19 @@ library;
 
 import 'package:flutter_realtime_player/rust/frb_generated.dart' as rlib_gen;
 import 'package:flutter_realtime_player/rust/api/simple.dart' as rlib;
-import 'dart:ffi' as ffi;
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 export './rust/core/types.dart';
 export './video_player.dart' show VideoController, VideoPlayer;
-import 'package:irondash_engine_context/irondash_engine_context.dart';
 
+/// The Rust shell compiles this plugin's crate directly into the runner
+/// executable rather than a standalone dynamic library, so its FRB symbols
+/// must be resolved from the current process instead of `dlopen`ed.
 Future<void> init() async {
-  await rlib_gen.RustLib.init();
-  rlib.flutterRealtimePlayerInit(
-    ffiPtr: ffi.NativeApi.initializeApiDLData.address,
+  await rlib_gen.RustLib.init(
+    externalLibrary: ExternalLibrary.process(iKnowHowToUseIt: true),
   );
 }
 
 Future<void> dispose() async {
-  final engineHandle = await EngineContext.instance.getEngineHandle();
-  await rlib.destroyEngineStreams(engineId: engineHandle);
+  await rlib.destroyAllSessions();
 }

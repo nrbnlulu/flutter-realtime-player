@@ -11,11 +11,6 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SESSION_COUNTER`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `deref`, `initialize`
 
-Future<void> flutterRealtimePlayerInit({required PlatformInt64 ffiPtr}) =>
-    RustLib.instance.api.crateApiSimpleFlutterRealtimePlayerInit(
-      ffiPtr: ffiPtr,
-    );
-
 /// updates the counter and returns a session id
 /// note that this doesn't create any resources apart from raising the counter
 Future<PlatformInt64> createNewSession() =>
@@ -23,11 +18,9 @@ Future<PlatformInt64> createNewSession() =>
 
 Stream<StreamMessage> createPlayable({
   required PlatformInt64 sessionId,
-  required PlatformInt64 engineHandle,
   required VideoConfig config,
 }) => RustLib.instance.api.crateApiSimpleCreatePlayable(
   sessionId: sessionId,
-  engineHandle: engineHandle,
   config: config,
 );
 
@@ -56,8 +49,8 @@ Future<void> setSpeed({
 Future<void> markSessionAlive({required PlatformInt64 sessionId}) =>
     RustLib.instance.api.crateApiSimpleMarkSessionAlive(sessionId: sessionId);
 
-Future<void> destroyEngineStreams({required PlatformInt64 engineId}) =>
-    RustLib.instance.api.crateApiSimpleDestroyEngineStreams(engineId: engineId);
+Future<void> destroyAllSessions() =>
+    RustLib.instance.api.crateApiSimpleDestroyAllSessions();
 
 Future<void> destroyStreamSession({required PlatformInt64 sessionId}) => RustLib
     .instance
