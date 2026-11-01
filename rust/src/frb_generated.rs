@@ -486,8 +486,9 @@ impl SseDecode for crate::dart_types::StreamEvent {
                 return crate::dart_types::StreamEvent::WscRtpSessionMode(var_field0);
             }
             4 => {
-                let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::dart_types::StreamEvent::WscRtpStreamState(var_field0);
+                let mut var_field0 =
+                    <crate::dart_types::WscRtpPlaybackEvent>::sse_decode(deserializer);
+                return crate::dart_types::StreamEvent::WscRtpPlayback(var_field0);
             }
             _ => {
                 unimplemented!("");
@@ -616,6 +617,60 @@ impl SseDecode for crate::dart_types::WscRtpMode {
     }
 }
 
+impl SseDecode for crate::dart_types::WscRtpPlaybackEvent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_timestamp = <i64>::sse_decode(deserializer);
+                return crate::dart_types::WscRtpPlaybackEvent::Playing {
+                    timestamp: var_timestamp,
+                };
+            }
+            1 => {
+                let mut var_timestamp = <i64>::sse_decode(deserializer);
+                return crate::dart_types::WscRtpPlaybackEvent::Waiting {
+                    timestamp: var_timestamp,
+                };
+            }
+            2 => {
+                let mut var_from = <i64>::sse_decode(deserializer);
+                let mut var_to = <i64>::sse_decode(deserializer);
+                return crate::dart_types::WscRtpPlaybackEvent::GapSkipped {
+                    from: var_from,
+                    to: var_to,
+                };
+            }
+            3 => {
+                let mut var_timestamp = <i64>::sse_decode(deserializer);
+                return crate::dart_types::WscRtpPlaybackEvent::Ended {
+                    timestamp: var_timestamp,
+                };
+            }
+            4 => {
+                let mut var_timestamp = <i64>::sse_decode(deserializer);
+                let mut var_message = <String>::sse_decode(deserializer);
+                return crate::dart_types::WscRtpPlaybackEvent::Error {
+                    timestamp: var_timestamp,
+                    message: var_message,
+                };
+            }
+            5 => {
+                let mut var_codec = <String>::sse_decode(deserializer);
+                let mut var_message = <String>::sse_decode(deserializer);
+                return crate::dart_types::WscRtpPlaybackEvent::RenegotiationRequired {
+                    codec: var_codec,
+                    message: var_message,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
 impl SseDecode for crate::core::types::WscRtpSessionConfig {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -719,7 +774,7 @@ impl flutter_rust_bridge::IntoDart for crate::dart_types::StreamEvent {
             crate::dart_types::StreamEvent::WscRtpSessionMode(field0) => {
                 [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
+            crate::dart_types::StreamEvent::WscRtpPlayback(field0) => {
                 [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             _ => {
@@ -857,6 +912,54 @@ impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::WscRtpMode>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::dart_types::WscRtpPlaybackEvent {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::dart_types::WscRtpPlaybackEvent::Playing { timestamp } => {
+                [0.into_dart(), timestamp.into_into_dart().into_dart()].into_dart()
+            }
+            crate::dart_types::WscRtpPlaybackEvent::Waiting { timestamp } => {
+                [1.into_dart(), timestamp.into_into_dart().into_dart()].into_dart()
+            }
+            crate::dart_types::WscRtpPlaybackEvent::GapSkipped { from, to } => [
+                2.into_dart(),
+                from.into_into_dart().into_dart(),
+                to.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::dart_types::WscRtpPlaybackEvent::Ended { timestamp } => {
+                [3.into_dart(), timestamp.into_into_dart().into_dart()].into_dart()
+            }
+            crate::dart_types::WscRtpPlaybackEvent::Error { timestamp, message } => [
+                4.into_dart(),
+                timestamp.into_into_dart().into_dart(),
+                message.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::dart_types::WscRtpPlaybackEvent::RenegotiationRequired { codec, message } => [
+                5.into_dart(),
+                codec.into_into_dart().into_dart(),
+                message.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::dart_types::WscRtpPlaybackEvent
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::dart_types::WscRtpPlaybackEvent>
+    for crate::dart_types::WscRtpPlaybackEvent
+{
+    fn into_into_dart(self) -> crate::dart_types::WscRtpPlaybackEvent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::core::types::WscRtpSessionConfig {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -974,9 +1077,9 @@ impl SseEncode for crate::dart_types::StreamEvent {
                 <i32>::sse_encode(3, serializer);
                 <crate::dart_types::WscRtpMode>::sse_encode(field0, serializer);
             }
-            crate::dart_types::StreamEvent::WscRtpStreamState(field0) => {
+            crate::dart_types::StreamEvent::WscRtpPlayback(field0) => {
                 <i32>::sse_encode(4, serializer);
-                <String>::sse_encode(field0, serializer);
+                <crate::dart_types::WscRtpPlaybackEvent>::sse_encode(field0, serializer);
             }
             _ => {
                 unimplemented!("");
@@ -1092,6 +1195,44 @@ impl SseEncode for crate::dart_types::WscRtpMode {
                 <i32>::sse_encode(1, serializer);
                 <i64>::sse_encode(current_time_ms, serializer);
                 <f64>::sse_encode(speed, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::dart_types::WscRtpPlaybackEvent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::dart_types::WscRtpPlaybackEvent::Playing { timestamp } => {
+                <i32>::sse_encode(0, serializer);
+                <i64>::sse_encode(timestamp, serializer);
+            }
+            crate::dart_types::WscRtpPlaybackEvent::Waiting { timestamp } => {
+                <i32>::sse_encode(1, serializer);
+                <i64>::sse_encode(timestamp, serializer);
+            }
+            crate::dart_types::WscRtpPlaybackEvent::GapSkipped { from, to } => {
+                <i32>::sse_encode(2, serializer);
+                <i64>::sse_encode(from, serializer);
+                <i64>::sse_encode(to, serializer);
+            }
+            crate::dart_types::WscRtpPlaybackEvent::Ended { timestamp } => {
+                <i32>::sse_encode(3, serializer);
+                <i64>::sse_encode(timestamp, serializer);
+            }
+            crate::dart_types::WscRtpPlaybackEvent::Error { timestamp, message } => {
+                <i32>::sse_encode(4, serializer);
+                <i64>::sse_encode(timestamp, serializer);
+                <String>::sse_encode(message, serializer);
+            }
+            crate::dart_types::WscRtpPlaybackEvent::RenegotiationRequired { codec, message } => {
+                <i32>::sse_encode(5, serializer);
+                <String>::sse_encode(codec, serializer);
+                <String>::sse_encode(message, serializer);
             }
             _ => {
                 unimplemented!("");

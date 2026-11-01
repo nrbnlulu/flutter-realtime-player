@@ -53,6 +53,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   WscRtpMode dco_decode_box_autoadd_wsc_rtp_mode(dynamic raw);
 
   @protected
+  WscRtpPlaybackEvent dco_decode_box_autoadd_wsc_rtp_playback_event(
+    dynamic raw,
+  );
+
+  @protected
   WscRtpSessionConfig dco_decode_box_autoadd_wsc_rtp_session_config(
     dynamic raw,
   );
@@ -100,6 +105,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   WscRtpMode dco_decode_wsc_rtp_mode(dynamic raw);
 
   @protected
+  WscRtpPlaybackEvent dco_decode_wsc_rtp_playback_event(dynamic raw);
+
+  @protected
   WscRtpSessionConfig dco_decode_wsc_rtp_session_config(dynamic raw);
 
   @protected
@@ -135,6 +143,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WscRtpMode sse_decode_box_autoadd_wsc_rtp_mode(SseDeserializer deserializer);
+
+  @protected
+  WscRtpPlaybackEvent sse_decode_box_autoadd_wsc_rtp_playback_event(
+    SseDeserializer deserializer,
+  );
 
   @protected
   WscRtpSessionConfig sse_decode_box_autoadd_wsc_rtp_session_config(
@@ -182,6 +195,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WscRtpMode sse_decode_wsc_rtp_mode(SseDeserializer deserializer);
+
+  @protected
+  WscRtpPlaybackEvent sse_decode_wsc_rtp_playback_event(
+    SseDeserializer deserializer,
+  );
 
   @protected
   WscRtpSessionConfig sse_decode_wsc_rtp_session_config(
@@ -243,6 +261,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_wsc_rtp_playback_event(
+    WscRtpPlaybackEvent self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_wsc_rtp_session_config(
     WscRtpSessionConfig self,
     SseSerializer serializer,
@@ -292,6 +316,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_wsc_rtp_mode(WscRtpMode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wsc_rtp_playback_event(
+    WscRtpPlaybackEvent self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_wsc_rtp_session_config(
