@@ -862,6 +862,26 @@ fn build_rtp_caps_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
     )
 }
 
+/// Output (cropped) frame size from the `sprop-sps` entry of an H.265 `sprop` string.
+///
+/// Cameras that do not repeat parameter sets in-band leave `h265parse` without
+/// frame dimensions, and MediaCodec cannot be configured with a 1x1 surface.
+fn h265_dimensions_from_sprop(sprop: &str) -> Option<(u32, u32)> {
+    use base64::Engine as _;
+
+    let sps_b64 = sprop
+        .split(',')
+        .find_map(|p| p.trim().strip_prefix("sprop-sps="))?
+        .trim_matches('"');
+    let sps = base64::engine::general_purpose::STANDARD
+        .decode(sps_b64)
+        .ok()?;
+    let sps = scuffle_h265::SpsNALUnit::parse(sps.as_slice()).ok()?;
+    let width = u32::try_from(sps.rbsp.cropped_width()).ok()?;
+    let height = u32::try_from(sps.rbsp.cropped_height()).ok()?;
+    (width > 0 && height > 0).then_some((width, height))
+}
+
 fn build_pipeline_str(
     encoding: &str,
     pt: u8,
@@ -877,11 +897,24 @@ fn build_pipeline_str(
         sprop.is_some()
     );
     let depay_parse = match encoding {
-        "H264" => "rtph264depay ! h264parse",
-        "H265" | "HEVC" => "rtph265depay ! h265parse",
-        "VP8" => "rtpvp8depay",
-        "VP9" => "rtpvp9depay",
-        _ => "rtpjpegdepay",
+        "H264" => "rtph264depay ! h264parse".to_owned(),
+        "H265" | "HEVC" => {
+            // config-interval=-1 re-inserts the SDP VPS/SPS/PPS before every IDR;
+            // cameras that only advertise them in the SDP otherwise leave
+            // MediaCodec unable to decode the byte-stream.
+            let mut chain = "rtph265depay ! h265parse config-interval=-1".to_owned();
+            // h265parse reports no frame size until it parses an in-band SPS;
+            // pin the one from the SDP so decoders are not configured as 1x1.
+            if let Some((w, h)) = sprop.as_deref().and_then(h265_dimensions_from_sprop) {
+                chain.push_str(&format!(
+                    " ! capsfilter caps=video/x-h265,width={w},height={h}"
+                ));
+            }
+            chain
+        }
+        "VP8" => "rtpvp8depay".to_owned(),
+        "VP9" => "rtpvp9depay".to_owned(),
+        _ => "rtpjpegdepay".to_owned(),
     };
     let decoder = if gpu {
         // The memory-specific downstream caps select MediaCodec surface output.
@@ -1087,5 +1120,23 @@ mod tests {
             url.as_str(),
             "https://example.test/ms1/client-session-control/session-1/seek"
         );
+    }
+}
+
+#[cfg(test)]
+mod h265_sps_tests {
+    use super::*;
+
+    #[test]
+    fn dimensions_from_camera_sprop() {
+        let sprop = "sprop-vps=\"QAEMAf//AWAAAAMAAAMAAAMAAAMAlqwJ\",sprop-sps=\"QgEBAWAAAAMAAAMAAAMAAAMAlqAFAgHh/iq07oku5sCADbugAM3+YAQ=\",sprop-pps=\"RAHAcvAbJA==\"";
+        assert_eq!(h265_dimensions_from_sprop(sprop), Some((640, 480)));
+    }
+
+    #[test]
+    fn missing_or_bad_sps_is_none() {
+        assert_eq!(h265_dimensions_from_sprop("sprop-vps=\"QAE=\""), None);
+        assert_eq!(h265_dimensions_from_sprop("sprop-sps=\"!!\""), None);
+        assert_eq!(h265_dimensions_from_sprop("sprop-sps=\"QgE=\""), None);
     }
 }

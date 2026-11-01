@@ -36,6 +36,8 @@ tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 media-server-api-models = { version = "0.1.0", git = "https://github.com/nrbnlulu/media-server.git", branch = "use-splitted-fmp4-files-for-recordings" }
 sdp = "0.17.1"
+base64 = "0.22"
+scuffle-h265 = "0.2"
 parking_lot = "0.12.5"
 async-trait = "0.1.89"
 
