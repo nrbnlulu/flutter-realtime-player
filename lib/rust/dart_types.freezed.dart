@@ -55,15 +55,15 @@ extension StreamEventPatterns on StreamEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( StreamEvent_Error value)?  error,TResult Function( StreamEvent_CurrentTime value)?  currentTime,TResult Function( StreamEvent_OriginVideoSize value)?  originVideoSize,TResult Function( StreamEvent_WscRtpSessionMode value)?  wscRtpSessionMode,TResult Function( StreamEvent_WscRtpStreamState value)?  wscRtpStreamState,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( StreamEvent_Error value)?  error,TResult Function( StreamEvent_CurrentTime value)?  currentTime,TResult Function( StreamEvent_OriginVideoSize value)?  originVideoSize,TResult Function( StreamEvent_WscRtpSessionMode value)?  wscRtpSessionMode,TResult Function( StreamEvent_WscRtpPlayback value)?  wscRtpPlayback,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case StreamEvent_Error() when error != null:
 return error(_that);case StreamEvent_CurrentTime() when currentTime != null:
 return currentTime(_that);case StreamEvent_OriginVideoSize() when originVideoSize != null:
 return originVideoSize(_that);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
-return wscRtpSessionMode(_that);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
-return wscRtpStreamState(_that);case _:
+return wscRtpSessionMode(_that);case StreamEvent_WscRtpPlayback() when wscRtpPlayback != null:
+return wscRtpPlayback(_that);case _:
   return orElse();
 
 }
@@ -81,15 +81,15 @@ return wscRtpStreamState(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( StreamEvent_Error value)  error,required TResult Function( StreamEvent_CurrentTime value)  currentTime,required TResult Function( StreamEvent_OriginVideoSize value)  originVideoSize,required TResult Function( StreamEvent_WscRtpSessionMode value)  wscRtpSessionMode,required TResult Function( StreamEvent_WscRtpStreamState value)  wscRtpStreamState,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( StreamEvent_Error value)  error,required TResult Function( StreamEvent_CurrentTime value)  currentTime,required TResult Function( StreamEvent_OriginVideoSize value)  originVideoSize,required TResult Function( StreamEvent_WscRtpSessionMode value)  wscRtpSessionMode,required TResult Function( StreamEvent_WscRtpPlayback value)  wscRtpPlayback,}){
 final _that = this;
 switch (_that) {
 case StreamEvent_Error():
 return error(_that);case StreamEvent_CurrentTime():
 return currentTime(_that);case StreamEvent_OriginVideoSize():
 return originVideoSize(_that);case StreamEvent_WscRtpSessionMode():
-return wscRtpSessionMode(_that);case StreamEvent_WscRtpStreamState():
-return wscRtpStreamState(_that);}
+return wscRtpSessionMode(_that);case StreamEvent_WscRtpPlayback():
+return wscRtpPlayback(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -103,15 +103,15 @@ return wscRtpStreamState(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( StreamEvent_Error value)?  error,TResult? Function( StreamEvent_CurrentTime value)?  currentTime,TResult? Function( StreamEvent_OriginVideoSize value)?  originVideoSize,TResult? Function( StreamEvent_WscRtpSessionMode value)?  wscRtpSessionMode,TResult? Function( StreamEvent_WscRtpStreamState value)?  wscRtpStreamState,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( StreamEvent_Error value)?  error,TResult? Function( StreamEvent_CurrentTime value)?  currentTime,TResult? Function( StreamEvent_OriginVideoSize value)?  originVideoSize,TResult? Function( StreamEvent_WscRtpSessionMode value)?  wscRtpSessionMode,TResult? Function( StreamEvent_WscRtpPlayback value)?  wscRtpPlayback,}){
 final _that = this;
 switch (_that) {
 case StreamEvent_Error() when error != null:
 return error(_that);case StreamEvent_CurrentTime() when currentTime != null:
 return currentTime(_that);case StreamEvent_OriginVideoSize() when originVideoSize != null:
 return originVideoSize(_that);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
-return wscRtpSessionMode(_that);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
-return wscRtpStreamState(_that);case _:
+return wscRtpSessionMode(_that);case StreamEvent_WscRtpPlayback() when wscRtpPlayback != null:
+return wscRtpPlayback(_that);case _:
   return null;
 
 }
@@ -128,14 +128,14 @@ return wscRtpStreamState(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  error,TResult Function( PlatformInt64 field0)?  currentTime,TResult Function( BigInt width,  BigInt height)?  originVideoSize,TResult Function( WscRtpMode field0)?  wscRtpSessionMode,TResult Function( String field0)?  wscRtpStreamState,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  error,TResult Function( PlatformInt64 field0)?  currentTime,TResult Function( BigInt width,  BigInt height)?  originVideoSize,TResult Function( WscRtpMode field0)?  wscRtpSessionMode,TResult Function( WscRtpPlaybackEvent field0)?  wscRtpPlayback,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case StreamEvent_Error() when error != null:
 return error(_that.field0);case StreamEvent_CurrentTime() when currentTime != null:
 return currentTime(_that.field0);case StreamEvent_OriginVideoSize() when originVideoSize != null:
 return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
-return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
-return wscRtpStreamState(_that.field0);case _:
+return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpPlayback() when wscRtpPlayback != null:
+return wscRtpPlayback(_that.field0);case _:
   return orElse();
 
 }
@@ -153,14 +153,14 @@ return wscRtpStreamState(_that.field0);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  error,required TResult Function( PlatformInt64 field0)  currentTime,required TResult Function( BigInt width,  BigInt height)  originVideoSize,required TResult Function( WscRtpMode field0)  wscRtpSessionMode,required TResult Function( String field0)  wscRtpStreamState,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  error,required TResult Function( PlatformInt64 field0)  currentTime,required TResult Function( BigInt width,  BigInt height)  originVideoSize,required TResult Function( WscRtpMode field0)  wscRtpSessionMode,required TResult Function( WscRtpPlaybackEvent field0)  wscRtpPlayback,}) {final _that = this;
 switch (_that) {
 case StreamEvent_Error():
 return error(_that.field0);case StreamEvent_CurrentTime():
 return currentTime(_that.field0);case StreamEvent_OriginVideoSize():
 return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode():
-return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpStreamState():
-return wscRtpStreamState(_that.field0);}
+return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpPlayback():
+return wscRtpPlayback(_that.field0);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -174,14 +174,14 @@ return wscRtpStreamState(_that.field0);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  error,TResult? Function( PlatformInt64 field0)?  currentTime,TResult? Function( BigInt width,  BigInt height)?  originVideoSize,TResult? Function( WscRtpMode field0)?  wscRtpSessionMode,TResult? Function( String field0)?  wscRtpStreamState,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  error,TResult? Function( PlatformInt64 field0)?  currentTime,TResult? Function( BigInt width,  BigInt height)?  originVideoSize,TResult? Function( WscRtpMode field0)?  wscRtpSessionMode,TResult? Function( WscRtpPlaybackEvent field0)?  wscRtpPlayback,}) {final _that = this;
 switch (_that) {
 case StreamEvent_Error() when error != null:
 return error(_that.field0);case StreamEvent_CurrentTime() when currentTime != null:
 return currentTime(_that.field0);case StreamEvent_OriginVideoSize() when originVideoSize != null:
 return originVideoSize(_that.width,_that.height);case StreamEvent_WscRtpSessionMode() when wscRtpSessionMode != null:
-return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpStreamState() when wscRtpStreamState != null:
-return wscRtpStreamState(_that.field0);case _:
+return wscRtpSessionMode(_that.field0);case StreamEvent_WscRtpPlayback() when wscRtpPlayback != null:
+return wscRtpPlayback(_that.field0);case _:
   return null;
 
 }
@@ -467,23 +467,23 @@ $WscRtpModeCopyWith<$Res> get field0 {
 /// @nodoc
 
 
-class StreamEvent_WscRtpStreamState extends StreamEvent {
-  const StreamEvent_WscRtpStreamState(this.field0): super._();
+class StreamEvent_WscRtpPlayback extends StreamEvent {
+  const StreamEvent_WscRtpPlayback(this.field0): super._();
   
 
- final  String field0;
+ final  WscRtpPlaybackEvent field0;
 
 /// Create a copy of StreamEvent
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
-$StreamEvent_WscRtpStreamStateCopyWith<StreamEvent_WscRtpStreamState> get copyWith => _$StreamEvent_WscRtpStreamStateCopyWithImpl<StreamEvent_WscRtpStreamState>(this, _$identity);
+$StreamEvent_WscRtpPlaybackCopyWith<StreamEvent_WscRtpPlayback> get copyWith => _$StreamEvent_WscRtpPlaybackCopyWithImpl<StreamEvent_WscRtpPlayback>(this, _$identity);
 
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamEvent_WscRtpStreamState&&(identical(other.field0, field0) || other.field0 == field0));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StreamEvent_WscRtpPlayback&&(identical(other.field0, field0) || other.field0 == field0));
 }
 
 
@@ -492,42 +492,51 @@ int get hashCode => Object.hash(runtimeType,field0);
 
 @override
 String toString() {
-  return 'StreamEvent.wscRtpStreamState(field0: $field0)';
+  return 'StreamEvent.wscRtpPlayback(field0: $field0)';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class $StreamEvent_WscRtpStreamStateCopyWith<$Res> implements $StreamEventCopyWith<$Res> {
-  factory $StreamEvent_WscRtpStreamStateCopyWith(StreamEvent_WscRtpStreamState value, $Res Function(StreamEvent_WscRtpStreamState) _then) = _$StreamEvent_WscRtpStreamStateCopyWithImpl;
+abstract mixin class $StreamEvent_WscRtpPlaybackCopyWith<$Res> implements $StreamEventCopyWith<$Res> {
+  factory $StreamEvent_WscRtpPlaybackCopyWith(StreamEvent_WscRtpPlayback value, $Res Function(StreamEvent_WscRtpPlayback) _then) = _$StreamEvent_WscRtpPlaybackCopyWithImpl;
 @useResult
 $Res call({
- String field0
+ WscRtpPlaybackEvent field0
 });
 
 
-
+$WscRtpPlaybackEventCopyWith<$Res> get field0;
 
 }
 /// @nodoc
-class _$StreamEvent_WscRtpStreamStateCopyWithImpl<$Res>
-    implements $StreamEvent_WscRtpStreamStateCopyWith<$Res> {
-  _$StreamEvent_WscRtpStreamStateCopyWithImpl(this._self, this._then);
+class _$StreamEvent_WscRtpPlaybackCopyWithImpl<$Res>
+    implements $StreamEvent_WscRtpPlaybackCopyWith<$Res> {
+  _$StreamEvent_WscRtpPlaybackCopyWithImpl(this._self, this._then);
 
-  final StreamEvent_WscRtpStreamState _self;
-  final $Res Function(StreamEvent_WscRtpStreamState) _then;
+  final StreamEvent_WscRtpPlayback _self;
+  final $Res Function(StreamEvent_WscRtpPlayback) _then;
 
 /// Create a copy of StreamEvent
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
-  return _then(StreamEvent_WscRtpStreamState(
+  return _then(StreamEvent_WscRtpPlayback(
 null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
-as String,
+as WscRtpPlaybackEvent,
   ));
 }
 
-
+/// Create a copy of StreamEvent
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$WscRtpPlaybackEventCopyWith<$Res> get field0 {
+  
+  return $WscRtpPlaybackEventCopyWith<$Res>(_self.field0, (value) {
+    return _then(_self.copyWith(field0: value));
+  });
+}
 }
 
 /// @nodoc
@@ -1464,6 +1473,592 @@ class _$WscRtpMode_DvrCopyWithImpl<$Res>
 currentTimeMs: null == currentTimeMs ? _self.currentTimeMs : currentTimeMs // ignore: cast_nullable_to_non_nullable
 as PlatformInt64,speed: null == speed ? _self.speed : speed // ignore: cast_nullable_to_non_nullable
 as double,
+  ));
+}
+
+
+}
+
+/// @nodoc
+mixin _$WscRtpPlaybackEvent {
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpPlaybackEvent);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'WscRtpPlaybackEvent()';
+}
+
+
+}
+
+/// @nodoc
+class $WscRtpPlaybackEventCopyWith<$Res>  {
+$WscRtpPlaybackEventCopyWith(WscRtpPlaybackEvent _, $Res Function(WscRtpPlaybackEvent) __);
+}
+
+
+/// Adds pattern-matching-related methods to [WscRtpPlaybackEvent].
+extension WscRtpPlaybackEventPatterns on WscRtpPlaybackEvent {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( WscRtpPlaybackEvent_Playing value)?  playing,TResult Function( WscRtpPlaybackEvent_Waiting value)?  waiting,TResult Function( WscRtpPlaybackEvent_GapSkipped value)?  gapSkipped,TResult Function( WscRtpPlaybackEvent_Ended value)?  ended,TResult Function( WscRtpPlaybackEvent_Error value)?  error,TResult Function( WscRtpPlaybackEvent_RenegotiationRequired value)?  renegotiationRequired,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case WscRtpPlaybackEvent_Playing() when playing != null:
+return playing(_that);case WscRtpPlaybackEvent_Waiting() when waiting != null:
+return waiting(_that);case WscRtpPlaybackEvent_GapSkipped() when gapSkipped != null:
+return gapSkipped(_that);case WscRtpPlaybackEvent_Ended() when ended != null:
+return ended(_that);case WscRtpPlaybackEvent_Error() when error != null:
+return error(_that);case WscRtpPlaybackEvent_RenegotiationRequired() when renegotiationRequired != null:
+return renegotiationRequired(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( WscRtpPlaybackEvent_Playing value)  playing,required TResult Function( WscRtpPlaybackEvent_Waiting value)  waiting,required TResult Function( WscRtpPlaybackEvent_GapSkipped value)  gapSkipped,required TResult Function( WscRtpPlaybackEvent_Ended value)  ended,required TResult Function( WscRtpPlaybackEvent_Error value)  error,required TResult Function( WscRtpPlaybackEvent_RenegotiationRequired value)  renegotiationRequired,}){
+final _that = this;
+switch (_that) {
+case WscRtpPlaybackEvent_Playing():
+return playing(_that);case WscRtpPlaybackEvent_Waiting():
+return waiting(_that);case WscRtpPlaybackEvent_GapSkipped():
+return gapSkipped(_that);case WscRtpPlaybackEvent_Ended():
+return ended(_that);case WscRtpPlaybackEvent_Error():
+return error(_that);case WscRtpPlaybackEvent_RenegotiationRequired():
+return renegotiationRequired(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( WscRtpPlaybackEvent_Playing value)?  playing,TResult? Function( WscRtpPlaybackEvent_Waiting value)?  waiting,TResult? Function( WscRtpPlaybackEvent_GapSkipped value)?  gapSkipped,TResult? Function( WscRtpPlaybackEvent_Ended value)?  ended,TResult? Function( WscRtpPlaybackEvent_Error value)?  error,TResult? Function( WscRtpPlaybackEvent_RenegotiationRequired value)?  renegotiationRequired,}){
+final _that = this;
+switch (_that) {
+case WscRtpPlaybackEvent_Playing() when playing != null:
+return playing(_that);case WscRtpPlaybackEvent_Waiting() when waiting != null:
+return waiting(_that);case WscRtpPlaybackEvent_GapSkipped() when gapSkipped != null:
+return gapSkipped(_that);case WscRtpPlaybackEvent_Ended() when ended != null:
+return ended(_that);case WscRtpPlaybackEvent_Error() when error != null:
+return error(_that);case WscRtpPlaybackEvent_RenegotiationRequired() when renegotiationRequired != null:
+return renegotiationRequired(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( PlatformInt64 timestamp)?  playing,TResult Function( PlatformInt64 timestamp)?  waiting,TResult Function( PlatformInt64 from,  PlatformInt64 to)?  gapSkipped,TResult Function( PlatformInt64 timestamp)?  ended,TResult Function( PlatformInt64 timestamp,  String message)?  error,TResult Function( String codec,  String message)?  renegotiationRequired,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case WscRtpPlaybackEvent_Playing() when playing != null:
+return playing(_that.timestamp);case WscRtpPlaybackEvent_Waiting() when waiting != null:
+return waiting(_that.timestamp);case WscRtpPlaybackEvent_GapSkipped() when gapSkipped != null:
+return gapSkipped(_that.from,_that.to);case WscRtpPlaybackEvent_Ended() when ended != null:
+return ended(_that.timestamp);case WscRtpPlaybackEvent_Error() when error != null:
+return error(_that.timestamp,_that.message);case WscRtpPlaybackEvent_RenegotiationRequired() when renegotiationRequired != null:
+return renegotiationRequired(_that.codec,_that.message);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( PlatformInt64 timestamp)  playing,required TResult Function( PlatformInt64 timestamp)  waiting,required TResult Function( PlatformInt64 from,  PlatformInt64 to)  gapSkipped,required TResult Function( PlatformInt64 timestamp)  ended,required TResult Function( PlatformInt64 timestamp,  String message)  error,required TResult Function( String codec,  String message)  renegotiationRequired,}) {final _that = this;
+switch (_that) {
+case WscRtpPlaybackEvent_Playing():
+return playing(_that.timestamp);case WscRtpPlaybackEvent_Waiting():
+return waiting(_that.timestamp);case WscRtpPlaybackEvent_GapSkipped():
+return gapSkipped(_that.from,_that.to);case WscRtpPlaybackEvent_Ended():
+return ended(_that.timestamp);case WscRtpPlaybackEvent_Error():
+return error(_that.timestamp,_that.message);case WscRtpPlaybackEvent_RenegotiationRequired():
+return renegotiationRequired(_that.codec,_that.message);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( PlatformInt64 timestamp)?  playing,TResult? Function( PlatformInt64 timestamp)?  waiting,TResult? Function( PlatformInt64 from,  PlatformInt64 to)?  gapSkipped,TResult? Function( PlatformInt64 timestamp)?  ended,TResult? Function( PlatformInt64 timestamp,  String message)?  error,TResult? Function( String codec,  String message)?  renegotiationRequired,}) {final _that = this;
+switch (_that) {
+case WscRtpPlaybackEvent_Playing() when playing != null:
+return playing(_that.timestamp);case WscRtpPlaybackEvent_Waiting() when waiting != null:
+return waiting(_that.timestamp);case WscRtpPlaybackEvent_GapSkipped() when gapSkipped != null:
+return gapSkipped(_that.from,_that.to);case WscRtpPlaybackEvent_Ended() when ended != null:
+return ended(_that.timestamp);case WscRtpPlaybackEvent_Error() when error != null:
+return error(_that.timestamp,_that.message);case WscRtpPlaybackEvent_RenegotiationRequired() when renegotiationRequired != null:
+return renegotiationRequired(_that.codec,_that.message);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class WscRtpPlaybackEvent_Playing extends WscRtpPlaybackEvent {
+  const WscRtpPlaybackEvent_Playing({required this.timestamp}): super._();
+  
+
+ final  PlatformInt64 timestamp;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$WscRtpPlaybackEvent_PlayingCopyWith<WscRtpPlaybackEvent_Playing> get copyWith => _$WscRtpPlaybackEvent_PlayingCopyWithImpl<WscRtpPlaybackEvent_Playing>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpPlaybackEvent_Playing&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,timestamp);
+
+@override
+String toString() {
+  return 'WscRtpPlaybackEvent.playing(timestamp: $timestamp)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $WscRtpPlaybackEvent_PlayingCopyWith<$Res> implements $WscRtpPlaybackEventCopyWith<$Res> {
+  factory $WscRtpPlaybackEvent_PlayingCopyWith(WscRtpPlaybackEvent_Playing value, $Res Function(WscRtpPlaybackEvent_Playing) _then) = _$WscRtpPlaybackEvent_PlayingCopyWithImpl;
+@useResult
+$Res call({
+ PlatformInt64 timestamp
+});
+
+
+
+
+}
+/// @nodoc
+class _$WscRtpPlaybackEvent_PlayingCopyWithImpl<$Res>
+    implements $WscRtpPlaybackEvent_PlayingCopyWith<$Res> {
+  _$WscRtpPlaybackEvent_PlayingCopyWithImpl(this._self, this._then);
+
+  final WscRtpPlaybackEvent_Playing _self;
+  final $Res Function(WscRtpPlaybackEvent_Playing) _then;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? timestamp = null,}) {
+  return _then(WscRtpPlaybackEvent_Playing(
+timestamp: null == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
+as PlatformInt64,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class WscRtpPlaybackEvent_Waiting extends WscRtpPlaybackEvent {
+  const WscRtpPlaybackEvent_Waiting({required this.timestamp}): super._();
+  
+
+ final  PlatformInt64 timestamp;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$WscRtpPlaybackEvent_WaitingCopyWith<WscRtpPlaybackEvent_Waiting> get copyWith => _$WscRtpPlaybackEvent_WaitingCopyWithImpl<WscRtpPlaybackEvent_Waiting>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpPlaybackEvent_Waiting&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,timestamp);
+
+@override
+String toString() {
+  return 'WscRtpPlaybackEvent.waiting(timestamp: $timestamp)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $WscRtpPlaybackEvent_WaitingCopyWith<$Res> implements $WscRtpPlaybackEventCopyWith<$Res> {
+  factory $WscRtpPlaybackEvent_WaitingCopyWith(WscRtpPlaybackEvent_Waiting value, $Res Function(WscRtpPlaybackEvent_Waiting) _then) = _$WscRtpPlaybackEvent_WaitingCopyWithImpl;
+@useResult
+$Res call({
+ PlatformInt64 timestamp
+});
+
+
+
+
+}
+/// @nodoc
+class _$WscRtpPlaybackEvent_WaitingCopyWithImpl<$Res>
+    implements $WscRtpPlaybackEvent_WaitingCopyWith<$Res> {
+  _$WscRtpPlaybackEvent_WaitingCopyWithImpl(this._self, this._then);
+
+  final WscRtpPlaybackEvent_Waiting _self;
+  final $Res Function(WscRtpPlaybackEvent_Waiting) _then;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? timestamp = null,}) {
+  return _then(WscRtpPlaybackEvent_Waiting(
+timestamp: null == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
+as PlatformInt64,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class WscRtpPlaybackEvent_GapSkipped extends WscRtpPlaybackEvent {
+  const WscRtpPlaybackEvent_GapSkipped({required this.from, required this.to}): super._();
+  
+
+ final  PlatformInt64 from;
+ final  PlatformInt64 to;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$WscRtpPlaybackEvent_GapSkippedCopyWith<WscRtpPlaybackEvent_GapSkipped> get copyWith => _$WscRtpPlaybackEvent_GapSkippedCopyWithImpl<WscRtpPlaybackEvent_GapSkipped>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpPlaybackEvent_GapSkipped&&(identical(other.from, from) || other.from == from)&&(identical(other.to, to) || other.to == to));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,from,to);
+
+@override
+String toString() {
+  return 'WscRtpPlaybackEvent.gapSkipped(from: $from, to: $to)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $WscRtpPlaybackEvent_GapSkippedCopyWith<$Res> implements $WscRtpPlaybackEventCopyWith<$Res> {
+  factory $WscRtpPlaybackEvent_GapSkippedCopyWith(WscRtpPlaybackEvent_GapSkipped value, $Res Function(WscRtpPlaybackEvent_GapSkipped) _then) = _$WscRtpPlaybackEvent_GapSkippedCopyWithImpl;
+@useResult
+$Res call({
+ PlatformInt64 from, PlatformInt64 to
+});
+
+
+
+
+}
+/// @nodoc
+class _$WscRtpPlaybackEvent_GapSkippedCopyWithImpl<$Res>
+    implements $WscRtpPlaybackEvent_GapSkippedCopyWith<$Res> {
+  _$WscRtpPlaybackEvent_GapSkippedCopyWithImpl(this._self, this._then);
+
+  final WscRtpPlaybackEvent_GapSkipped _self;
+  final $Res Function(WscRtpPlaybackEvent_GapSkipped) _then;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? from = null,Object? to = null,}) {
+  return _then(WscRtpPlaybackEvent_GapSkipped(
+from: null == from ? _self.from : from // ignore: cast_nullable_to_non_nullable
+as PlatformInt64,to: null == to ? _self.to : to // ignore: cast_nullable_to_non_nullable
+as PlatformInt64,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class WscRtpPlaybackEvent_Ended extends WscRtpPlaybackEvent {
+  const WscRtpPlaybackEvent_Ended({required this.timestamp}): super._();
+  
+
+ final  PlatformInt64 timestamp;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$WscRtpPlaybackEvent_EndedCopyWith<WscRtpPlaybackEvent_Ended> get copyWith => _$WscRtpPlaybackEvent_EndedCopyWithImpl<WscRtpPlaybackEvent_Ended>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpPlaybackEvent_Ended&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,timestamp);
+
+@override
+String toString() {
+  return 'WscRtpPlaybackEvent.ended(timestamp: $timestamp)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $WscRtpPlaybackEvent_EndedCopyWith<$Res> implements $WscRtpPlaybackEventCopyWith<$Res> {
+  factory $WscRtpPlaybackEvent_EndedCopyWith(WscRtpPlaybackEvent_Ended value, $Res Function(WscRtpPlaybackEvent_Ended) _then) = _$WscRtpPlaybackEvent_EndedCopyWithImpl;
+@useResult
+$Res call({
+ PlatformInt64 timestamp
+});
+
+
+
+
+}
+/// @nodoc
+class _$WscRtpPlaybackEvent_EndedCopyWithImpl<$Res>
+    implements $WscRtpPlaybackEvent_EndedCopyWith<$Res> {
+  _$WscRtpPlaybackEvent_EndedCopyWithImpl(this._self, this._then);
+
+  final WscRtpPlaybackEvent_Ended _self;
+  final $Res Function(WscRtpPlaybackEvent_Ended) _then;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? timestamp = null,}) {
+  return _then(WscRtpPlaybackEvent_Ended(
+timestamp: null == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
+as PlatformInt64,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class WscRtpPlaybackEvent_Error extends WscRtpPlaybackEvent {
+  const WscRtpPlaybackEvent_Error({required this.timestamp, required this.message}): super._();
+  
+
+ final  PlatformInt64 timestamp;
+ final  String message;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$WscRtpPlaybackEvent_ErrorCopyWith<WscRtpPlaybackEvent_Error> get copyWith => _$WscRtpPlaybackEvent_ErrorCopyWithImpl<WscRtpPlaybackEvent_Error>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpPlaybackEvent_Error&&(identical(other.timestamp, timestamp) || other.timestamp == timestamp)&&(identical(other.message, message) || other.message == message));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,timestamp,message);
+
+@override
+String toString() {
+  return 'WscRtpPlaybackEvent.error(timestamp: $timestamp, message: $message)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $WscRtpPlaybackEvent_ErrorCopyWith<$Res> implements $WscRtpPlaybackEventCopyWith<$Res> {
+  factory $WscRtpPlaybackEvent_ErrorCopyWith(WscRtpPlaybackEvent_Error value, $Res Function(WscRtpPlaybackEvent_Error) _then) = _$WscRtpPlaybackEvent_ErrorCopyWithImpl;
+@useResult
+$Res call({
+ PlatformInt64 timestamp, String message
+});
+
+
+
+
+}
+/// @nodoc
+class _$WscRtpPlaybackEvent_ErrorCopyWithImpl<$Res>
+    implements $WscRtpPlaybackEvent_ErrorCopyWith<$Res> {
+  _$WscRtpPlaybackEvent_ErrorCopyWithImpl(this._self, this._then);
+
+  final WscRtpPlaybackEvent_Error _self;
+  final $Res Function(WscRtpPlaybackEvent_Error) _then;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? timestamp = null,Object? message = null,}) {
+  return _then(WscRtpPlaybackEvent_Error(
+timestamp: null == timestamp ? _self.timestamp : timestamp // ignore: cast_nullable_to_non_nullable
+as PlatformInt64,message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class WscRtpPlaybackEvent_RenegotiationRequired extends WscRtpPlaybackEvent {
+  const WscRtpPlaybackEvent_RenegotiationRequired({required this.codec, required this.message}): super._();
+  
+
+ final  String codec;
+ final  String message;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$WscRtpPlaybackEvent_RenegotiationRequiredCopyWith<WscRtpPlaybackEvent_RenegotiationRequired> get copyWith => _$WscRtpPlaybackEvent_RenegotiationRequiredCopyWithImpl<WscRtpPlaybackEvent_RenegotiationRequired>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WscRtpPlaybackEvent_RenegotiationRequired&&(identical(other.codec, codec) || other.codec == codec)&&(identical(other.message, message) || other.message == message));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,codec,message);
+
+@override
+String toString() {
+  return 'WscRtpPlaybackEvent.renegotiationRequired(codec: $codec, message: $message)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $WscRtpPlaybackEvent_RenegotiationRequiredCopyWith<$Res> implements $WscRtpPlaybackEventCopyWith<$Res> {
+  factory $WscRtpPlaybackEvent_RenegotiationRequiredCopyWith(WscRtpPlaybackEvent_RenegotiationRequired value, $Res Function(WscRtpPlaybackEvent_RenegotiationRequired) _then) = _$WscRtpPlaybackEvent_RenegotiationRequiredCopyWithImpl;
+@useResult
+$Res call({
+ String codec, String message
+});
+
+
+
+
+}
+/// @nodoc
+class _$WscRtpPlaybackEvent_RenegotiationRequiredCopyWithImpl<$Res>
+    implements $WscRtpPlaybackEvent_RenegotiationRequiredCopyWith<$Res> {
+  _$WscRtpPlaybackEvent_RenegotiationRequiredCopyWithImpl(this._self, this._then);
+
+  final WscRtpPlaybackEvent_RenegotiationRequired _self;
+  final $Res Function(WscRtpPlaybackEvent_RenegotiationRequired) _then;
+
+/// Create a copy of WscRtpPlaybackEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? codec = null,Object? message = null,}) {
+  return _then(WscRtpPlaybackEvent_RenegotiationRequired(
+codec: null == codec ? _self.codec : codec // ignore: cast_nullable_to_non_nullable
+as String,message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
+as String,
   ));
 }
 

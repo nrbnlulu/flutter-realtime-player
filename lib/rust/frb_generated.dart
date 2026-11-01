@@ -469,6 +469,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WscRtpPlaybackEvent dco_decode_box_autoadd_wsc_rtp_playback_event(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_wsc_rtp_playback_event(raw);
+  }
+
+  @protected
   WscRtpSessionConfig dco_decode_box_autoadd_wsc_rtp_session_config(
     dynamic raw,
   ) {
@@ -530,7 +538,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           dco_decode_box_autoadd_wsc_rtp_mode(raw[1]),
         );
       case 4:
-        return StreamEvent_WscRtpStreamState(dco_decode_String(raw[1]));
+        return StreamEvent_WscRtpPlayback(
+          dco_decode_box_autoadd_wsc_rtp_playback_event(raw[1]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -627,6 +637,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WscRtpPlaybackEvent dco_decode_wsc_rtp_playback_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return WscRtpPlaybackEvent_Playing(timestamp: dco_decode_i_64(raw[1]));
+      case 1:
+        return WscRtpPlaybackEvent_Waiting(timestamp: dco_decode_i_64(raw[1]));
+      case 2:
+        return WscRtpPlaybackEvent_GapSkipped(
+          from: dco_decode_i_64(raw[1]),
+          to: dco_decode_i_64(raw[2]),
+        );
+      case 3:
+        return WscRtpPlaybackEvent_Ended(timestamp: dco_decode_i_64(raw[1]));
+      case 4:
+        return WscRtpPlaybackEvent_Error(
+          timestamp: dco_decode_i_64(raw[1]),
+          message: dco_decode_String(raw[2]),
+        );
+      case 5:
+        return WscRtpPlaybackEvent_RenegotiationRequired(
+          codec: dco_decode_String(raw[1]),
+          message: dco_decode_String(raw[2]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
   WscRtpSessionConfig dco_decode_wsc_rtp_session_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -714,6 +754,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WscRtpPlaybackEvent sse_decode_box_autoadd_wsc_rtp_playback_event(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_wsc_rtp_playback_event(deserializer));
+  }
+
+  @protected
   WscRtpSessionConfig sse_decode_box_autoadd_wsc_rtp_session_config(
     SseDeserializer deserializer,
   ) {
@@ -782,8 +830,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_field0 = sse_decode_box_autoadd_wsc_rtp_mode(deserializer);
         return StreamEvent_WscRtpSessionMode(var_field0);
       case 4:
-        var var_field0 = sse_decode_String(deserializer);
-        return StreamEvent_WscRtpStreamState(var_field0);
+        var var_field0 = sse_decode_box_autoadd_wsc_rtp_playback_event(
+          deserializer,
+        );
+        return StreamEvent_WscRtpPlayback(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -887,6 +937,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return WscRtpMode_Dvr(
           currentTimeMs: var_currentTimeMs,
           speed: var_speed,
+        );
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  WscRtpPlaybackEvent sse_decode_wsc_rtp_playback_event(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_timestamp = sse_decode_i_64(deserializer);
+        return WscRtpPlaybackEvent_Playing(timestamp: var_timestamp);
+      case 1:
+        var var_timestamp = sse_decode_i_64(deserializer);
+        return WscRtpPlaybackEvent_Waiting(timestamp: var_timestamp);
+      case 2:
+        var var_from = sse_decode_i_64(deserializer);
+        var var_to = sse_decode_i_64(deserializer);
+        return WscRtpPlaybackEvent_GapSkipped(from: var_from, to: var_to);
+      case 3:
+        var var_timestamp = sse_decode_i_64(deserializer);
+        return WscRtpPlaybackEvent_Ended(timestamp: var_timestamp);
+      case 4:
+        var var_timestamp = sse_decode_i_64(deserializer);
+        var var_message = sse_decode_String(deserializer);
+        return WscRtpPlaybackEvent_Error(
+          timestamp: var_timestamp,
+          message: var_message,
+        );
+      case 5:
+        var var_codec = sse_decode_String(deserializer);
+        var var_message = sse_decode_String(deserializer);
+        return WscRtpPlaybackEvent_RenegotiationRequired(
+          codec: var_codec,
+          message: var_message,
         );
       default:
         throw UnimplementedError('');
@@ -1008,6 +1098,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_wsc_rtp_playback_event(
+    WscRtpPlaybackEvent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_wsc_rtp_playback_event(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_wsc_rtp_session_config(
     WscRtpSessionConfig self,
     SseSerializer serializer,
@@ -1075,9 +1174,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case StreamEvent_WscRtpSessionMode(field0: final field0):
         sse_encode_i_32(3, serializer);
         sse_encode_box_autoadd_wsc_rtp_mode(field0, serializer);
-      case StreamEvent_WscRtpStreamState(field0: final field0):
+      case StreamEvent_WscRtpPlayback(field0: final field0):
         sse_encode_i_32(4, serializer);
-        sse_encode_String(field0, serializer);
+        sse_encode_box_autoadd_wsc_rtp_playback_event(field0, serializer);
     }
   }
 
@@ -1164,6 +1263,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(1, serializer);
         sse_encode_i_64(currentTimeMs, serializer);
         sse_encode_f_64(speed, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_wsc_rtp_playback_event(
+    WscRtpPlaybackEvent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case WscRtpPlaybackEvent_Playing(timestamp: final timestamp):
+        sse_encode_i_32(0, serializer);
+        sse_encode_i_64(timestamp, serializer);
+      case WscRtpPlaybackEvent_Waiting(timestamp: final timestamp):
+        sse_encode_i_32(1, serializer);
+        sse_encode_i_64(timestamp, serializer);
+      case WscRtpPlaybackEvent_GapSkipped(from: final from, to: final to):
+        sse_encode_i_32(2, serializer);
+        sse_encode_i_64(from, serializer);
+        sse_encode_i_64(to, serializer);
+      case WscRtpPlaybackEvent_Ended(timestamp: final timestamp):
+        sse_encode_i_32(3, serializer);
+        sse_encode_i_64(timestamp, serializer);
+      case WscRtpPlaybackEvent_Error(
+        timestamp: final timestamp,
+        message: final message,
+      ):
+        sse_encode_i_32(4, serializer);
+        sse_encode_i_64(timestamp, serializer);
+        sse_encode_String(message, serializer);
+      case WscRtpPlaybackEvent_RenegotiationRequired(
+        codec: final codec,
+        message: final message,
+      ):
+        sse_encode_i_32(5, serializer);
+        sse_encode_String(codec, serializer);
+        sse_encode_String(message, serializer);
     }
   }
 

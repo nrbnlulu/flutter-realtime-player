@@ -23,15 +23,15 @@ use crate::{
         session::VideoSessionCommon, texture::flutter::FlutterPixelBufferSink,
         types::WscRtpSessionConfig,
     },
-    dart_types::{StreamEvent, StreamState, WscRtpMode},
+    dart_types::{StreamEvent, StreamState, WscRtpMode, WscRtpPlaybackEvent},
 };
 
 const DEFAULT_WIDTH: u32 = 640;
 const DEFAULT_HEIGHT: u32 = 480;
 
 use media_server_api_models::{
-    SeekRequest, SessionMode, SessionModeResponse, SpeedRequest, WscRtpClientMessage,
-    WscRtpServerMessage,
+    PlaybackEvent, SeekRequest, SessionMode, SessionModeResponse, SpeedRequest,
+    WscRtpClientMessage, WscRtpServerMessage,
 };
 
 const PING_INTERVAL: Duration = Duration::from_secs(2);
@@ -471,6 +471,7 @@ impl WscRtpSession {
 
         let mut ping_interval = tokio::time::interval(PING_INTERVAL);
         ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut ping_sent_at: Option<std::time::Instant> = None;
 
         // Inner select loop
         loop {
@@ -490,6 +491,7 @@ impl WscRtpSession {
 
                 _ = ping_interval.tick() => {
                     if let Ok(payload) = serde_json::to_string(&WscRtpClientMessage::Ping) {
+                        ping_sent_at = Some(std::time::Instant::now());
                         let _ = ws_sink.send(Message::Text(payload.into())).await;
                     }
                 }
@@ -529,6 +531,11 @@ impl WscRtpSession {
                         Some(Ok(Message::Text(text))) => {
                             match serde_json::from_str::<WscRtpServerMessage>(&text) {
                                 Ok(msg) => {
+                                    if let WscRtpServerMessage::Pong = msg {
+                                        if let Some(sent_at) = ping_sent_at.take() {
+                                            log::debug!("WSC-RTP: ping rtt={:?}", sent_at.elapsed());
+                                        }
+                                    }
                                     if let WscRtpServerMessage::Sdp { ref sdp } = msg {
                                         if let Some((encoding, pt, clock_rate, sprop)) = parse_rtp_caps_from_sdp(sdp) {
                                             let caps_str = build_rtp_caps_str(&encoding, pt, clock_rate, &sprop);
@@ -619,6 +626,10 @@ impl WscRtpSession {
                 self.session_common
                     .send_event_msg(StreamEvent::Error(message));
             }
+            WscRtpServerMessage::Playback { event } => {
+                self.session_common
+                    .send_event_msg(StreamEvent::WscRtpPlayback(to_dart_playback_event(event)));
+            }
             WscRtpServerMessage::FallingBackRtpToWs => {
                 log::debug!("WSC-RTP: server falling back to WebSocket for RTP delivery");
             }
@@ -692,6 +703,10 @@ impl WscRtpSession {
         };
         self.session_common
             .send_event_msg(StreamEvent::WscRtpSessionMode(wsc_mode));
+        if let Some(event) = mode.playback {
+            self.session_common
+                .send_event_msg(StreamEvent::WscRtpPlayback(to_dart_playback_event(event)));
+        }
         Ok(())
     }
 }
@@ -920,12 +935,38 @@ fn build_wsc_rtp_handshake_request(
     url.set_scheme(&scheme)
         .map_err(|_| anyhow::anyhow!("invalid base_url scheme"))?;
     set_media_server_endpoint_path(&mut url, &["streams", source_id, "wsc-rtp"])?;
+    // Always opt in to structured playback events; older servers ignore the flag.
+    let mut query = vec!["playback_events=true"];
     if force_websocket_transport {
-        url.set_query(Some("force_websocket_transport=true"));
-    } else {
-        url.set_query(None);
+        query.push("force_websocket_transport=true");
     }
+    url.set_query(Some(&query.join("&")));
     Ok(url)
+}
+
+fn to_dart_playback_event(event: PlaybackEvent) -> WscRtpPlaybackEvent {
+    match event {
+        PlaybackEvent::Playing { timestamp } => WscRtpPlaybackEvent::Playing {
+            timestamp: timestamp as i64,
+        },
+        PlaybackEvent::Waiting { timestamp } => WscRtpPlaybackEvent::Waiting {
+            timestamp: timestamp as i64,
+        },
+        PlaybackEvent::GapSkipped { from, to } => WscRtpPlaybackEvent::GapSkipped {
+            from: from as i64,
+            to: to as i64,
+        },
+        PlaybackEvent::Ended { timestamp } => WscRtpPlaybackEvent::Ended {
+            timestamp: timestamp as i64,
+        },
+        PlaybackEvent::Error { timestamp, message } => WscRtpPlaybackEvent::Error {
+            timestamp: timestamp as i64,
+            message,
+        },
+        PlaybackEvent::RenegotiationRequired { codec, message } => {
+            WscRtpPlaybackEvent::RenegotiationRequired { codec, message }
+        }
+    }
 }
 
 fn set_media_server_endpoint_path(url: &mut Url, endpoint_segments: &[&str]) -> Result<()> {
@@ -981,7 +1022,7 @@ mod tests {
 
         assert_eq!(
             url.as_str(),
-            "wss://localhost/streams/source-1/wsc-rtp?force_websocket_transport=true"
+            "wss://localhost/streams/source-1/wsc-rtp?playback_events=true&force_websocket_transport=true"
         );
     }
 
@@ -993,7 +1034,7 @@ mod tests {
 
         assert_eq!(
             url.as_str(),
-            "wss://localhost/ms1/streams/2442237282583284537/wsc-rtp?force_websocket_transport=true"
+            "wss://localhost/ms1/streams/2442237282583284537/wsc-rtp?playback_events=true&force_websocket_transport=true"
         );
     }
 
@@ -1005,7 +1046,7 @@ mod tests {
 
         assert_eq!(
             url.as_str(),
-            "ws://example.test/ms1/streams/source-1/wsc-rtp"
+            "ws://example.test/ms1/streams/source-1/wsc-rtp?playback_events=true"
         );
     }
 
