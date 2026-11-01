@@ -1,3 +1,7 @@
 build/
 .gradle/
 local.properties
+
+.rlutter-gameactivity-backup/
+
+app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java

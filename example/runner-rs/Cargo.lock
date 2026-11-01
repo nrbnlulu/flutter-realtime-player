@@ -720,6 +720,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "flutter-shell-android"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "flutter-gpu-queue",
+ "flutter-plugin-sdk",
+ "flutter-shell-core",
+ "flutter-shell-wgpu",
+]
+
+[[package]]
 name = "flutter-shell-core"
 version = "0.1.0"
 
@@ -777,6 +788,7 @@ dependencies = [
  "gstreamer",
  "gstreamer-app",
  "gstreamer-video",
+ "jni-sys 0.3.1",
  "lazy_static",
  "log",
  "media-server-api-models",
@@ -800,10 +812,10 @@ version = "0.1.0"
 dependencies = [
  "android_logger",
  "flutter-plugin-sdk",
+ "flutter-shell-android",
  "flutter-shell-winit",
  "flutter_realtime_player",
  "log",
- "winit",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(gst_android_hardware_buffer)");
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
 
@@ -37,6 +38,21 @@ fn main() {
 
         if gstreamer_root.is_empty() {
             panic!("GSTREAMER_ROOT_ANDROID environment variable is empty");
+        }
+
+        // The public ready-buffer query was added for 1.30. Older SDKs keep
+        // building the CPU path, without unresolved references to new symbols.
+        let ahb_header = std::path::Path::new(&gstreamer_root)
+            .join(&gstreamer_arch_dir)
+            .join("include/gstreamer-1.0/gst/allocators/gstahardwarebuffer.h");
+        println!(
+            "cargo:rerun-if-changed={}",
+            ahb_header.parent().unwrap().display()
+        );
+        if ahb_header.is_file() {
+            println!("cargo:rustc-cfg=gst_android_hardware_buffer");
+        } else {
+            println!("cargo:warning=Android GPU video requires GStreamer AHardwareBuffer output (1.30 API); using CPU video");
         }
 
         println!(
@@ -88,6 +104,9 @@ fn main() {
         println!("cargo:rustc-link-lib=static=gstcoreelements");
         println!("cargo:rustc-link-lib=static=gsttypefindfunctions");
         println!("cargo:rustc-link-lib=static=gstplayback");
+        // Containers used by the example/demo URIs (MP4 and WebM/Matroska).
+        println!("cargo:rustc-link-lib=static=gstisomp4");
+        println!("cargo:rustc-link-lib=static=gstmatroska");
 
         // Networking / HTTP(S) source
         println!("cargo:rustc-link-lib=static=gstsoup");

@@ -1,5 +1,7 @@
 plugins {
     id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "dev.flutter.flutter-gradle-plugin"
 }
 
 // `rlutter build android` stages native libraries (jniLibs/<abi>/) and the
@@ -8,6 +10,12 @@ plugins {
 def rlutterStageDir = project.findProperty("rlutterStageDir") ?: "${rootDir}/../.dart_tool/flutter_rs/android/debug"
 
 android {
+    ndkVersion flutter.ndkVersion
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
     namespace "com.example.flutter_realtime_player_example.rs"
     compileSdk 36
 
@@ -22,7 +30,6 @@ android {
     sourceSets {
         main {
             jniLibs.srcDirs = ["${rlutterStageDir}/jniLibs"]
-            assets.srcDirs = ["${rlutterStageDir}/assets"]
         }
     }
 
@@ -49,7 +56,6 @@ android {
 }
 
 dependencies {
-    implementation "androidx.games:games-activity:4.4.0"
     // GameActivity extends AppCompatActivity but its POM does not declare
     // this as a transitive dependency; without it, loading the class throws
     // NoClassDefFoundError for AppCompatActivity at runtime.
@@ -61,8 +67,16 @@ dependencies {
 // which duplicate classes across dex inputs. Force one consistent version.
 configurations.all {
     resolutionStrategy {
-        force "org.jetbrains.kotlin:kotlin-stdlib:1.8.22"
-        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"
-        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22"
+    }
+}
+flutter { source "../.." }
+
+android {
+    buildTypes {
+        release {
+            // rlutter: preserve Dart JNI plugin methods
+            minifyEnabled false
+            shrinkResources false
+        }
     }
 }
