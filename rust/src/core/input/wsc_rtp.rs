@@ -1,6 +1,6 @@
 use std::{
     net::{SocketAddr, ToSocketAddrs},
-    sync::{Arc, Weak},
+    sync::Arc,
     time::Duration,
 };
 
@@ -12,7 +12,6 @@ use futures_util::{
 };
 use gst::prelude::*;
 use gst_app::AppSrc;
-use irondash_texture::Texture;
 use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
 use tokio::net::{TcpStream, UdpSocket};
@@ -22,19 +21,15 @@ use url::Url;
 use crate::{
     core::{
         session::VideoSessionCommon,
-        texture::{
-            payload::{self, RawRgbaFrame, SharedPixelData},
-            FlutterTextureSession,
-        },
+        texture::{attach_appsink, FlutterVideoSink, ANDROID_CAPS, CPU_CAPS},
         types::WscRtpSessionConfig,
     },
-    dart_types::{StreamEvent, StreamState, WscRtpMode},
-    utils::invoke_on_platform_main_thread,
+    dart_types::{StreamEvent, StreamState, WscRtpMode, WscRtpPlaybackEvent},
 };
 
 use media_server_api_models::{
-    SeekRequest, SessionMode, SessionModeResponse, SpeedRequest, WscRtpClientMessage,
-    WscRtpServerMessage,
+    PlaybackEvent, SeekRequest, SessionMode, SessionModeResponse, SpeedRequest,
+    WscRtpClientMessage, WscRtpServerMessage,
 };
 
 const PING_INTERVAL: Duration = Duration::from_secs(2);
@@ -55,6 +50,15 @@ struct ConnectionResources {
     udp_sock: Option<UdpSocket>,
     pipeline: gst::Pipeline,
     wsc_session_id: String,
+}
+
+// Cancellation and pipeline startup errors must also stop the UDP task: dropping
+// a JoinHandle alone detaches it and would retain the old decoder across fallback.
+struct AbortReceiverOnDrop(tokio::task::AbortHandle);
+impl Drop for AbortReceiverOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 pub struct WscRtpSession {
@@ -98,7 +102,7 @@ impl WscRtpSession {
 
     /// Connect to the WSC-RTP websocket, wait for Init + SDP messages,
     /// build the GStreamer pipeline, and return connection resources.
-    async fn connect_and_setup_pipeline(&self) -> Result<ConnectionResources> {
+    async fn connect_and_setup_pipeline(&self, gpu: bool) -> Result<ConnectionResources> {
         let wsc_rtp_url = build_wsc_rtp_handshake_request(
             &self.media_server_http_url,
             &self.source_id,
@@ -162,11 +166,11 @@ impl WscRtpSession {
 
         let (encoding, pt, clock_rate, sprop) = parse_rtp_caps_from_sdp(&initial_sdp)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse RTP caps from SDP"))?;
-        let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop);
+        let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop, gpu);
         log::trace!("WSC-RTP GStreamer pipeline: {}", pipeline_str);
 
         let pipeline = gst::parse::launch(&pipeline_str)
-            .context("GStreamer pipeline launch")?
+            .map_err(|e| super::VideoOutputError(format!("GStreamer pipeline launch: {e}")))?
             .downcast::<gst::Pipeline>()
             .map_err(|_| anyhow::anyhow!("Not a pipeline"))?;
 
@@ -211,24 +215,7 @@ impl WscRtpSession {
         self: &Arc<Self>,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> anyhow::Result<()> {
-        let payload_holder = Arc::new(crate::core::texture::payload::PayloadHolder::new());
-        let payload_holder_weak = Arc::downgrade(&payload_holder);
-        let payload_holder_for_texture = Arc::clone(&payload_holder);
-        let engine_handle = self.session_common.engine_handle;
-        let (sendable_texture, texture_id) =
-            invoke_on_platform_main_thread(move || -> Result<_> {
-                let texture =
-                    Texture::new_with_provider(engine_handle, payload_holder_for_texture)?;
-                let texture_id = texture.id();
-                Ok((texture.into_sendable_texture(), texture_id))
-            })?;
-
-        let texture_session = Arc::new(crate::core::texture::flutter::TextureSession::new(
-            texture_id,
-            Arc::downgrade(&sendable_texture),
-            payload_holder_weak.clone(),
-        ));
-        let texture_session: Arc<dyn FlutterTextureSession> = texture_session;
+        let mut video_sink = FlutterVideoSink::new().await?;
 
         self.session_common.send_state_msg(StreamState::Loading);
 
@@ -236,7 +223,7 @@ impl WscRtpSession {
         let output: anyhow::Result<()>;
 
         loop {
-            match self.connect_and_setup_pipeline().await {
+            match self.connect_and_setup_pipeline(video_sink.is_gpu()).await {
                 Ok(resources) => {
                     // Reset backoff on successful connection
                     backoff = INITIAL_BACKOFF;
@@ -253,10 +240,9 @@ impl WscRtpSession {
                         resources.ws_stream,
                         resources.udp_sock,
                         pipeline_arc.clone(),
-                        texture_session.clone(),
-                        payload_holder_weak.clone(),
+                        video_sink.clone(),
                         &mut shutdown_rx,
-                        texture_id,
+                        video_sink.texture_id(),
                     )
                     .await;
 
@@ -269,6 +255,13 @@ impl WscRtpSession {
                             break;
                         }
                         Err(e) => {
+                            if video_sink.is_gpu()
+                                && e.downcast_ref::<super::VideoOutputError>().is_some()
+                            {
+                                warn!("WSC-RTP: GPU output failed, reconnecting with CPU output: {e:#}");
+                                video_sink = FlutterVideoSink::cpu().await?;
+                                continue;
+                            }
                             // Connection lost - will retry if auto_restart is enabled
                             warn!("WSC-RTP session disconnected: {}", e);
                             self.session_common
@@ -287,6 +280,12 @@ impl WscRtpSession {
                     }
                 }
                 Err(e) => {
+                    if video_sink.is_gpu() && e.downcast_ref::<super::VideoOutputError>().is_some()
+                    {
+                        warn!("WSC-RTP: GPU setup failed, reconnecting with CPU output: {e:#}");
+                        video_sink = FlutterVideoSink::cpu().await?;
+                        continue;
+                    }
                     error!("WSC-RTP connection failed: {:#}", e);
                     self.session_common
                         .send_event_msg(StreamEvent::Error(format!("Connection failed: {}", e)));
@@ -330,11 +329,7 @@ impl WscRtpSession {
             .session_common
             .send_state_msg(crate::dart_types::StreamState::Stopped);
 
-        // Texture + payload_holder must be dropped on the platform main thread
-        invoke_on_platform_main_thread(move || {
-            drop(sendable_texture);
-            drop(payload_holder);
-        });
+        drop(video_sink);
 
         output
     }
@@ -347,11 +342,11 @@ impl WscRtpSession {
         mut ws_stream: WsStream,
         udp_sock: Option<UdpSocket>,
         pipeline: Arc<gst::Pipeline>,
-        texture_session: Arc<dyn FlutterTextureSession>,
-        payload_holder_weak: Weak<payload::PayloadHolder>,
+        video_sink: Arc<FlutterVideoSink>,
         shutdown_rx: &mut tokio::sync::mpsc::Receiver<()>,
         texture_id: i64,
     ) -> Result<ExitReason> {
+        let _pipeline_guard = super::PipelineGuard(pipeline.clone());
         let appsrc = pipeline
             .by_name("src")
             .ok_or_else(|| anyhow::anyhow!("appsrc not found"))?
@@ -365,76 +360,24 @@ impl WscRtpSession {
             .map_err(|_| anyhow::anyhow!("sink is not AppSink"))?;
 
         let session_weak = Arc::downgrade(session);
-        let session_weak_for_callbacks = session_weak.clone();
-        let mut last_size: Option<(u32, u32)> = None;
-        appsink.set_callbacks(
-            gst_app::AppSinkCallbacks::builder()
-                .new_sample(move |sink| {
-                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                    let caps = sample.caps().ok_or(gst::FlowError::Error)?;
-                    let video_info =
-                        gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::FlowError::Error)?;
-                    let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
-
-                    let width = video_info.width();
-                    let height = video_info.height();
-
-                    // Emit OriginVideoSize on size change
-                    if last_size != Some((width, height)) {
-                        log::debug!(
-                            "WSC-RTP: decoded frame size changed from {:?} to {}x{}",
-                            last_size,
-                            width,
-                            height
-                        );
-                        last_size = Some((width, height));
-                        if let Some(session) = session_weak_for_callbacks.upgrade() {
-                            session
-                                .session_common
-                                .send_event_msg(StreamEvent::OriginVideoSize {
-                                    width: width as u64,
-                                    height: height as u64,
-                                });
-                        }
-                    }
-
-                    let video_frame =
-                        gst_video::VideoFrameRef::from_buffer_ref_readable(buffer, &video_info)
-                            .map_err(|_| gst::FlowError::Error)?;
-
-                    let stride = video_info.stride()[0] as usize;
-                    let expected_stride = (width as usize) * 4; // RGBA
-                    let plane_data = video_frame
-                        .plane_data(0)
-                        .map_err(|_| gst::FlowError::Error)?;
-
-                    let data = if stride == expected_stride {
-                        plane_data.to_vec()
-                    } else {
-                        // Stride mismatch — copy row by row to strip padding
-                        let mut buf = Vec::with_capacity(expected_stride * height as usize);
-                        for y in 0..height as usize {
-                            let row_start = y * stride;
-                            buf.extend_from_slice(
-                                &plane_data[row_start..row_start + expected_stride],
-                            );
-                        }
-                        buf
-                    };
-
-                    let frame = RawRgbaFrame {
-                        width,
-                        height,
-                        data,
-                    };
-
-                    if let Some(holder) = payload_holder_weak.upgrade() {
-                        holder.set_payload(Arc::new(frame) as SharedPixelData);
-                        texture_session.mark_frame_available();
-                    }
-                    Ok(gst::FlowSuccess::Ok)
-                })
-                .build(),
+        let event_session = session_weak.clone();
+        let resize_session = session_weak.clone();
+        attach_appsink(
+            &appsink,
+            video_sink.clone(),
+            move |event| {
+                if let Some(session) = event_session.upgrade() {
+                    session.session_common.send_event_msg(event);
+                }
+            },
+            move |texture_id| {
+                if let Some(session) = resize_session.upgrade() {
+                    session.session_common.send_state_msg(StreamState::Playing {
+                        texture_id,
+                        seekable: true,
+                    });
+                }
+            },
         );
 
         // Shared flag: set after a codec-params (SDP) update so the very next
@@ -475,6 +418,10 @@ impl WscRtpSession {
             )));
         }
 
+        let _udp_receiver_guard = udp_packet_rcv_task
+            .as_ref()
+            .map(|task| AbortReceiverOnDrop(task.abort_handle()));
+
         // Set up GStreamer bus error monitoring
         let (gst_err_tx, mut gst_err_rx) = tokio::sync::mpsc::channel::<String>(4);
         let bus = pipeline.bus().unwrap();
@@ -482,6 +429,7 @@ impl WscRtpSession {
         bus.set_sync_handler(move |_bus, msg| {
             match msg.view() {
                 gst::MessageView::Error(err) => {
+                    log::error!("GStreamer failure: {}: {:?}", err.error(), err.debug());
                     let _ = gst_err_tx.try_send(format!(
                         "GStreamer error [{}]: {}",
                         bus_session_id,
@@ -499,9 +447,9 @@ impl WscRtpSession {
             gst::BusSyncReply::Drop
         });
 
-        pipeline
-            .set_state(gst::State::Playing)
-            .context("setting GStreamer pipeline to Playing")?;
+        pipeline.set_state(gst::State::Playing).map_err(|e| {
+            super::VideoOutputError(format!("setting GStreamer pipeline to Playing: {e}"))
+        })?;
 
         // Send Playing state with texture_id
         if let Some(session) = session_weak.upgrade() {
@@ -513,6 +461,7 @@ impl WscRtpSession {
 
         let mut ping_interval = tokio::time::interval(PING_INTERVAL);
         ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut ping_sent_at: Option<std::time::Instant> = None;
 
         // Inner select loop
         loop {
@@ -532,6 +481,7 @@ impl WscRtpSession {
 
                 _ = ping_interval.tick() => {
                     if let Ok(payload) = serde_json::to_string(&WscRtpClientMessage::Ping) {
+                        ping_sent_at = Some(std::time::Instant::now());
                         let _ = ws_sink.send(Message::Text(payload.into())).await;
                     }
                 }
@@ -571,6 +521,11 @@ impl WscRtpSession {
                         Some(Ok(Message::Text(text))) => {
                             match serde_json::from_str::<WscRtpServerMessage>(&text) {
                                 Ok(msg) => {
+                                    if let WscRtpServerMessage::Pong = msg {
+                                        if let Some(sent_at) = ping_sent_at.take() {
+                                            log::debug!("WSC-RTP: ping rtt={:?}", sent_at.elapsed());
+                                        }
+                                    }
                                     if let WscRtpServerMessage::Sdp { ref sdp } = msg {
                                         if let Some((encoding, pt, clock_rate, sprop)) = parse_rtp_caps_from_sdp(sdp) {
                                             let caps_str = build_rtp_caps_str(&encoding, pt, clock_rate, &sprop);
@@ -583,6 +538,14 @@ impl WscRtpSession {
                                                 let _ = appsrc.send_event(gst::event::FlushStop::builder(false).build());
 
                                                 appsrc.set_caps(Some(&caps));
+                                                if matches!(encoding.as_str(), "H265" | "HEVC") {
+                                                    if let Some(filter) = pipeline.by_name(H265_SIZE_FILTER) {
+                                                        match h265_size_caps(&sprop).parse::<gst::Caps>() {
+                                                            Ok(size_caps) => filter.set_property("caps", &size_caps),
+                                                            Err(e) => log::warn!("WSC-RTP: failed to build H.265 size caps: {}", e),
+                                                        }
+                                                    }
+                                                }
                                                 // Signal that the next RTP buffer should carry the DISCONT flag.
                                                 // avdec_h265 calls avcodec_flush_buffers() on DISCONT+IDR,
                                                 // forcing a clean decoder reinit even when resolution is unchanged.
@@ -621,7 +584,7 @@ impl WscRtpSession {
                             udp_rcv_task.abort();
                         }
                         pipeline.set_state(gst::State::Null)?;
-                        return Err(anyhow::anyhow!(err));
+                        return Err(super::VideoOutputError(err).into());
                     }
                 }
             }
@@ -660,6 +623,10 @@ impl WscRtpSession {
             WscRtpServerMessage::Error { message } => {
                 self.session_common
                     .send_event_msg(StreamEvent::Error(message));
+            }
+            WscRtpServerMessage::Playback { event } => {
+                self.session_common
+                    .send_event_msg(StreamEvent::WscRtpPlayback(to_dart_playback_event(event)));
             }
             WscRtpServerMessage::FallingBackRtpToWs => {
                 log::debug!("WSC-RTP: server falling back to WebSocket for RTP delivery");
@@ -734,6 +701,10 @@ impl WscRtpSession {
         };
         self.session_common
             .send_event_msg(StreamEvent::WscRtpSessionMode(wsc_mode));
+        if let Some(event) = mode.playback {
+            self.session_common
+                .send_event_msg(StreamEvent::WscRtpPlayback(to_dart_playback_event(event)));
+        }
         Ok(())
     }
 }
@@ -760,10 +731,6 @@ impl crate::core::session::VideoSession for WscRtpSession {
     fn session_id(&self) -> i64 {
         self.session_common.session_id
     }
-    fn engine_handle(&self) -> i64 {
-        self.session_common.engine_handle
-    }
-
     fn last_alive_mark(&self) -> std::time::SystemTime {
         self.session_common.get_last_alive_mark()
     }
@@ -903,7 +870,45 @@ fn build_rtp_caps_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
     )
 }
 
-fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<String>) -> String {
+/// Output (cropped) frame size from the `sprop-sps` entry of an H.265 `sprop` string.
+///
+/// Cameras that do not repeat parameter sets in-band leave `h265parse` without
+/// frame dimensions, and MediaCodec cannot be configured with a 1x1 surface.
+fn h265_dimensions_from_sprop(sprop: &str) -> Option<(u32, u32)> {
+    use base64::Engine as _;
+
+    let sps_b64 = sprop
+        .split(',')
+        .find_map(|p| p.trim().strip_prefix("sprop-sps="))?
+        .trim_matches('"');
+    let sps = base64::engine::general_purpose::STANDARD
+        .decode(sps_b64)
+        .ok()?;
+    let sps = scuffle_h265::SpsNALUnit::parse(sps.as_slice()).ok()?;
+    let width = u32::try_from(sps.rbsp.cropped_width()).ok()?;
+    let height = u32::try_from(sps.rbsp.cropped_height()).ok()?;
+    (width > 0 && height > 0).then_some((width, height))
+}
+
+/// Name of the H.265 capsfilter that pins the frame size, so SDP updates can retarget it.
+const H265_SIZE_FILTER: &str = "h265size";
+
+/// Caps for the H.265 size filter: the SDP's frame size when known, otherwise unconstrained
+/// so a resolution change can renegotiate.
+fn h265_size_caps(sprop: &Option<String>) -> String {
+    match sprop.as_deref().and_then(h265_dimensions_from_sprop) {
+        Some((w, h)) => format!("video/x-h265,width={w},height={h}"),
+        None => "video/x-h265".to_owned(),
+    }
+}
+
+fn build_pipeline_str(
+    encoding: &str,
+    pt: u8,
+    clock_rate: u32,
+    sprop: &Option<String>,
+    gpu: bool,
+) -> String {
     log::info!(
         "WSC-RTP: build_pipeline_str encoding={} pt={} clock_rate={} sprop_present={}",
         encoding,
@@ -911,14 +916,42 @@ fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
         clock_rate,
         sprop.is_some()
     );
-    let depay_decode = match encoding {
-        "H264" => "rtph264depay ! h264parse ! avdec_h264",
-        "H265" | "HEVC" => "rtph265depay ! h265parse ! avdec_h265",
-        "VP8" => "rtpvp8depay ! vp8dec",
-        "VP9" => "rtpvp9depay ! vp9dec",
-        _ => "rtpjpegdepay ! jpegdec",
+    let depay_parse = match encoding {
+        "H264" => "rtph264depay ! h264parse".to_owned(),
+        "H265" | "HEVC" => {
+            // config-interval=-1 re-inserts the SDP VPS/SPS/PPS before every IDR;
+            // cameras that only advertise them in the SDP otherwise leave
+            // MediaCodec unable to decode the byte-stream.
+            // h265parse reports no frame size until it parses an in-band SPS;
+            // pin the one from the SDP so decoders are not configured as 1x1.
+            format!(
+                "rtph265depay ! h265parse config-interval=-1 ! capsfilter name={H265_SIZE_FILTER} caps={}",
+                h265_size_caps(sprop)
+            )
+        }
+        "VP8" => "rtpvp8depay".to_owned(),
+        "VP9" => "rtpvp9depay".to_owned(),
+        _ => "rtpjpegdepay".to_owned(),
+    };
+    let decoder = if gpu {
+        // The memory-specific downstream caps select MediaCodec surface output.
+        format!("decodebin caps=\"{ANDROID_CAPS}\"")
+    } else {
+        match encoding {
+            "H264" => "avdec_h264",
+            "H265" | "HEVC" => "avdec_h265",
+            "VP8" => "vp8dec",
+            "VP9" => "vp9dec",
+            _ => "jpegdec",
+        }
+        .to_owned()
     };
 
+    let output = if gpu {
+        ANDROID_CAPS.to_owned()
+    } else {
+        format!("videoconvert ! {CPU_CAPS}")
+    };
     let caps_str = build_rtp_caps_str(encoding, pt, clock_rate, sprop);
     let escaped_caps = caps_str.replace('"', "\\\"");
 
@@ -942,10 +975,9 @@ fn build_pipeline_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
     format!(
         "appsrc name=src caps=\"{escaped_caps}\" format=time is-live=true do-timestamp=true \
          ! rtpjitterbuffer latency=200 \
-         ! {depay_decode} \
-         ! videoconvert \
-         ! video/x-raw,format=RGBA \
-         ! appsink name=sink sync=true max-lateness=100000000 qos=true emit-signals=true",
+         ! {depay_parse} ! {decoder} \
+         ! {output} \
+         ! appsink name=sink",
     )
 }
 
@@ -966,12 +998,38 @@ fn build_wsc_rtp_handshake_request(
     url.set_scheme(&scheme)
         .map_err(|_| anyhow::anyhow!("invalid base_url scheme"))?;
     set_media_server_endpoint_path(&mut url, &["streams", source_id, "wsc-rtp"])?;
+    // Always opt in to structured playback events; older servers ignore the flag.
+    let mut query = vec!["playback_events=true"];
     if force_websocket_transport {
-        url.set_query(Some("force_websocket_transport=true"));
-    } else {
-        url.set_query(None);
+        query.push("force_websocket_transport=true");
     }
+    url.set_query(Some(&query.join("&")));
     Ok(url)
+}
+
+fn to_dart_playback_event(event: PlaybackEvent) -> WscRtpPlaybackEvent {
+    match event {
+        PlaybackEvent::Playing { timestamp } => WscRtpPlaybackEvent::Playing {
+            timestamp: timestamp as i64,
+        },
+        PlaybackEvent::Waiting { timestamp } => WscRtpPlaybackEvent::Waiting {
+            timestamp: timestamp as i64,
+        },
+        PlaybackEvent::GapSkipped { from, to } => WscRtpPlaybackEvent::GapSkipped {
+            from: from as i64,
+            to: to as i64,
+        },
+        PlaybackEvent::Ended { timestamp } => WscRtpPlaybackEvent::Ended {
+            timestamp: timestamp as i64,
+        },
+        PlaybackEvent::Error { timestamp, message } => WscRtpPlaybackEvent::Error {
+            timestamp: timestamp as i64,
+            message,
+        },
+        PlaybackEvent::RenegotiationRequired { codec, message } => {
+            WscRtpPlaybackEvent::RenegotiationRequired { codec, message }
+        }
+    }
 }
 
 fn set_media_server_endpoint_path(url: &mut Url, endpoint_segments: &[&str]) -> Result<()> {
@@ -1027,7 +1085,7 @@ mod tests {
 
         assert_eq!(
             url.as_str(),
-            "wss://localhost/streams/source-1/wsc-rtp?force_websocket_transport=true"
+            "wss://localhost/streams/source-1/wsc-rtp?playback_events=true&force_websocket_transport=true"
         );
     }
 
@@ -1039,7 +1097,7 @@ mod tests {
 
         assert_eq!(
             url.as_str(),
-            "wss://localhost/ms1/streams/2442237282583284537/wsc-rtp?force_websocket_transport=true"
+            "wss://localhost/ms1/streams/2442237282583284537/wsc-rtp?playback_events=true&force_websocket_transport=true"
         );
     }
 
@@ -1051,7 +1109,7 @@ mod tests {
 
         assert_eq!(
             url.as_str(),
-            "ws://example.test/ms1/streams/source-1/wsc-rtp"
+            "ws://example.test/ms1/streams/source-1/wsc-rtp?playback_events=true"
         );
     }
 
@@ -1079,5 +1137,33 @@ mod tests {
             url.as_str(),
             "https://example.test/ms1/client-session-control/session-1/seek"
         );
+    }
+}
+
+#[cfg(test)]
+mod h265_sps_tests {
+    use super::*;
+
+    #[test]
+    fn dimensions_from_camera_sprop() {
+        let sprop = "sprop-vps=\"QAEMAf//AWAAAAMAAAMAAAMAAAMAlqwJ\",sprop-sps=\"QgEBAWAAAAMAAAMAAAMAAAMAlqAFAgHh/iq07oku5sCADbugAM3+YAQ=\",sprop-pps=\"RAHAcvAbJA==\"";
+        assert_eq!(h265_dimensions_from_sprop(sprop), Some((640, 480)));
+    }
+
+    #[test]
+    fn size_caps_follow_the_sdp() {
+        let sprop = Some(
+            "sprop-sps=\"QgEBAWAAAAMAAAMAAAMAAAMAlqAFAgHh/iq07oku5sCADbugAM3+YAQ=\"".to_owned(),
+        );
+        assert_eq!(h265_size_caps(&sprop), "video/x-h265,width=640,height=480");
+        // No usable SPS must not keep a previous fixed size.
+        assert_eq!(h265_size_caps(&None), "video/x-h265");
+    }
+
+    #[test]
+    fn missing_or_bad_sps_is_none() {
+        assert_eq!(h265_dimensions_from_sprop("sprop-vps=\"QAE=\""), None);
+        assert_eq!(h265_dimensions_from_sprop("sprop-sps=\"!!\""), None);
+        assert_eq!(h265_dimensions_from_sprop("sprop-sps=\"QgE=\""), None);
     }
 }

@@ -32,9 +32,12 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 build/
 target/
+.cxx/
 
 *.log*
 
 # FVM Version Cache
 .fvm/
 .vscode/settings.json
+example/android-rs/
+tmp/

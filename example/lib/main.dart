@@ -169,11 +169,13 @@ class StreamControlWidgetState extends State<StreamControlWidget> {
         Expanded(
           child: GridView.builder(
             padding: const EdgeInsets.all(16.0),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              // One column on phones, two on wider screens.
+              crossAxisCount: MediaQuery.sizeOf(context).width < 600 ? 1 : 2,
               crossAxisSpacing: 16.0,
               mainAxisSpacing: 16.0,
-              childAspectRatio: 1, // Square shape to allow flexible sizing
+              childAspectRatio:
+                  MediaQuery.sizeOf(context).width < 600 ? 0.65 : 1,
             ),
             itemCount: _streams.length,
             addAutomaticKeepAlives: true,
@@ -356,242 +358,193 @@ class _StreamGridItemState extends State<_StreamGridItem>
         ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Switch(
-                    value: stream.useWscRtp,
-                    onChanged: (value) {
-                      setState(() {
-                        stream.useWscRtp = value;
-                        if (value) stream.usePlaybin = false;
-                      });
-                    },
-                  ),
-                  const Text('Use WSC-RTP'),
-                  const SizedBox(width: 8),
-                  Switch(
-                    value: stream.usePlaybin,
-                    onChanged: (value) {
-                      setState(() {
-                        stream.usePlaybin = value;
-                        if (value) stream.useWscRtp = false;
-                      });
-                    },
-                  ),
-                  const Text('Use Playbin'),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: 'Remove this stream',
-                    onPressed: () => widget.removeStream(widget.streamIdx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12.0),
-              if (!stream.useWscRtp && !stream.usePlaybin)
-                TextField(
-                  controller: stream.urlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Stream URL (e.g., rtsp://...)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              if (stream.usePlaybin) ...[
-                TextField(
-                  controller: stream.urlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Media URI (file://, http://, rtsp://, etc.)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8.0),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Switch(
-                      value: stream.mute,
-                      onChanged: (value) {
-                        setState(() {
-                          stream.mute = value;
-                        });
-                      },
-                    ),
-                    const Text('Mute Audio'),
-                  ],
-                ),
-              ],
-              if (stream.useWscRtp) ...[
-                TextField(
-                  controller: stream.wscRtpBaseUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'WSC-RTP Base URL (e.g., https://api.example)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12.0),
-                TextField(
-                  controller: stream.wscRtpSourceIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'WSC-RTP Source ID',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8.0),
-                Row(
-                  children: [
-                    Switch(
-                      value: stream.forceWebsocketTransport,
-                      onChanged: (value) {
-                        setState(() {
-                          stream.forceWebsocketTransport = value;
-                        });
-                      },
-                    ),
-                    const Text('Force WebSocket Transport'),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 16.0),
-              // FFmpeg options expansion
-              ExpansionTile(
-                title: const Text('FFmpeg Options'),
-                childrenPadding: const EdgeInsets.only(
-                  left: 16.0,
-                  right: 16.0,
-                  bottom: 16.0,
-                ),
-                children: [
-                  ...stream.ffmpegOptionControllers.asMap().entries.map((
-                    entry,
-                  ) {
-                    final idx = entry.key;
-                    final controllers = entry.value;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Row(
+                    Expanded(
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Expanded(
-                            child: TextField(
-                              controller: controllers.key,
-                              decoration: const InputDecoration(
-                                labelText: 'Option Key',
-                                border: OutlineInputBorder(),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Switch(
+                                value: stream.useWscRtp,
+                                onChanged: (value) {
+                                  setState(() {
+                                    stream.useWscRtp = value;
+                                    if (value) stream.usePlaybin = false;
+                                  });
+                                },
                               ),
-                            ),
+                              const Text('Use WSC-RTP'),
+                            ],
                           ),
-                          const SizedBox(width: 8.0),
-                          Expanded(
-                            child: TextField(
-                              controller: controllers.value,
-                              decoration: const InputDecoration(
-                                labelText: 'Option Value',
-                                border: OutlineInputBorder(),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Switch(
+                                value: stream.usePlaybin,
+                                onChanged: (value) {
+                                  setState(() {
+                                    stream.usePlaybin = value;
+                                    if (value) stream.useWscRtp = false;
+                                  });
+                                },
                               ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed:
-                                () => widget.removeFfmpegOptionField(
-                                  widget.streamIdx,
-                                  idx,
-                                ),
-                            tooltip: 'Remove option',
+                              const Text('Use Playbin'),
+                            ],
                           ),
                         ],
                       ),
-                    );
-                  }),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Option'),
-                      onPressed:
-                          () => widget.addFfmpegOptionField(widget.streamIdx),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16.0),
-              // Video player area - takes maximum space
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Video player
-                    stream.isStreaming
-                        ? _VideoPlayerWithControls(
-                          config: VideoConfig.wscRtp(
-                            WscRtpSessionConfig(
-                              baseUrl: stream.wscRtpBaseUrlController.text,
-                              sourceId: stream.wscRtpSourceIdController.text,
-                              forceWebsocketTransport:
-                                  stream.forceWebsocketTransport,
-                              autoRestart: stream.autoRestart,
-                            ),
-                          ),
-                        )
-                        : const Center(
-                          child: Text(
-                            'Stream is stopped',
-                            style: TextStyle(
-                              fontSize: 16.0,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                    // Overlay buttons when video is playing
-                    if (stream.isStreaming)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Stop Stream Button
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.stop,
-                                  color: Colors.white,
-                                ),
-                                tooltip: 'Stop Stream',
-                                onPressed: _stopStream,
-                              ),
-                              // Remove Stream Button
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.white,
-                                ),
-                                tooltip: 'Remove Stream',
-                                onPressed: _removeStream,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Remove this stream',
+                      onPressed: () => widget.removeStream(widget.streamIdx),
+                    ),
                   ],
                 ),
-              ),
-              // Controls at bottom when not streaming
-              if (!stream.isStreaming) const SizedBox(height: 16.0),
-              if (!stream.isStreaming)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                const SizedBox(height: 12.0),
+                if (!stream.useWscRtp && !stream.usePlaybin)
+                  TextField(
+                    controller: stream.urlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Stream URL (e.g., rtsp://...)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                if (stream.usePlaybin) ...[
+                  TextField(
+                    controller: stream.urlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Media URI (file://, http://, rtsp://, etc.)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  Row(
+                    children: [
+                      Switch(
+                        value: stream.mute,
+                        onChanged: (value) {
+                          setState(() {
+                            stream.mute = value;
+                          });
+                        },
+                      ),
+                      const Text('Mute Audio'),
+                    ],
+                  ),
+                ],
+                if (stream.useWscRtp) ...[
+                  TextField(
+                    controller: stream.wscRtpBaseUrlController,
+                    decoration: const InputDecoration(
+                      labelText: 'WSC-RTP Base URL (e.g., https://api.example)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12.0),
+                  TextField(
+                    controller: stream.wscRtpSourceIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'WSC-RTP Source ID',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  Row(
+                    children: [
+                      Switch(
+                        value: stream.forceWebsocketTransport,
+                        onChanged: (value) {
+                          setState(() {
+                            stream.forceWebsocketTransport = value;
+                          });
+                        },
+                      ),
+                      const Flexible(child: Text('Force WebSocket Transport')),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16.0),
+                // FFmpeg options expansion
+                ExpansionTile(
+                  title: const Text('FFmpeg Options'),
+                  childrenPadding: const EdgeInsets.only(
+                    left: 16.0,
+                    right: 16.0,
+                    bottom: 16.0,
+                  ),
+                  children: [
+                    ...stream.ffmpegOptionControllers.asMap().entries.map((
+                      entry,
+                    ) {
+                      final idx = entry.key;
+                      final controllers = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: controllers.key,
+                                decoration: const InputDecoration(
+                                  labelText: 'Option Key',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8.0),
+                            Expanded(
+                              child: TextField(
+                                controller: controllers.value,
+                                decoration: const InputDecoration(
+                                  labelText: 'Option Value',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline),
+                              onPressed:
+                                  () => widget.removeFfmpegOptionField(
+                                    widget.streamIdx,
+                                    idx,
+                                  ),
+                              tooltip: 'Remove option',
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Option'),
+                        onPressed:
+                            () => widget.addFfmpegOptionField(widget.streamIdx),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16.0),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     ElevatedButton(
                       onPressed: () => widget.toggleStream(widget.streamIdx),
                       child: const Text('Start Stream'),
                     ),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Switch(
                           value: stream.autoRestart,
@@ -606,7 +559,8 @@ class _StreamGridItemState extends State<_StreamGridItem>
                     ),
                   ],
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       );

@@ -21,8 +21,8 @@ sealed class StreamEvent with _$StreamEvent {
   }) = StreamEvent_OriginVideoSize;
   const factory StreamEvent.wscRtpSessionMode(WscRtpMode field0) =
       StreamEvent_WscRtpSessionMode;
-  const factory StreamEvent.wscRtpStreamState(String field0) =
-      StreamEvent_WscRtpStreamState;
+  const factory StreamEvent.wscRtpPlayback(WscRtpPlaybackEvent field0) =
+      StreamEvent_WscRtpPlayback;
 }
 
 @freezed
@@ -55,4 +55,30 @@ sealed class WscRtpMode with _$WscRtpMode {
     required PlatformInt64 currentTimeMs,
     required double speed,
   }) = WscRtpMode_Dvr;
+}
+
+@freezed
+sealed class WscRtpPlaybackEvent with _$WscRtpPlaybackEvent {
+  const WscRtpPlaybackEvent._();
+
+  const factory WscRtpPlaybackEvent.playing({
+    required PlatformInt64 timestamp,
+  }) = WscRtpPlaybackEvent_Playing;
+  const factory WscRtpPlaybackEvent.waiting({
+    required PlatformInt64 timestamp,
+  }) = WscRtpPlaybackEvent_Waiting;
+  const factory WscRtpPlaybackEvent.gapSkipped({
+    required PlatformInt64 from,
+    required PlatformInt64 to,
+  }) = WscRtpPlaybackEvent_GapSkipped;
+  const factory WscRtpPlaybackEvent.ended({required PlatformInt64 timestamp}) =
+      WscRtpPlaybackEvent_Ended;
+  const factory WscRtpPlaybackEvent.error({
+    required PlatformInt64 timestamp,
+    required String message,
+  }) = WscRtpPlaybackEvent_Error;
+  const factory WscRtpPlaybackEvent.renegotiationRequired({
+    required String codec,
+    required String message,
+  }) = WscRtpPlaybackEvent_RenegotiationRequired;
 }

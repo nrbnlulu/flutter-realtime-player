@@ -1,7 +1,6 @@
+#[cfg(all(target_os = "android", gst_android_hardware_buffer))]
+mod android;
 pub mod flutter;
-pub mod payload;
+mod video;
 
-pub trait FlutterTextureSession: Send + Sync {
-    fn mark_frame_available(&self);
-    fn terminate(&self);
-}
+pub(crate) use video::{attach_appsink, FlutterVideoSink, ANDROID_CAPS, CPU_CAPS};

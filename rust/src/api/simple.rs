@@ -1,6 +1,4 @@
-use std::thread;
-
-use log::{debug, error, trace};
+use log::{error, trace};
 
 use crate::{
     core::{
@@ -10,34 +8,15 @@ use crate::{
             VideoSessionCommon,
         },
         types::VideoConfig,
-        HTTP_CLIENT, IS_INITIALIZED,
+        HTTP_CLIENT,
     },
     dart_types::StreamMessage,
     frb_generated::StreamSink,
-    utils::LogErr,
 };
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     crate::core::init_logger();
-}
-
-pub fn flutter_realtime_player_init(ffi_ptr: i64) {
-    let mut is_initialized = IS_INITIALIZED.lock().unwrap();
-    if *is_initialized {
-        return;
-    }
-    irondash_dart_ffi::irondash_init_ffi(ffi_ptr as *mut std::ffi::c_void);
-
-    registry::init().log_err();
-    // it is necessary for Android to register all plugins manually since we are linking statically
-    #[cfg(target_os = "android")]
-    unsafe {
-        crate::android_gst_plugins::register_all();
-    }
-    thread::spawn(crate::core::session::registry::stream_alive_tester_task);
-    debug!("Done initializing flutter gstreamer");
-    *is_initialized = true;
 }
 
 lazy_static::lazy_static! {
@@ -53,19 +32,14 @@ pub fn create_new_session() -> i64 {
 
 pub async fn create_playable(
     session_id: i64,
-    engine_handle: i64,
     config: VideoConfig,
     combined_sink: StreamSink<StreamMessage>,
 ) -> anyhow::Result<()> {
-    trace!(
-        "create_playable was called with engine_handle: {}, session_id: {}",
-        engine_handle,
-        session_id
-    );
+    trace!("create_playable was called with session_id: {}", session_id);
     match config {
         VideoConfig::WscRtp(wsc_rtp_config) => {
             trace!("  source_id: {}", wsc_rtp_config.source_id.as_str());
-            let session_common = VideoSessionCommon::new(session_id, engine_handle, combined_sink);
+            let session_common = VideoSessionCommon::new(session_id, combined_sink);
             let (session, shutdown_rx) =
                 WscRtpSession::new(wsc_rtp_config, session_common, HTTP_CLIENT.clone());
             let session_clone = session.clone();
@@ -78,7 +52,7 @@ pub async fn create_playable(
         }
         VideoConfig::Playbin(playbin_config) => {
             trace!("  uri: {}", playbin_config.uri);
-            let session_common = VideoSessionCommon::new(session_id, engine_handle, combined_sink);
+            let session_common = VideoSessionCommon::new(session_id, combined_sink);
             let (session, shutdown_rx) = PlaybinSession::new(playbin_config, session_common);
             let session_clone = session.clone();
             tokio::spawn(async move {
@@ -134,12 +108,9 @@ pub fn mark_session_alive(session_id: i64) {
     crate::core::session::registry::mark_session_alive(session_id);
 }
 
-pub fn destroy_engine_streams(engine_id: i64) {
-    trace!("destroy_playable was called");
-    // it is important to call this on the platform main thread
-    // because irondash will unregister the texture on Drop, and drop must occur
-    // on the platform main thread
-    crate::core::session::registry::destroy_engine_streams(engine_id);
+pub fn destroy_all_sessions() {
+    trace!("destroy_all_sessions was called");
+    crate::core::session::registry::destroy_all_sessions();
 }
 
 pub fn destroy_stream_session(session_id: i64) {
