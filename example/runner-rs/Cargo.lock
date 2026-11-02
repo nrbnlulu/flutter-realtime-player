@@ -1772,7 +1772,7 @@ dependencies = [
 [[package]]
 name = "media-server-api-models"
 version = "0.1.0"
-source = "git+https://github.com/nrbnlulu/media-server.git?branch=use-splitted-fmp4-files-for-recordings#48ddf886f830172d226fa76e6b68821fb1f1f55b"
+source = "git+https://github.com/nrbnlulu/media-server.git?branch=main#873fce447d4e320e4cc5b641088c7b92f6a11aaa"
 dependencies = [
  "serde",
  "url",

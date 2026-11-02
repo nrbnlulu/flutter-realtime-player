@@ -34,7 +34,7 @@ gst-video = {package = "gstreamer-video", version = "0.24.4"}
 log = "0.4"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-media-server-api-models = { version = "0.1.0", git = "https://github.com/nrbnlulu/media-server.git", branch = "use-splitted-fmp4-files-for-recordings" }
+media-server-api-models = { version = "0.1.0", git = "https://github.com/nrbnlulu/media-server.git", branch = "main" }
 sdp = "0.17.1"
 base64 = "0.22"
 scuffle-h265 = "0.2"
