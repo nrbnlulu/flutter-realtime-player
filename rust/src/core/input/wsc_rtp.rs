@@ -538,6 +538,14 @@ impl WscRtpSession {
                                                 let _ = appsrc.send_event(gst::event::FlushStop::builder(false).build());
 
                                                 appsrc.set_caps(Some(&caps));
+                                                if matches!(encoding.as_str(), "H265" | "HEVC") {
+                                                    if let Some(filter) = pipeline.by_name(H265_SIZE_FILTER) {
+                                                        match h265_size_caps(&sprop).parse::<gst::Caps>() {
+                                                            Ok(size_caps) => filter.set_property("caps", &size_caps),
+                                                            Err(e) => log::warn!("WSC-RTP: failed to build H.265 size caps: {}", e),
+                                                        }
+                                                    }
+                                                }
                                                 // Signal that the next RTP buffer should carry the DISCONT flag.
                                                 // avdec_h265 calls avcodec_flush_buffers() on DISCONT+IDR,
                                                 // forcing a clean decoder reinit even when resolution is unchanged.
@@ -882,6 +890,18 @@ fn h265_dimensions_from_sprop(sprop: &str) -> Option<(u32, u32)> {
     (width > 0 && height > 0).then_some((width, height))
 }
 
+/// Name of the H.265 capsfilter that pins the frame size, so SDP updates can retarget it.
+const H265_SIZE_FILTER: &str = "h265size";
+
+/// Caps for the H.265 size filter: the SDP's frame size when known, otherwise unconstrained
+/// so a resolution change can renegotiate.
+fn h265_size_caps(sprop: &Option<String>) -> String {
+    match sprop.as_deref().and_then(h265_dimensions_from_sprop) {
+        Some((w, h)) => format!("video/x-h265,width={w},height={h}"),
+        None => "video/x-h265".to_owned(),
+    }
+}
+
 fn build_pipeline_str(
     encoding: &str,
     pt: u8,
@@ -902,15 +922,12 @@ fn build_pipeline_str(
             // config-interval=-1 re-inserts the SDP VPS/SPS/PPS before every IDR;
             // cameras that only advertise them in the SDP otherwise leave
             // MediaCodec unable to decode the byte-stream.
-            let mut chain = "rtph265depay ! h265parse config-interval=-1".to_owned();
             // h265parse reports no frame size until it parses an in-band SPS;
             // pin the one from the SDP so decoders are not configured as 1x1.
-            if let Some((w, h)) = sprop.as_deref().and_then(h265_dimensions_from_sprop) {
-                chain.push_str(&format!(
-                    " ! capsfilter caps=video/x-h265,width={w},height={h}"
-                ));
-            }
-            chain
+            format!(
+                "rtph265depay ! h265parse config-interval=-1 ! capsfilter name={H265_SIZE_FILTER} caps={}",
+                h265_size_caps(sprop)
+            )
         }
         "VP8" => "rtpvp8depay".to_owned(),
         "VP9" => "rtpvp9depay".to_owned(),
@@ -1131,6 +1148,16 @@ mod h265_sps_tests {
     fn dimensions_from_camera_sprop() {
         let sprop = "sprop-vps=\"QAEMAf//AWAAAAMAAAMAAAMAAAMAlqwJ\",sprop-sps=\"QgEBAWAAAAMAAAMAAAMAAAMAlqAFAgHh/iq07oku5sCADbugAM3+YAQ=\",sprop-pps=\"RAHAcvAbJA==\"";
         assert_eq!(h265_dimensions_from_sprop(sprop), Some((640, 480)));
+    }
+
+    #[test]
+    fn size_caps_follow_the_sdp() {
+        let sprop = Some(
+            "sprop-sps=\"QgEBAWAAAAMAAAMAAAMAAAMAlqAFAgHh/iq07oku5sCADbugAM3+YAQ=\"".to_owned(),
+        );
+        assert_eq!(h265_size_caps(&sprop), "video/x-h265,width=640,height=480");
+        // No usable SPS must not keep a previous fixed size.
+        assert_eq!(h265_size_caps(&None), "video/x-h265");
     }
 
     #[test]

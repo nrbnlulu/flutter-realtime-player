@@ -53,7 +53,13 @@ impl PlaybinSession {
         let result = self
             .run_pipeline(&mut shutdown_rx, video_sink, texture_id)
             .await;
-        if gpu && result.is_err() {
+        // Only decoder/appsink failures say anything about the GPU output; source
+        // and other pipeline errors would fail again with the CPU sink.
+        let output_failed = result
+            .as_ref()
+            .err()
+            .is_some_and(|e| e.downcast_ref::<super::VideoOutputError>().is_some());
+        if gpu && output_failed {
             warn!(
                 "Playbin: GPU output failed, retrying CPU output: {:?}",
                 result.as_ref().err()
@@ -123,16 +129,16 @@ impl PlaybinSession {
             .bus()
             .ok_or(anyhow::anyhow!("Failed to get pipeline bus"))?;
         let bus_session_id = self.session_common.session_id;
+        let bus_appsink = appsink.clone();
 
         bus.set_sync_handler(move |_bus, msg| {
             match msg.view() {
                 gst::MessageView::Error(err) => {
                     log::error!("GStreamer failure: {}: {:?}", err.error(), err.debug());
-                    let _ = gst_event_tx.try_send(GstBusEvent::Error(format!(
-                        "GStreamer error [{}]: {}",
-                        bus_session_id,
-                        err.error()
-                    )));
+                    let _ = gst_event_tx.try_send(GstBusEvent::Error {
+                        message: format!("GStreamer error [{}]: {}", bus_session_id, err.error()),
+                        output: is_video_output_error(msg.src(), &bus_appsink),
+                    });
                 }
                 gst::MessageView::Eos(_) => {
                     let _ = gst_event_tx.try_send(GstBusEvent::Eos);
@@ -187,13 +193,17 @@ impl PlaybinSession {
                 }
                 event = gst_event_rx.recv() => {
                     match event {
-                        Some(GstBusEvent::Error(msg)) => {
+                        Some(GstBusEvent::Error { message: msg, output }) => {
                             error!("Playbin: {}", msg);
                             self.session_common.send_event_msg(StreamEvent::Error(msg.clone()));
                             if let Some(pipeline) = self.active_pipeline.lock().take() {
                                 let _ = pipeline.set_state(gst::State::Null);
                             }
-                            loop_result = Err(anyhow::anyhow!(msg));
+                            loop_result = Err(if output {
+                                super::VideoOutputError(msg).into()
+                            } else {
+                                anyhow::anyhow!(msg)
+                            });
                             break;
                         }
                         Some(GstBusEvent::Warning(msg)) => {
@@ -229,9 +239,28 @@ impl PlaybinSession {
     }
 }
 
+/// Whether a bus error came from the video output path (the appsink or a decoder).
+fn is_video_output_error(src: Option<&gst::Object>, appsink: &AppSink) -> bool {
+    let Some(src) = src else {
+        return false;
+    };
+    if src == appsink.upcast_ref::<gst::Object>()
+        || src.has_as_ancestor(appsink.upcast_ref::<gst::Object>())
+    {
+        return true;
+    }
+    src.downcast_ref::<gst::Element>()
+        .and_then(|element| element.factory())
+        .is_some_and(|factory| factory.klass().contains("Decoder"))
+}
+
 #[derive(Debug, Clone)]
 enum GstBusEvent {
-    Error(String),
+    Error {
+        message: String,
+        /// Raised by the decoder or the appsink rather than the source/demuxer.
+        output: bool,
+    },
     Warning(String),
     Eos,
     Buffering(i32),
@@ -306,5 +335,27 @@ impl VideoSession for PlaybinSession {
 
         *self.current_speed.lock() = speed;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_appsink_and_decoder_errors_count_as_output_failures() {
+        gst::init().unwrap();
+        let appsink = AppSink::builder().build();
+        let source = gst::ElementFactory::make("fakesrc").build().unwrap();
+
+        assert!(is_video_output_error(
+            Some(appsink.upcast_ref::<gst::Object>()),
+            &appsink
+        ));
+        assert!(!is_video_output_error(
+            Some(source.upcast_ref::<gst::Object>()),
+            &appsink
+        ));
+        assert!(!is_video_output_error(None, &appsink));
     }
 }

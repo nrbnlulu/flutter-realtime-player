@@ -40,3 +40,4 @@ target/
 .fvm/
 .vscode/settings.json
 example/android-rs/
+tmp/
