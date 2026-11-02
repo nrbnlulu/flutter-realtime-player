@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// flutter-rust-runner-version: 7
+// flutter-rust-runner-version: 8
 
 use std::{env, path::PathBuf};
 
@@ -35,6 +35,9 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", engine_dir.display());
     println!("cargo:rustc-link-lib=dylib={engine_name}");
     if target_os == "android" {
+        // System.loadLibrary normally loads locally. Android's global group
+        // must include Rust plugins for Dart process() and native providers.
+        println!("cargo:rustc-link-arg=-Wl,-z,global");
         // The engine ships inside the APK's jniLibs/<abi>/ next to this
         // cdylib, so resolve it relative to wherever this library is loaded.
         println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");

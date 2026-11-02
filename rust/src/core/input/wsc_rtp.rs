@@ -164,9 +164,9 @@ impl WscRtpSession {
             udp_sock_maybe = Some(udp_sock);
         }
 
-        let (encoding, pt, clock_rate, sprop) = parse_rtp_caps_from_sdp(&initial_sdp)
+        let (encoding, pt, clock_rate, sprop, frame_size) = parse_rtp_caps_from_sdp(&initial_sdp)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse RTP caps from SDP"))?;
-        let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop, gpu);
+        let pipeline_str = build_pipeline_str(&encoding, pt, clock_rate, &sprop, frame_size, gpu);
         log::trace!("WSC-RTP GStreamer pipeline: {}", pipeline_str);
 
         let pipeline = gst::parse::launch(&pipeline_str)
@@ -527,7 +527,7 @@ impl WscRtpSession {
                                         }
                                     }
                                     if let WscRtpServerMessage::Sdp { ref sdp } = msg {
-                                        if let Some((encoding, pt, clock_rate, sprop)) = parse_rtp_caps_from_sdp(sdp) {
+                                        if let Some((encoding, pt, clock_rate, sprop, frame_size)) = parse_rtp_caps_from_sdp(sdp) {
                                             let caps_str = build_rtp_caps_str(&encoding, pt, clock_rate, &sprop);
                                             if let Ok(caps) = std::str::FromStr::from_str(&caps_str) {
                                                 log::info!("WSC-RTP: Updating appsrc caps to {}", caps_str);
@@ -540,7 +540,7 @@ impl WscRtpSession {
                                                 appsrc.set_caps(Some(&caps));
                                                 if matches!(encoding.as_str(), "H265" | "HEVC") {
                                                     if let Some(filter) = pipeline.by_name(H265_SIZE_FILTER) {
-                                                        match h265_size_caps(&sprop).parse::<gst::Caps>() {
+                                                        match h265_size_caps(frame_size).parse::<gst::Caps>() {
                                                             Ok(size_caps) => filter.set_property("caps", &size_caps),
                                                             Err(e) => log::warn!("WSC-RTP: failed to build H.265 size caps: {}", e),
                                                         }
@@ -808,7 +808,11 @@ async fn validate_udp_handshare(session_id: &str, udp_sock: &mut UdpSocket) -> a
 
 // ─── GStreamer pipeline helpers ───────────────────────────────────────────────
 
-fn parse_rtp_caps_from_sdp(sdp_text: &str) -> Option<(String, u8, u32, Option<String>)> {
+/// RTP stream parameters advertised by an SDP: encoding, payload type, clock rate,
+/// `sprop` parameter sets and the frame size.
+type SdpRtpParams = (String, u8, u32, Option<String>, Option<(u32, u32)>);
+
+fn parse_rtp_caps_from_sdp(sdp_text: &str) -> Option<SdpRtpParams> {
     let mut reader = std::io::Cursor::new(sdp_text);
     let sdp = sdp::description::session::SessionDescription::unmarshal(&mut reader).ok()?;
 
@@ -855,7 +859,20 @@ fn parse_rtp_caps_from_sdp(sdp_text: &str) -> Option<(String, u8, u32, Option<St
         }
     });
 
-    Some((encoding, pt, clock_rate, sprop))
+    let frame_size = media
+        .attribute("framesize")
+        .flatten()
+        .and_then(parse_framesize);
+
+    Some((encoding, pt, clock_rate, sprop, frame_size))
+}
+
+/// Parses the value of an `a=framesize:<pt> <width>-<height>` attribute.
+fn parse_framesize(value: &str) -> Option<(u32, u32)> {
+    let (width, height) = value.split_whitespace().nth(1)?.split_once('-')?;
+    let width: u32 = width.parse().ok()?;
+    let height: u32 = height.parse().ok()?;
+    (width > 0 && height > 0).then_some((width, height))
 }
 
 fn build_rtp_caps_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<String>) -> String {
@@ -870,33 +887,16 @@ fn build_rtp_caps_str(encoding: &str, pt: u8, clock_rate: u32, sprop: &Option<St
     )
 }
 
-/// Output (cropped) frame size from the `sprop-sps` entry of an H.265 `sprop` string.
-///
-/// Cameras that do not repeat parameter sets in-band leave `h265parse` without
-/// frame dimensions, and MediaCodec cannot be configured with a 1x1 surface.
-fn h265_dimensions_from_sprop(sprop: &str) -> Option<(u32, u32)> {
-    use base64::Engine as _;
-
-    let sps_b64 = sprop
-        .split(',')
-        .find_map(|p| p.trim().strip_prefix("sprop-sps="))?
-        .trim_matches('"');
-    let sps = base64::engine::general_purpose::STANDARD
-        .decode(sps_b64)
-        .ok()?;
-    let sps = scuffle_h265::SpsNALUnit::parse(sps.as_slice()).ok()?;
-    let width = u32::try_from(sps.rbsp.cropped_width()).ok()?;
-    let height = u32::try_from(sps.rbsp.cropped_height()).ok()?;
-    (width > 0 && height > 0).then_some((width, height))
-}
-
 /// Name of the H.265 capsfilter that pins the frame size, so SDP updates can retarget it.
 const H265_SIZE_FILTER: &str = "h265size";
 
 /// Caps for the H.265 size filter: the SDP's frame size when known, otherwise unconstrained
 /// so a resolution change can renegotiate.
-fn h265_size_caps(sprop: &Option<String>) -> String {
-    match sprop.as_deref().and_then(h265_dimensions_from_sprop) {
+///
+/// Cameras that do not repeat parameter sets in-band leave `h265parse` without
+/// frame dimensions, and MediaCodec cannot be configured with a 1x1 surface.
+fn h265_size_caps(frame_size: Option<(u32, u32)>) -> String {
+    match frame_size {
         Some((w, h)) => format!("video/x-h265,width={w},height={h}"),
         None => "video/x-h265".to_owned(),
     }
@@ -907,6 +907,7 @@ fn build_pipeline_str(
     pt: u8,
     clock_rate: u32,
     sprop: &Option<String>,
+    frame_size: Option<(u32, u32)>,
     gpu: bool,
 ) -> String {
     log::info!(
@@ -926,7 +927,7 @@ fn build_pipeline_str(
             // pin the one from the SDP so decoders are not configured as 1x1.
             format!(
                 "rtph265depay ! h265parse config-interval=-1 ! capsfilter name={H265_SIZE_FILTER} caps={}",
-                h265_size_caps(sprop)
+                h265_size_caps(frame_size)
             )
         }
         "VP8" => "rtpvp8depay".to_owned(),
@@ -1141,29 +1142,39 @@ mod tests {
 }
 
 #[cfg(test)]
-mod h265_sps_tests {
+mod h265_size_tests {
     use super::*;
 
-    #[test]
-    fn dimensions_from_camera_sprop() {
-        let sprop = "sprop-vps=\"QAEMAf//AWAAAAMAAAMAAAMAAAMAlqwJ\",sprop-sps=\"QgEBAWAAAAMAAAMAAAMAAAMAlqAFAgHh/iq07oku5sCADbugAM3+YAQ=\",sprop-pps=\"RAHAcvAbJA==\"";
-        assert_eq!(h265_dimensions_from_sprop(sprop), Some((640, 480)));
+    fn sdp(attributes: &str) -> String {
+        format!(
+            "v=0\no=- 1 0 IN IP4 0.0.0.0\ns=media-server\nc=IN IP4 0.0.0.0\nt=0 0\n\
+             m=video 5000 RTP/AVP 96\na=rtpmap:96 H265/90000\n{attributes}a=sendonly\n"
+        )
     }
 
     #[test]
-    fn size_caps_follow_the_sdp() {
-        let sprop = Some(
-            "sprop-sps=\"QgEBAWAAAAMAAAMAAAMAAAMAlqAFAgHh/iq07oku5sCADbugAM3+YAQ=\"".to_owned(),
+    fn frame_size_follows_the_sdp() {
+        let sdp = sdp("a=framesize:96 1920-1080\n");
+        let (.., frame_size) = parse_rtp_caps_from_sdp(&sdp).unwrap();
+        assert_eq!(frame_size, Some((1920, 1080)));
+        assert_eq!(
+            h265_size_caps(frame_size),
+            "video/x-h265,width=1920,height=1080"
         );
-        assert_eq!(h265_size_caps(&sprop), "video/x-h265,width=640,height=480");
-        // No usable SPS must not keep a previous fixed size.
-        assert_eq!(h265_size_caps(&None), "video/x-h265");
     }
 
     #[test]
-    fn missing_or_bad_sps_is_none() {
-        assert_eq!(h265_dimensions_from_sprop("sprop-vps=\"QAE=\""), None);
-        assert_eq!(h265_dimensions_from_sprop("sprop-sps=\"!!\""), None);
-        assert_eq!(h265_dimensions_from_sprop("sprop-sps=\"QgE=\""), None);
+    fn missing_frame_size_is_unconstrained() {
+        let (.., frame_size) = parse_rtp_caps_from_sdp(&sdp("")).unwrap();
+        assert_eq!(frame_size, None);
+        // No usable size must not keep a previous fixed size.
+        assert_eq!(h265_size_caps(None), "video/x-h265");
+    }
+
+    #[test]
+    fn bad_frame_size_is_none() {
+        assert_eq!(parse_framesize("96 0-1080"), None);
+        assert_eq!(parse_framesize("96 1920x1080"), None);
+        assert_eq!(parse_framesize("1920-1080"), None);
     }
 }
