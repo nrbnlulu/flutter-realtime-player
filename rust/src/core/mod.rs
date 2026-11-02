@@ -6,6 +6,7 @@ use std::sync::{Arc, OnceLock};
 
 use flutter_plugin_sdk::{GpuTextures, MainThreadDispatcher};
 use log::debug;
+#[cfg(not(target_os = "android"))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 lazy_static::lazy_static! {

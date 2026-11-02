@@ -13,7 +13,7 @@ pub fn init() -> anyhow::Result<()> {
     _setup_bundled_gstreamer();
 
     gst::init().map_err(|e| anyhow::anyhow!("Failed to initialize GStreamer: {:?}", e))?;
-    info!("GStreamer initialized");
+    info!("GStreamer initialized: {}", gst::version_string());
     Ok(())
 }
 

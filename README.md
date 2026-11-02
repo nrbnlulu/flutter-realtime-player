@@ -8,6 +8,9 @@ GStreamer based player, optimized for realtime streams
 
 ## Android
 
+The experimental zero-copy GPU path and its Rust-shell/GStreamer requirements
+are documented in [Android GPU video](docs/android-gpu-rendering.md).
+
 Android cross-compilation is currently supported from Linux hosts only.
 If you want to cross compile the library and run example on Android, follow instructions below:
 
@@ -47,5 +50,7 @@ If you want to cross compile the library and run example on Android, follow inst
     ```
 
   (`24` is the Android API level and should match the app's `minSdk`.)
-  The `[env]` variables can also be `export`ed in your shell instead.
+  Export `GSTREAMER_ROOT_ANDROID` in the build shell as well: the Android Java
+  plugin compiles GStreamer's helper classes from that same SDK. Cargo's `[env]`
+  settings apply only to Cargo, while Gradle also needs this path.
 - You can use [`cargo-ndk`](https://github.com/bbqsrc/cargo-ndk) (eg. `cargo ndk -t x86_64 -P 35`) to make sure the rust side is building successfully

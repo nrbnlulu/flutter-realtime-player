@@ -1,0 +1,25 @@
+group = 'dev.onetboss.realtimeplayer'
+version = '1.0'
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'dev.onetboss.realtimeplayer'
+    compileSdk 36
+    defaultConfig { minSdk 24 }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Reuse the helper classes shipped with the same SDK as the native libraries.
+// They are architecture-independent, so any installed ABI supplies the sources.
+def sdkRoot = System.getenv('GSTREAMER_ROOT_ANDROID')
+def helpers = sdkRoot == null ? null : ['arm64', 'armv7', 'x86_64', 'x86']
+    .collect { new File(sdkRoot, "${it}/share/gst-android/ndk-build/androidmedia") }
+    .find { it.isDirectory() }
+if (helpers == null) {
+    throw new GradleException('GSTREAMER_ROOT_ANDROID must contain the GStreamer Android SDK and its androidmedia Java helpers')
+}
+android.sourceSets.main.java.srcDir(helpers)

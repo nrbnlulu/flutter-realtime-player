@@ -1,3 +1,6 @@
+#[cfg(target_os = "android")]
+mod android_jni;
+
 pub mod api;
 pub mod core;
 pub mod dart_types;
@@ -34,38 +37,40 @@ pub fn register(registrar: &mut PluginRegistrar) -> Result<()> {
 
 #[cfg(target_os = "android")]
 pub(crate) mod android_gst_plugins {
-    use crate::utils::{is_gst_result_ok, GstBool};
-
     extern "C" {
-        fn gst_plugin_app_register() -> GstBool;
-        fn gst_plugin_coreelements_register() -> GstBool;
-        fn gst_plugin_typefindfunctions_register() -> GstBool;
-        fn gst_plugin_playback_register() -> GstBool;
-        fn gst_plugin_soup_register() -> GstBool;
-        fn gst_plugin_libav_register() -> GstBool;
-        fn gst_plugin_androidmedia_register() -> GstBool;
-        fn gst_plugin_videoconvertscale_register() -> GstBool;
-        fn gst_plugin_audioconvert_register() -> GstBool;
-        fn gst_plugin_audioresample_register() -> GstBool;
-        fn gst_plugin_volume_register() -> GstBool;
-        fn gst_plugin_audiomixer_register() -> GstBool;
-        fn gst_plugin_autodetect_register() -> GstBool;
-        fn gst_plugin_opensles_register() -> GstBool;
-        fn gst_plugin_rtsp_register() -> GstBool;
-        fn gst_plugin_rtp_register() -> GstBool;
-        fn gst_plugin_rtpmanager_register() -> GstBool;
-        fn gst_plugin_udp_register() -> GstBool;
-        fn gst_plugin_tcp_register() -> GstBool;
-        fn gst_plugin_sdpelem_register() -> GstBool;
-        fn gst_plugin_videoparsersbad_register() -> GstBool;
+        fn gst_plugin_app_register();
+        fn gst_plugin_coreelements_register();
+        fn gst_plugin_typefindfunctions_register();
+        fn gst_plugin_playback_register();
+        fn gst_plugin_isomp4_register();
+        fn gst_plugin_matroska_register();
+        fn gst_plugin_soup_register();
+        fn gst_plugin_libav_register();
+        fn gst_plugin_androidmedia_register();
+        fn gst_plugin_videoconvertscale_register();
+        fn gst_plugin_audioconvert_register();
+        fn gst_plugin_audioresample_register();
+        fn gst_plugin_volume_register();
+        fn gst_plugin_audiomixer_register();
+        fn gst_plugin_autodetect_register();
+        fn gst_plugin_opensles_register();
+        fn gst_plugin_rtsp_register();
+        fn gst_plugin_rtp_register();
+        fn gst_plugin_rtpmanager_register();
+        fn gst_plugin_udp_register();
+        fn gst_plugin_tcp_register();
+        fn gst_plugin_sdpelem_register();
+        fn gst_plugin_videoparsersbad_register();
     }
 
     pub unsafe fn register_all() {
-        let plugins: &[(&str, unsafe extern "C" fn() -> GstBool)] = &[
+        let plugins: &[(&str, unsafe extern "C" fn())] = &[
             ("app", gst_plugin_app_register),
             ("coreelements", gst_plugin_coreelements_register),
             ("typefindfunctions", gst_plugin_typefindfunctions_register),
             ("playback", gst_plugin_playback_register),
+            ("isomp4", gst_plugin_isomp4_register),
+            ("matroska", gst_plugin_matroska_register),
             ("soup", gst_plugin_soup_register),
             ("libav", gst_plugin_libav_register),
             ("androidmedia", gst_plugin_androidmedia_register),
@@ -86,7 +91,8 @@ pub(crate) mod android_gst_plugins {
         ];
 
         for (name, register_fn) in plugins {
-            if !is_gst_result_ok(register_fn()) {
+            register_fn();
+            if gst::Registry::get().find_plugin(name).is_none() {
                 log::error!("Failed to register GStreamer plugin: {}", name);
             }
         }

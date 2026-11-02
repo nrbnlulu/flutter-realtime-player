@@ -32,6 +32,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 build/
 target/
+.cxx/
 
 *.log*
 
@@ -39,3 +40,4 @@ target/
 .fvm/
 .vscode/settings.json
 example/android-rs/
+tmp/

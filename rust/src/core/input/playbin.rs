@@ -1,4 +1,4 @@
-use std::sync::{atomic::AtomicU32, Arc};
+use std::sync::Arc;
 
 use anyhow::Context;
 use gst::prelude::*;
@@ -9,14 +9,11 @@ use parking_lot::Mutex;
 use crate::{
     core::{
         session::{VideoSession, VideoSessionCommon},
-        texture::flutter::FlutterPixelBufferSink,
+        texture::{attach_appsink, FlutterVideoSink},
         types::PlaybinConfig,
     },
     dart_types::{StreamEvent, StreamState},
 };
-
-const DEFAULT_WIDTH: u32 = 640;
-const DEFAULT_HEIGHT: u32 = 480;
 
 pub struct PlaybinSession {
     session_common: VideoSessionCommon,
@@ -46,84 +43,65 @@ impl PlaybinSession {
 
     pub async fn execute(
         self: &Arc<Self>,
-        shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+        mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> anyhow::Result<()> {
-        let pixel_sink =
-            Arc::new(FlutterPixelBufferSink::new(DEFAULT_WIDTH, DEFAULT_HEIGHT).await?);
-        let texture_id = pixel_sink.texture_id();
+        let video_sink = FlutterVideoSink::new().await?;
+        let texture_id = video_sink.texture_id();
         info!("Playbin: texture created, id={}", texture_id);
 
-        self.run_pipeline(shutdown_rx, pixel_sink, texture_id).await
+        let gpu = video_sink.is_gpu();
+        let result = self
+            .run_pipeline(&mut shutdown_rx, video_sink, texture_id)
+            .await;
+        // Only decoder/appsink failures say anything about the GPU output; source
+        // and other pipeline errors would fail again with the CPU sink.
+        let output_failed = result
+            .as_ref()
+            .err()
+            .is_some_and(|e| e.downcast_ref::<super::VideoOutputError>().is_some());
+        if gpu && output_failed {
+            warn!(
+                "Playbin: GPU output failed, retrying CPU output: {:?}",
+                result.as_ref().err()
+            );
+            let sink = FlutterVideoSink::cpu().await?;
+            return self
+                .run_pipeline(&mut shutdown_rx, sink.clone(), sink.texture_id())
+                .await;
+        }
+        result
     }
 
     async fn run_pipeline(
         self: &Arc<Self>,
-        mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
-        pixel_sink: Arc<FlutterPixelBufferSink>,
+        shutdown_rx: &mut tokio::sync::mpsc::Receiver<()>,
+        video_sink: Arc<FlutterVideoSink>,
         texture_id: i64,
     ) -> anyhow::Result<()> {
         self.session_common.send_state_msg(StreamState::Loading);
 
-        // Build appsink for receiving video frames
-        let caps = gst::Caps::builder("video/x-raw")
-            .field("format", "RGBA")
-            .build();
-        let appsink = AppSink::builder().caps(&caps).sync(false).build();
+        let appsink = AppSink::builder().build();
 
         // Set up appsink callbacks for frame processing
         let session_weak = Arc::downgrade(self);
-        let session_weak_for_callbacks = session_weak.clone();
-        let size = Arc::new(parking_lot::Mutex::new((0u32, 0u32)));
-        let _frame_count = Arc::new(AtomicU32::new(0));
-        let pixel_sink_for_callback = Arc::clone(&pixel_sink);
-
-        appsink.set_callbacks(
-            gst_app::AppSinkCallbacks::builder()
-                .new_sample(move |appsink| {
-                    let sample = appsink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                    let caps = sample.caps().ok_or(gst::FlowError::Error)?;
-                    let video_info =
-                        gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::FlowError::Error)?;
-                    let buffer = sample.buffer_owned().ok_or(gst::FlowError::Error)?;
-
-                    let width = video_info.width();
-                    let height = video_info.height();
-
-                    let mut size_guard = size.lock();
-                    let (cached_width, cached_height) = *size_guard;
-                    // Emit OriginVideoSize only when dimensions change (lock-free comparison)
-                    if cached_width != width || cached_height != height {
-                        *size_guard = (width, height);
-                        log::debug!("Playbin: video dimensions: {}x{}", width, height);
-                        if let Some(session) = session_weak_for_callbacks.upgrade() {
-                            session
-                                .session_common
-                                .send_event_msg(StreamEvent::OriginVideoSize {
-                                    width: width as u64,
-                                    height: height as u64,
-                                });
-                        }
-                    }
-                    drop(size_guard);
-
-                    let resize_session_weak = session_weak_for_callbacks.clone();
-                    if let Err(err) = pixel_sink_for_callback.write_frame(
-                        &video_info,
-                        buffer,
-                        move |new_texture_id| {
-                            if let Some(session) = resize_session_weak.upgrade() {
-                                session.session_common.send_state_msg(StreamState::Playing {
-                                    texture_id: new_texture_id,
-                                    seekable: true,
-                                });
-                            }
-                        },
-                    ) {
-                        warn!("Playbin: failed to write frame: {}", err);
-                    }
-                    Ok(gst::FlowSuccess::Ok)
-                })
-                .build(),
+        let event_session = session_weak.clone();
+        let resize_session = session_weak.clone();
+        attach_appsink(
+            &appsink,
+            video_sink.clone(),
+            move |event| {
+                if let Some(session) = event_session.upgrade() {
+                    session.session_common.send_event_msg(event);
+                }
+            },
+            move |texture_id| {
+                if let Some(session) = resize_session.upgrade() {
+                    session.session_common.send_state_msg(StreamState::Playing {
+                        texture_id,
+                        seekable: true,
+                    });
+                }
+            },
         );
 
         // Build playbin3 pipeline
@@ -141,6 +119,7 @@ impl PlaybinSession {
             .downcast::<gst::Pipeline>()
             .map_err(|_| anyhow::anyhow!("playbin3 is not a pipeline"))?;
         let pipeline_arc = Arc::new(pipeline);
+        let _pipeline_guard = super::PipelineGuard(pipeline_arc.clone());
 
         *self.active_pipeline.lock() = Some(Arc::clone(&pipeline_arc));
 
@@ -150,15 +129,16 @@ impl PlaybinSession {
             .bus()
             .ok_or(anyhow::anyhow!("Failed to get pipeline bus"))?;
         let bus_session_id = self.session_common.session_id;
+        let bus_appsink = appsink.clone();
 
         bus.set_sync_handler(move |_bus, msg| {
             match msg.view() {
                 gst::MessageView::Error(err) => {
-                    let _ = gst_event_tx.try_send(GstBusEvent::Error(format!(
-                        "GStreamer error [{}]: {}",
-                        bus_session_id,
-                        err.error()
-                    )));
+                    log::error!("GStreamer failure: {}: {:?}", err.error(), err.debug());
+                    let _ = gst_event_tx.try_send(GstBusEvent::Error {
+                        message: format!("GStreamer error [{}]: {}", bus_session_id, err.error()),
+                        output: is_video_output_error(msg.src(), &bus_appsink),
+                    });
                 }
                 gst::MessageView::Eos(_) => {
                     let _ = gst_event_tx.try_send(GstBusEvent::Eos);
@@ -213,13 +193,17 @@ impl PlaybinSession {
                 }
                 event = gst_event_rx.recv() => {
                     match event {
-                        Some(GstBusEvent::Error(msg)) => {
+                        Some(GstBusEvent::Error { message: msg, output }) => {
                             error!("Playbin: {}", msg);
                             self.session_common.send_event_msg(StreamEvent::Error(msg.clone()));
                             if let Some(pipeline) = self.active_pipeline.lock().take() {
                                 let _ = pipeline.set_state(gst::State::Null);
                             }
-                            loop_result = Err(anyhow::anyhow!(msg));
+                            loop_result = Err(if output {
+                                super::VideoOutputError(msg).into()
+                            } else {
+                                anyhow::anyhow!(msg)
+                            });
                             break;
                         }
                         Some(GstBusEvent::Warning(msg)) => {
@@ -255,9 +239,28 @@ impl PlaybinSession {
     }
 }
 
+/// Whether a bus error came from the video output path (the appsink or a decoder).
+fn is_video_output_error(src: Option<&gst::Object>, appsink: &AppSink) -> bool {
+    let Some(src) = src else {
+        return false;
+    };
+    if src == appsink.upcast_ref::<gst::Object>()
+        || src.has_as_ancestor(appsink.upcast_ref::<gst::Object>())
+    {
+        return true;
+    }
+    src.downcast_ref::<gst::Element>()
+        .and_then(|element| element.factory())
+        .is_some_and(|factory| factory.klass().contains("Decoder"))
+}
+
 #[derive(Debug, Clone)]
 enum GstBusEvent {
-    Error(String),
+    Error {
+        message: String,
+        /// Raised by the decoder or the appsink rather than the source/demuxer.
+        output: bool,
+    },
     Warning(String),
     Eos,
     Buffering(i32),
@@ -332,5 +335,27 @@ impl VideoSession for PlaybinSession {
 
         *self.current_speed.lock() = speed;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_appsink_and_decoder_errors_count_as_output_failures() {
+        gst::init().unwrap();
+        let appsink = AppSink::builder().build();
+        let source = gst::ElementFactory::make("fakesrc").build().unwrap();
+
+        assert!(is_video_output_error(
+            Some(appsink.upcast_ref::<gst::Object>()),
+            &appsink
+        ));
+        assert!(!is_video_output_error(
+            Some(source.upcast_ref::<gst::Object>()),
+            &appsink
+        ));
+        assert!(!is_video_output_error(None, &appsink));
     }
 }

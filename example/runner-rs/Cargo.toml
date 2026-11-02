@@ -15,7 +15,6 @@ path = "src/main.rs"
 
 [dependencies]
 flutter-plugin-sdk = { path = "../.dart_tool/flutter_rs/sdk/crates/flutter-plugin-sdk" }
-flutter-shell-winit = { path = "../.dart_tool/flutter_rs/sdk/crates/flutter-shell-winit" }
 
 # === BEGIN FLUTTER GENERATED RUST PLUGINS ===
 flutter_rs_plugin_flutter_realtime_player = { package = "flutter_realtime_player", path = "../.dart_tool/flutter_rs/plugins/flutter_realtime_player" }
@@ -39,5 +38,8 @@ unexpected_cfgs = { level = "warn", check-cfg = ["cfg(frb_expand)"] }
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "=0.15.1"
 log = "=0.4.33"
-winit = { version = "=0.31.0-beta.2", default-features = false, features = ["android-game-activity"] }
+flutter-shell-android = { path = "../.dart_tool/flutter_rs/sdk/crates/flutter-shell-android" }
 # === END FLUTTER GENERATED ANDROID RUNNER ===
+
+[target.'cfg(target_os = "linux")'.dependencies]
+flutter-shell-winit = { path = "../.dart_tool/flutter_rs/sdk/crates/flutter-shell-winit" }

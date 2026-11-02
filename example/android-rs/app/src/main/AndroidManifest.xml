@@ -8,20 +8,19 @@
         android:label="flutter_realtime_player_example">
 
         <activity
-            android:name="com.google.androidgamesdk.GameActivity"
+            android:name="dev.flutter.rs.RustActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/AndroidRunnerTheme">
 
             <!-- The Rust runner cdylib (lib<name>.so) that GameActivity loads. -->
-            <meta-data
-                android:name="android.app.lib_name"
-                android:value="flutter_realtime_player_example" />
+
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <meta-data android:name="flutterEmbedding" android:value="2" />
     </application>
 </manifest>
